@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulación económica 2026 · Fantasy MotoGP Independiente</title>
+<style>
+  :root {
+    --bg: #0b0f17;
+    --panel: #111827;
+    --panel2: #0f1522;
+    --border: #1f2a3d;
+    --text: #e5e7eb;
+    --muted: #8fa3bf;
+    --accent: #f97316;
+    --a: #94a3b8;
+    --b: #ef4444;
+    --c: #f59e0b;
+    --e: #22c55e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 28px 20px 64px; }
+  header { border-bottom: 1px solid var(--border); padding-bottom: 18px; }
+  h1 { font-size: 25px; margin: 0 0 8px; letter-spacing: -0.02em; }
+  h1 .flag { color: var(--accent); }
+  .sub { color: var(--muted); font-size: 14px; margin: 0; }
+  .sub b { color: var(--text); font-weight: 600; }
+  .sub code { background: #1a2336; padding: 1px 6px; border-radius: 5px; font-size: 12.5px; }
+  .section { margin-top: 36px; }
+  h2 { font-size: 18px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .desc { color: var(--muted); font-size: 13.5px; margin: 0 0 14px; max-width: 880px; }
+  .desc b { color: var(--text); }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+  .card.pass { border-color: #14532d; }
+  .card.fail { border-color: #58201f; }
+  .card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .opt-letter { font-weight: 800; font-size: 15px; width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex: none; }
+  .opt-name { font-size: 13.5px; font-weight: 600; flex: 1; }
+  .badge { font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+  .badge.pass { background: #052e16; color: #4ade80; border: 1px solid #14532d; }
+  .badge.fail { background: #2d0a0a; color: #f87171; border: 1px solid #58201f; }
+  .card-metrics { display: grid; gap: 5px; }
+  .card-metrics div { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--muted); }
+  .card-metrics b { color: var(--text); font-weight: 600; }
+  .card-metrics i { font-style: normal; color: var(--muted); }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 12px; }
+  .controls > label { font-size: 13px; color: var(--muted); }
+  .controls label.toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; user-select: none; color: var(--muted); }
+  .controls label.toggle:hover { color: var(--text); }
+  .controls label.toggle i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex: none; }
+  .controls label.toggle input { accent-color: var(--accent); margin: 0; }
+  select { background: #0d1424; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 13.5px; max-width: 360px; }
+  .quick { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+  .quick button { background: #0d1424; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 4px 11px; font-size: 12.5px; cursor: pointer; }
+  .quick button:hover { color: var(--text); border-color: #33456b; }
+  .chart-wrap { position: relative; }
+  svg.chart { width: 100%; height: auto; display: block; }
+  text.axis { fill: #7d8fae; font-size: 11px; font-family: inherit; }
+  text.thr { fill: #f87171; font-size: 10.5px; font-family: inherit; }
+  .tip { position: absolute; display: none; background: rgba(13, 20, 36, 0.95); border: 1px solid #2a3a5c; border-radius: 10px; padding: 10px 12px; font-size: 12.5px; pointer-events: none; z-index: 5; min-width: 220px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6); }
+  .tip-title { font-weight: 700; font-size: 13px; }
+  .tip-title span { color: var(--muted); font-weight: 400; font-size: 11.5px; }
+  .tip-row { margin-top: 7px; display: flex; gap: 7px; align-items: flex-start; }
+  .tip-row i { width: 9px; height: 9px; border-radius: 2px; margin-top: 4px; flex: none; }
+  .tip-vals { color: var(--muted); }
+  .tip-vals b { color: var(--text); font-weight: 600; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 10px; margin-top: 14px; }
+  .stat { background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+  .stat-opt { font-size: 12px; font-weight: 700; margin-bottom: 6px; color: var(--muted); }
+  .stat-row { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--muted); }
+  .stat-row b { color: var(--text); font-weight: 600; }
+  .metric { margin-bottom: 18px; }
+  .metric:last-child { margin-bottom: 0; }
+  .metric-head { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .metric-target { color: var(--muted); font-weight: 400; font-size: 12px; white-space: nowrap; }
+  .mrow { display: grid; grid-template-columns: 20px 1fr 110px; align-items: center; gap: 10px; margin-top: 4px; }
+  .mopt { font-weight: 800; font-size: 12.5px; }
+  .mbar { background: #0d1424; border-radius: 5px; height: 14px; overflow: hidden; }
+  .mbar span { display: block; height: 100%; border-radius: 5px; opacity: 0.85; }
+  .mval { font-size: 12.5px; text-align: right; color: var(--muted); white-space: nowrap; }
+  .mval.ok { color: #4ade80; }
+  .mval.ko { color: #f87171; }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; padding: 6px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 6px 10px; border-bottom: 1px solid #16203a; white-space: nowrap; }
+  td.mut { color: var(--muted); }
+  td.up { color: #4ade80; }
+  td.down { color: #f87171; }
+  footer { margin-top: 44px; border-top: 1px solid var(--border); padding-top: 20px; color: var(--muted); font-size: 13px; }
+  footer h2 { color: var(--text); margin-bottom: 10px; }
+  .method { margin: 0 0 12px; padding-left: 20px; }
+  .method li { margin-bottom: 6px; }
+  .method b { color: var(--text); }
+  .fineprint { font-size: 12.5px; max-width: 880px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  @media (max-width: 640px) {
+    .wrap { padding: 20px 12px 48px; }
+    h1 { font-size: 20px; }
+    .mrow { grid-template-columns: 16px 1fr 92px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><span class="flag">▮▮</span> Simulación económica 2026 — comparación interactiva</h1>
+    <p class="sub" id="header-sub"></p>
+  </header>
+
+  <section class="section">
+    <h2>Puerta T-15 — veredicto por opción</h2>
+    <p class="desc">La puerta del MVP exige, re-ejecutando la simulación con los parámetros definitivos: <b>Gini &lt; 0.05</b> (igualdad de presupuestos), <b>recuperación del peor jugador &gt; 0.95</b> (nadie queda hundido) y <b>diversidad de lineups &gt; 70 %</b>. Los parámetros mostrados son <b>PROVISIONAL</b> (B=100, t=0.25, cmax=8): la calibración definitiva (D-01/D-02) y la re-simulación T-15 son obligatorias antes del MVP.</p>
+    <div class="cards" id="gate-cards"></div>
+  </section>
+
+  <section class="section">
+    <h2>Trayectoria del presupuesto por GP</h2>
+    <p class="desc">Banda = rango (mín–máx) de los 40 jugadores; línea = media del campo. La línea roja discontinua marca <b>0.9·B</b>: si el presupuesto de un jugador cae por debajo y no vuelve, está en espiral de la muerte. Pasa el ratón sobre el gráfico para ver los valores de cada GP.</p>
+    <div class="panel">
+      <div class="controls" id="opt-toggles"></div>
+      <div class="chart-wrap" id="traj-wrap"></div>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Explorador de jugadores</h2>
+    <p class="desc">Elige cualquiera de los 40 arquetipos y compara su presupuesto GP a GP bajo las cuatro opciones. Los botones rápidos cargan los casos nombrados del informe (M1, M3, S1, S2) y los extremos observados (peor jugador bajo B, mejor bajo E).</p>
+    <div class="panel">
+      <div class="controls">
+        <label for="player-select">Jugador</label>
+        <select id="player-select"></select>
+        <span class="quick" id="quick-picks"></span>
+      </div>
+      <div class="chart-wrap" id="player-wrap"></div>
+      <div class="stats" id="player-stats"></div>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Métricas de la puerta T-15</h2>
+    <p class="desc">Comparación directa con las metas. ✓ = cumple la meta, ✗ = no la cumple (los puntos por jugador son solo contexto).</p>
+    <div class="panel" id="metrics-panel"></div>
+  </section>
+
+  <section class="section">
+    <h2>Movimientos de precio (contexto)</h2>
+    <p class="desc">Los precios son <b>exógenos</b>: la fórmula pricing-v1 sobre los resultados reales 2026 genera la misma serie para las cuatro opciones. Explican por qué el «equipo» pierde valor bajo la opción B: si tus activos caen de precio, tu presupuesto cae contigo.</p>
+    <div class="panel table-wrap">
+      <table id="movers-table"></table>
+    </div>
+  </section>
+
+  <footer>
+    <h2>Método</h2>
+    <ul class="method">
+      <li><b>A (fijo):</b> presupuesto = B en cada GP.</li>
+      <li><b>B (oficial, ratchet):</b> presupuesto = valor de mercado del equipo (lineup a precios nuevos) + sin usar. La ventaja se acumula y la desventaja también: si el equipo pierde valor, el presupuesto cae y no vuelve (espiral de la muerte).</li>
+      <li><b>C (dinámico):</b> presupuesto = B ajustado ±20 % por el rendimiento relativo al campo, acotado a [0.8·B, 1.2·B].</li>
+      <li><b>E (híbrido, recomendado):</b> presupuesto = B + min(t × sin_usar_previo, cmax). Recompensa la eficiencia sin ventaja acumulativa: siempre acotado a [B, B + cmax].</li>
+    </ul>
+    <p class="fineprint">Simplificaciones de la simulación: el lineup se reconstruye cada GP (sin transfers ni lockout); 40 arquetipos deterministas; precios exógenos. Datos: temporada 2026 real (PulseLive) + standings 2025 para P0. Informe completo: <a href="./simulacion-2026.md">simulacion-2026.md</a>. Archivo generado automáticamente con <code>npm run simulate:viz</code>; no editarlo a mano.</p>
+  </footer>
+</div>
+<script>
+"use strict";
+const DATA = {"generatedAt":"2026-10-13","params":{"B":100,"t":0.25,"cmax":8},"gps":[{"order":1,"shortName":"THA","name":"GRAND PRIX OF THAILAND","date":"2026-03-01"},{"order":2,"shortName":"BRA","name":"GRAND PRIX OF BRAZIL","date":"2026-03-22"},{"order":3,"shortName":"USA","name":"GRAND PRIX OF THE UNITED STATES","date":"2026-03-29"},{"order":4,"shortName":"SPA","name":"GRAND PRIX OF SPAIN","date":"2026-04-26"},{"order":5,"shortName":"FRA","name":"GRAND PRIX DE FRANCE","date":"2026-05-10"},{"order":6,"shortName":"CAT","name":"GRAND PRIX OF CATALONIA","date":"2026-05-17"},{"order":7,"shortName":"ITA","name":"GRAND PRIX OF ITALY","date":"2026-05-31"},{"order":8,"shortName":"HUN","name":"GRAND PRIX OF HUNGARY","date":"2026-06-07"},{"order":9,"shortName":"CZE","name":"GRAND PRIX OF CZECHIA","date":"2026-06-21"},{"order":10,"shortName":"NED","name":"GRAND PRIX OF THE NETHERLANDS","date":"2026-06-28"},{"order":11,"shortName":"GER","name":"GRAND PRIX OF GERMANY","date":"2026-07-12"},{"order":12,"shortName":"GBR","name":"GRAND PRIX OF GREAT BRITAIN","date":"2026-08-09"},{"order":13,"shortName":"ARA","name":"GRAND PRIX OF ARAGON","date":"2026-08-30"},{"order":14,"shortName":"RSM","name":"GRAND PRIX OF SAN MARINO","date":"2026-09-13"},{"order":15,"shortName":"AUT","name":"GRAND PRIX OF AUSTRIA","date":"2026-09-20"},{"order":16,"shortName":"JPN","name":"GRAND PRIX OF JAPAN","date":"2026-10-04"},{"order":17,"shortName":"INA","name":"GRAND PRIX OF INDONESIA","date":"2026-10-11"}],"options":{"A":{"avgByGp":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"minByGp":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"maxByGp":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"giniByGp":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"metrics":{"giniFinal":0,"giniAvg":0,"recoveryWorst":1,"recoveryWorstPlayer":"F1","recoveryMalArranque":1,"p5p6FinalDivergence":0,"p5p6MaxDivergence":0,"deathSpiralPlayers":[],"finalBelowBase":[],"diversityAvg":0.8735294117647061,"concentrationPct":0.8955882352941177,"avgPoints":765.1875}},"B":{"avgByGp":[100,94,92.2,93.1,90.6,89,84.9,76.9,76.6,77.4,77.4,77.6,77.9,79.2,80.9,82.7,84.2],"minByGp":[100,91.6,89,88.3,79.7,75.2,65.8,51.7,50.7,50.9,49.9,50.3,50.5,51.6,53.8,54.3,55.8],"maxByGp":[100,96.9,95.8,98.2,99.1,98.5,100,95.7,95.3,95.4,95.7,96.8,96.6,97.3,97,97.4,98.1],"giniByGp":[0,0.008,0.01,0.015,0.034,0.038,0.062,0.091,0.093,0.094,0.098,0.095,0.089,0.08,0.072,0.066,0.063],"metrics":{"giniFinal":0.06254603175660423,"giniAvg":0.059310798499478345,"recoveryWorst":0.5471140098702216,"recoveryWorstPlayer":"V4","recoveryMalArranque":0.8174639007378947,"p5p6FinalDivergence":4.861146461820596,"p5p6MaxDivergence":6.4779511743803795,"deathSpiralPlayers":["F1","F2","F4","F5","F6","G1","G2","G3","G5","E1","E2","E3","E4","E5","E6","E7","E8","V1","V2","V3","V4","V5","V6","V7","V8","A3","A4","A5","M1","M2","M3","M4","S1","S2","S3","S4"],"finalBelowBase":["F1","F5","F6","G1","G2","G3","E1","E2","E3","E4","E5","E6","E7","V2","V3","V4","V5","V6","V7","A4","M1","M3","M4","S1","S2","S3"],"diversityAvg":0.8941176470588237,"concentrationPct":0.8955882352941177,"avgPoints":757.6375}},"C":{"avgByGp":[100,99.9,99.9,100,99.8,99.5,100,100,100,100,100,100,100,100,100,100,100.1],"minByGp":[100,84.7,80,80,80.4,80.4,82.8,81.6,87.8,81.2,83.9,81.7,85.2,83.2,80,84.4,80],"maxByGp":[100,120,120,120,120,120,116.3,110.9,110.1,116.7,120,110.7,111.4,114.8,114.4,115.9,115.7],"giniByGp":[0,0.054,0.053,0.05,0.06,0.054,0.043,0.043,0.039,0.042,0.055,0.042,0.037,0.044,0.049,0.054,0.057],"metrics":{"giniFinal":0.05697824293668807,"giniAvg":0.04569405598175562,"recoveryWorst":0.8146472805600431,"recoveryWorstPlayer":"A2","recoveryMalArranque":1.0644480479353289,"p5p6FinalDivergence":10.941935483870964,"p5p6MaxDivergence":21.195476575121162,"deathSpiralPlayers":["F6","G2","G3","E5","E6","E7","E8","V1","V2","V3","V4","V5","V6","V7","V8","A1","A2","A3","A4","A5","M4","S1","S2"],"finalBelowBase":["V5","V6","V7","A1","A2","A3","A4","A5"],"diversityAvg":0.8735294117647061,"concentrationPct":0.8955882352941177,"avgPoints":765.1875}},"E":{"avgByGp":[100,106.1,107.4,107.5,107.3,107.6,107.7,108,108,108,108,108,108,108,108,108,107.9],"minByGp":[100,101.4,103.7,104.3,103.7,105.1,105.7,108,108,108,108,108,108,108,108,108,107.1],"maxByGp":[100,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"giniByGp":[0,0.011,0.005,0.004,0.005,0.003,0.002,0,0,0,0,0,0,0,0,0,0.001],"metrics":{"giniFinal":0.0005909237922872013,"giniAvg":0.00187548841547842,"recoveryWorst":1.0770183504355928,"recoveryWorstPlayer":"F1","recoveryMalArranque":1.0791758728567018,"p5p6FinalDivergence":0,"p5p6MaxDivergence":2.841743119266056,"deathSpiralPlayers":[],"finalBelowBase":[],"diversityAvg":0.8735294117647061,"concentrationPct":0.8955882352941177,"avgPoints":765.1875}}},"players":[{"id":"F1","label":"Favoritista 1","archetype":"favoritista","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[25,61,74,51,38,33.5,79.5,75.5,61,14.5,65,31,79,93,60.5,80,47.5],"totalPoints":969,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,92,92.2,95,86.3,85.2,73.9,65.7,67.1,67.3,65.7,65.1,66.4,69.6,73.3,78.6,82],"points":[25,61,74,51,38,33.5,79.5,75.5,61,14.5,65,33,80,86,70.5,68,53],"totalPoints":968.5,"minBudget":65.1,"finalBudget":82},"C":{"budgets":[100,94.7,108.9,108.6,102,106.7,95.5,108.1,106.9,101.1,92.4,104,97.9,107.9,111.2,111.3,113],"points":[25,61,74,51,38,33.5,79.5,75.5,61,14.5,65,31,79,93,60.5,80,47.5],"totalPoints":969,"minBudget":92.4,"finalBudget":113},"E":{"budgets":[100,101.4,103.7,104.3,103.7,105.1,105.7,108,108,108,108,108,108,108,108,108,107.1],"points":[25,61,74,51,38,33.5,79.5,75.5,61,14.5,65,31,79,93,60.5,80,47.5],"totalPoints":969,"minBudget":100,"finalBudget":107.1}}},{"id":"F2","label":"Favoritista 2","archetype":"favoritista","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[48.5,60.5,74,79,46,56.5,58.5,63.5,76.5,29,53.5,24.5,51,65,50.5,47.5,39.5],"totalPoints":923.5,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,93.7,93.2,95.9,98.5,97.7,96.9,92.9,89.3,90.7,90.3,90,88.7,89.3,89.6,92,93.1],"points":[48.5,60.5,74,79,46,56.5,58.5,63.5,76.5,29,53.5,24.5,51,65,50.5,47.5,39.5],"totalPoints":923.5,"minBudget":88.7,"finalBudget":93.1},"C":{"budgets":[100,108.6,108.6,108.6,114.1,112.3,106.1,100.6,102.6,106.5,104.9,99.8,94.1,98,101.8,106.1,99.6],"points":[48.5,60.5,74,79,46,56.5,58.5,63.5,76.5,29,53.5,24.5,51,65,50.5,47.5,39.5],"totalPoints":923.5,"minBudget":94.1,"finalBudget":99.6},"E":{"budgets":[100,103.9,106.4,107.1,106.6,108,108,108,108,108,108,108,108,108,108,108,108],"points":[48.5,60.5,74,79,46,56.5,58.5,63.5,76.5,29,53.5,24.5,51,65,50.5,47.5,39.5],"totalPoints":923.5,"minBudget":100,"finalBudget":108}}},{"id":"F3","label":"Favoritista 3","archetype":"favoritista","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[68.5,63,56,67,36.5,69,56.5,61.5,63.5,43,73.5,33.5,35.5,49.5,24,40.5,29.5],"totalPoints":870.5,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,95.3,95.3,96.4,99,98.5,100,95.7,92.5,93,94.9,96.8,96.5,95.8,95.6,96.6,98.1],"points":[68.5,63,56,67,36.5,69,56.5,61.5,63.5,43,73.5,33.5,35.5,49.5,24,40.5,29.5],"totalPoints":870.5,"minBudget":92.5,"finalBudget":98.1},"C":{"budgets":[100,120,109.8,101.7,108.9,105.6,111.9,99.9,101.9,102,116.9,107.2,99.3,92.5,96.6,92.4,96.7],"points":[68.5,63,56,67,36.5,69,56.5,61.5,63.5,43,73.5,33.5,35.5,49.5,24,40.5,29.5],"totalPoints":870.5,"minBudget":92.4,"finalBudget":96.7},"E":{"budgets":[100,105.8,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[68.5,63,56,67,36.5,69,56.5,61.5,63.5,43,73.5,33.5,35.5,49.5,24,40.5,29.5],"totalPoints":870.5,"minBudget":100,"finalBudget":108}}},{"id":"F4","label":"Favoritista 4","archetype":"favoritista","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[43,30.5,56.5,42.5,28,43.5,47.5,58,80.5,25,81.5,43.5,35.5,60.5,38,53.5,28.5],"totalPoints":796,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,93.9,91.9,92.6,92.4,92.4,92.9,88.7,85.8,87.8,89.4,91.7,92.4,92.1,93.4,92.8,93],"points":[43,30.5,56.5,42.5,28,43.5,47.5,58,80.5,25,81.5,43.5,35.5,60.5,38,53.5,28.5],"totalPoints":796,"minBudget":85.8,"finalBudget":93},"C":{"budgets":[100,105.4,94.4,101.9,98.3,99.7,100.1,96.8,100.7,107.9,101.4,110.1,105.1,92.5,100.3,99.6,102.1],"points":[43,30.5,56.5,42.5,28,43.5,47.5,58,80.5,25,81.5,43.5,35.5,60.5,38,53.5,28.5],"totalPoints":796,"minBudget":92.5,"finalBudget":102.1},"E":{"budgets":[100,107.3,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[43,30.5,56.5,42.5,28,43.5,47.5,58,80.5,25,81.5,43.5,35.5,60.5,38,53.5,28.5],"totalPoints":796,"minBudget":100,"finalBudget":108}}},{"id":"F5","label":"Favoritista 5","archetype":"favoritista","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[36,32.5,43.5,35,15,38.5,39.5,61.5,77,22.5,59,40,30.5,68.5,31,54.5,35.5],"totalPoints":720,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,94,91.9,91.8,91.9,87.1,87.6,77.3,74.7,77,77,77.5,79.5,80.8,82.6,81.9,82.6],"points":[36,32.5,43.5,35,15,38.5,39.5,61.5,77,22.5,59,40,30.5,68.5,31,54.5,35.5],"totalPoints":720,"minBudget":74.7,"finalBudget":82.6},"C":{"budgets":[100,101.2,95.4,96.8,95.1,90.5,97.8,93.9,101.9,106.7,99.3,101.8,103.1,90.8,103,96,102.5],"points":[36,32.5,43.5,35,15,38.5,39.5,61.5,77,22.5,59,40,30.5,68.5,31,54.5,35.5],"totalPoints":720,"minBudget":90.5,"finalBudget":102.5},"E":{"budgets":[100,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[36,32.5,43.5,35,15,38.5,39.5,61.5,77,22.5,59,40,30.5,68.5,31,54.5,35.5],"totalPoints":720,"minBudget":100,"finalBudget":108}}},{"id":"F6","label":"Favoritista 6","archetype":"favoritista","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[37,41.5,32.5,23,22,42.5,37.5,84.5,61,45.5,70,54,38.5,56,29,54.5,40],"totalPoints":769,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,94.2,92.5,91.7,91.3,86.5,87.3,72.1,69.9,71.2,72,72.8,74.9,76.3,76.4,75.5,75.7],"points":[37,41.5,32.5,23,22,42.5,37.5,84.5,61,45.5,70,54,38.5,56,29,54.5,40],"totalPoints":769,"minBudget":69.9,"finalBudget":75.7},"C":{"budgets":[100,101.8,99.6,92.6,89.9,95.5,99.6,93.2,110.1,101.1,119,105.9,111.2,93.6,98.8,95,102.5],"points":[37,41.5,32.5,23,22,42.5,37.5,84.5,61,45.5,70,54,38.5,56,29,54.5,40],"totalPoints":769,"minBudget":89.9,"finalBudget":102.5},"E":{"budgets":[100,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[37,41.5,32.5,23,22,42.5,37.5,84.5,61,45.5,70,54,38.5,56,29,54.5,40],"totalPoints":769,"minBudget":100,"finalBudget":108}}},{"id":"G1","label":"Gastador 1","archetype":"gastador","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[25,61,74,51,31.5,27,70.5,81,71,21,80.5,48,98.5,93.5,66.5,82.5,52.5],"totalPoints":1035,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,92,92.2,95,86.3,80.3,70,57.2,55.1,57.7,58.1,61.5,65.3,69,74.9,81.4,85.9],"points":[25,61,74,51,31.5,27,70.5,81,71,21,80.5,48,98.5,93.5,66.5,82.5,52.5],"totalPoints":1035,"minBudget":55.1,"finalBudget":85.9},"C":{"budgets":[100,94.7,108.9,108.6,102,102.1,92.5,104.9,108.9,104.6,98,109.7,107.7,114.8,111.4,114.4,114.1],"points":[25,61,74,51,31.5,27,70.5,81,71,21,80.5,48,98.5,93.5,66.5,82.5,52.5],"totalPoints":1035,"minBudget":92.5,"finalBudget":114.1},"E":{"budgets":[100,101.4,103.7,104.3,103.7,105.7,107.7,108,108,108,108,108,108,108,108,108,108],"points":[25,61,74,51,31.5,27,70.5,81,71,21,80.5,48,98.5,93.5,66.5,82.5,52.5],"totalPoints":1035,"minBudget":100,"finalBudget":108}}},{"id":"G2","label":"Gastador 2","archetype":"gastador","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[48.5,60.5,70.5,68.5,29,30,74,82,57,7,60.5,34,63.5,58.5,57.5,54,44.5],"totalPoints":899.5,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,93.7,93.2,95.4,97.3,95.9,84.7,71.7,69.4,71.3,69.4,70.6,71.5,72.1,74.7,78.8,81.6],"points":[48.5,60.5,70.5,68.5,29,30,74,82,57,7,60.5,34,63.5,58.5,57.5,54,44.5],"totalPoints":899.5,"minBudget":69.4,"finalBudget":81.6},"C":{"budgets":[100,108.6,108.6,107.3,109.6,100.4,93.9,106.1,109.2,99.7,86,102.4,99.6,102.4,99.6,109.7,102.3],"points":[48.5,60.5,70.5,68.5,29,30,74,82,57,7,60.5,34,63.5,58.5,57.5,54,44.5],"totalPoints":899.5,"minBudget":86,"finalBudget":102.3},"E":{"budgets":[100,103.9,106.4,107.2,106.8,106.3,106.5,108,108,108,108,108,108,108,108,108,108],"points":[48.5,60.5,70.5,68.5,29,30,74,82,57,7,60.5,34,63.5,58.5,57.5,54,44.5],"totalPoints":899.5,"minBudget":100,"finalBudget":108}}},{"id":"G3","label":"Gastador 3","archetype":"gastador","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[68.5,63,76,49.5,46,56.5,79.5,78,63.5,8,60.5,32.5,61.5,60,69.5,59,37],"totalPoints":968.5,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,95.3,95.3,97.6,97.5,96.7,95.9,87.7,84.8,85.8,83.1,82.8,82.3,81.4,82.4,84.6,85.3],"points":[68.5,63,76,49.5,46,56.5,79.5,78,63.5,8,60.5,32.5,61.5,60,69.5,59,37],"totalPoints":968.5,"minBudget":81.4,"finalBudget":85.3},"C":{"budgets":[100,120,109.8,109.4,101.4,112.3,106.1,108.1,107.8,102,86.9,102.4,98.8,101.7,100.1,115.9,104.4],"points":[68.5,63,76,49.5,46,56.5,79.5,78,63.5,8,60.5,32.5,61.5,60,69.5,59,37],"totalPoints":968.5,"minBudget":86.9,"finalBudget":104.4},"E":{"budgets":[100,105.8,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[68.5,63,76,49.5,46,56.5,79.5,78,63.5,8,60.5,32.5,61.5,60,69.5,59,37],"totalPoints":968.5,"minBudget":100,"finalBudget":108}}},{"id":"G4","label":"Gastador 4","archetype":"gastador","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[43,30.5,52.5,38.5,37.5,60.5,55,75.5,61,14.5,65,24.5,53.5,63,61.5,53,25.5],"totalPoints":814.5,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,93.9,91.9,92.3,92,92,93,93.9,95.3,95.4,93.8,93.3,92,92.2,92.7,93.9,93.8],"points":[43,30.5,52.5,38.5,37.5,60.5,55,75.5,61,14.5,65,24.5,53.5,63,61.5,53,25.5],"totalPoints":814.5,"minBudget":91.9,"finalBudget":93.8},"C":{"budgets":[100,105.4,94.4,100.3,96.6,106.3,108,99.4,106.9,101.1,92.4,104,94.1,98.9,101.1,111.8,101.9],"points":[43,30.5,52.5,38.5,37.5,60.5,55,75.5,61,14.5,65,24.5,53.5,63,61.5,53,25.5],"totalPoints":814.5,"minBudget":92.4,"finalBudget":101.9},"E":{"budgets":[100,107.3,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[43,30.5,52.5,38.5,37.5,60.5,55,75.5,61,14.5,65,24.5,53.5,63,61.5,53,25.5],"totalPoints":814.5,"minBudget":100,"finalBudget":108}}},{"id":"G5","label":"Gastador 5","archetype":"gastador","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[36,32.5,43.5,35,28,43.5,56.5,63.5,77,36,57.5,33.5,35.5,49.5,38,53.5,28.5],"totalPoints":747.5,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,94,91.9,91.8,91.9,91.9,92.4,88.1,89.8,92,92.6,93.4,93.2,92.5,92.3,91.7,91.9],"points":[36,32.5,43.5,35,28,43.5,56.5,63.5,77,36,57.5,33.5,35.5,49.5,38,53.5,28.5],"totalPoints":747.5,"minBudget":88.1,"finalBudget":91.9},"C":{"budgets":[100,101.2,95.4,96.8,95.1,99.7,100.1,99.9,102.6,106.7,110.9,101.2,99.3,92.5,96.6,99.6,102.1],"points":[36,32.5,43.5,35,28,43.5,56.5,63.5,77,36,57.5,33.5,35.5,49.5,38,53.5,28.5],"totalPoints":747.5,"minBudget":92.5,"finalBudget":102.1},"E":{"budgets":[100,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[36,32.5,43.5,35,28,43.5,56.5,63.5,77,36,57.5,33.5,35.5,49.5,38,53.5,28.5],"totalPoints":747.5,"minBudget":100,"finalBudget":108}}},{"id":"E1","label":"Equilibrado 1","archetype":"equilibrado","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[25,77,92.5,65.5,38,42,87.5,55,82,23.5,83,46,86,93,52,82.5,40.5],"totalPoints":1071,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,93.2,94.1,97.4,86.7,85.7,74.4,60.1,56.5,57.7,58.2,61.1,64.3,67.9,71.7,76.7,81.2],"points":[25,77,92.5,65.5,38,42,87.5,55.5,60,37.5,83,70,80.5,85.5,51.5,82.5,40.5],"totalPoints":1074,"minBudget":56.5,"finalBudget":81.2},"C":{"budgets":[100,94.7,116.4,115.8,108.3,106.7,99.4,110.9,99.6,108.4,100.2,110.7,106.5,110.4,111.2,106.9,114.1],"points":[25,77,92.5,65.5,38,42,87.5,55,82,23.5,83,46,86,93,52,82.5,40.5],"totalPoints":1071,"minBudget":94.7,"finalBudget":114.1},"E":{"budgets":[100,108,108,106.9,105.8,105.6,105.8,108,108,108,108,108,108,108,108,108,108],"points":[25,77,92.5,65.5,38,42,87.5,55,82,23.5,83,46,86,93,52,82.5,40.5],"totalPoints":1071,"minBudget":100,"finalBudget":108}}},{"id":"E2","label":"Equilibrado 2","archetype":"equilibrado","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[37,42,74.5,53.5,27.5,63,87,49.5,106,25.5,63,32,67,77.5,42,50,39.5],"totalPoints":936.5,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,94.5,93.2,94.9,84.1,83.4,74.3,54.6,50.7,53.7,52.7,53.6,50.5,51.6,53.8,57,58.7],"points":[37,42,74.5,53.5,27.5,63,87,52.5,97.5,14,59,49.5,47.5,42.5,45.5,11.5,36],"totalPoints":840,"minBudget":50.5,"finalBudget":58.7},"C":{"budgets":[100,101.8,99.9,108.8,103.1,99.3,109.1,110.7,97.7,116.7,101.9,103.3,98.5,103.7,106,101.7,100.6],"points":[37,42,74.5,53.5,27.5,63,87,49.5,106,25.5,63,32,67,77.5,42,50,39.5],"totalPoints":936.5,"minBudget":97.7,"finalBudget":100.6},"E":{"budgets":[100,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[37,42,74.5,53.5,27.5,63,87,49.5,106,25.5,63,32,67,77.5,42,50,39.5],"totalPoints":936.5,"minBudget":100,"finalBudget":108}}},{"id":"E3","label":"Equilibrado 3","archetype":"equilibrado","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[27,38.5,72.5,88.5,39,78.5,71,47.5,103,40,81,47,50,77,25.5,43.5,34],"totalPoints":963.5,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,94.1,92.5,93.9,96.6,91.6,93,79.6,75.9,78.6,78,79,75.7,77.3,79.3,80.4,82.6],"points":[27,38.5,72.5,88.5,39,78.5,71,47.5,103,40,81,47,50,77,25.5,43.5,34],"totalPoints":963.5,"minBudget":75.7,"finalBudget":82.6},"C":{"budgets":[100,95.9,98.2,108,118.2,107.4,116.3,105.1,96.9,115.7,114.3,109.9,107.1,97.7,105.8,93.2,98],"points":[27,38.5,72.5,88.5,39,78.5,71,47.5,103,40,81,47,50,77,25.5,43.5,34],"totalPoints":963.5,"minBudget":93.2,"finalBudget":98},"E":{"budgets":[100,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[27,38.5,72.5,88.5,39,78.5,71,47.5,103,40,81,47,50,77,25.5,43.5,34],"totalPoints":963.5,"minBudget":100,"finalBudget":108}}},{"id":"E4","label":"Equilibrado 4","archetype":"equilibrado","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[22,26.5,60.5,97,43,77.5,62,53,76,40,79,32,69.5,75.5,37.5,56.5,52],"totalPoints":959.5,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,94.2,91.9,92.6,95.8,91.2,92.7,79.4,80.5,81.6,82,83.2,78.6,78.8,80.5,79.9,80.9],"points":[22,26.5,60.5,97,43,77.5,62,53,76,40,79,32,69.5,75.5,37.5,56.5,52],"totalPoints":959.5,"minBudget":78.6,"finalBudget":80.9},"C":{"budgets":[100,93,92.5,103.4,120,110.2,115.8,101.9,98.9,106.3,114.3,109.2,98.5,104.5,105.3,99.4,103.3],"points":[22,26.5,60.5,97,43,77.5,62,53,76,40,79,32,69.5,75.5,37.5,56.5,52],"totalPoints":959.5,"minBudget":92.5,"finalBudget":103.3},"E":{"budgets":[100,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[22,26.5,60.5,97,43,77.5,62,53,76,40,79,32,69.5,75.5,37.5,56.5,52],"totalPoints":959.5,"minBudget":100,"finalBudget":108}}},{"id":"E5","label":"Equilibrado 5","archetype":"equilibrado","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[11.5,29,49.5,76,37,59,65,67,69,32.5,72.5,24.5,55.5,50.5,38,69,50],"totalPoints":855.5,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,92,89.9,90,92.4,87.8,88.2,80.1,81.4,82.7,83,84.1,79.2,78.9,78.5,78,79.6],"points":[11.5,29,49.5,76,37,59,65,67,69,32.5,72.5,24.5,55.5,50.5,38,69,50],"totalPoints":855.5,"minBudget":78,"finalBudget":79.6},"C":{"budgets":[100,86.8,93.7,99.1,112.8,106,107.3,102.9,103.9,103.9,107.9,106.8,94.1,99.6,97,99.6,108.5],"points":[11.5,29,49.5,76,37,59,65,67,69,32.5,72.5,24.5,55.5,50.5,38,69,50],"totalPoints":855.5,"minBudget":86.8,"finalBudget":108.5},"E":{"budgets":[100,107.4,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[11.5,29,49.5,76,37,59,65,67,69,32.5,72.5,24.5,55.5,50.5,38,69,50],"totalPoints":855.5,"minBudget":100,"finalBudget":108}}},{"id":"E6","label":"Equilibrado 6","archetype":"equilibrado","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[8,44,45.5,53,41,50,57,40.5,59,25.5,69.5,24.5,44.5,43,34,69.5,49],"totalPoints":757.5,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,91.6,90,89.8,90,85.6,85.7,77.9,78.9,80.5,80.7,81.1,80.1,78.1,78.5,78.4,79.2],"points":[8,44,45.5,53,41,50,57,40.5,59,25.5,69.5,24.5,44.5,43,34,69.5,49],"totalPoints":757.5,"minBudget":77.9,"finalBudget":79.2},"C":{"budgets":[100,84.7,100.8,97.6,102.9,108.8,103.1,100.1,94.4,100.4,101.9,105.7,94.1,95.7,94.4,97.6,108.7],"points":[8,44,45.5,53,41,50,57,40.5,59,25.5,69.5,24.5,44.5,43,34,69.5,49],"totalPoints":757.5,"minBudget":84.7,"finalBudget":108.7},"E":{"budgets":[100,107.2,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[8,44,45.5,53,41,50,57,40.5,59,25.5,69.5,24.5,44.5,43,34,69.5,49],"totalPoints":757.5,"minBudget":100,"finalBudget":108}}},{"id":"E7","label":"Equilibrado 7","archetype":"equilibrado","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[16,53,51.5,49.5,36,30,71,53.5,57.5,32,63.5,28,44,41.5,25,67.5,43],"totalPoints":762.5,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,92,90.7,90.8,90.9,91.1,90.7,83.9,85.4,87.8,89,89.6,89.1,87.2,87.6,87.2,88.4],"points":[16,53,51.5,49.5,36,30,71,53.5,57.5,32,63.5,28,44,41.5,25,67.5,43],"totalPoints":762.5,"minBudget":83.9,"finalBudget":88.4},"C":{"budgets":[100,89.4,105.1,99.9,101.4,105.3,93.9,105.1,99.1,99.9,107.5,103.5,96.2,95.5,93.9,92.9,107.9],"points":[16,53,51.5,49.5,36,30,71,53.5,57.5,32,63.5,28,44,41.5,25,67.5,43],"totalPoints":762.5,"minBudget":89.4,"finalBudget":107.9},"E":{"budgets":[100,107,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[16,53,51.5,49.5,36,30,71,53.5,57.5,32,63.5,28,44,41.5,25,67.5,43],"totalPoints":762.5,"minBudget":100,"finalBudget":108}}},{"id":"E8","label":"Equilibrado 8","archetype":"equilibrado","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[41,43,55.5,58.5,31,34.5,62.5,45.5,64.5,47,56,36,33,39.5,15,75.5,25.5],"totalPoints":763.5,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,93.4,92.2,92.4,92.7,92.7,92.6,88.6,89.8,89.4,91,92.8,92.5,91.7,92.1,91.5,92.9],"points":[41,43,55.5,58.5,31,34.5,62.5,45.5,64.5,47,56,36,33,39.5,15,75.5,25.5],"totalPoints":763.5,"minBudget":88.6,"finalBudget":92.9},"C":{"budgets":[100,104.2,100.3,101.5,105.2,101.8,95.9,102.1,96.2,102.3,120,100.7,100.8,91.7,93.3,87.8,111.2],"points":[41,43,55.5,58.5,31,34.5,62.5,45.5,64.5,47,56,36,33,39.5,15,75.5,25.5],"totalPoints":763.5,"minBudget":87.8,"finalBudget":111.2},"E":{"budgets":[100,105.5,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[41,43,55.5,58.5,31,34.5,62.5,45.5,64.5,47,56,36,33,39.5,15,75.5,25.5],"totalPoints":763.5,"minBudget":100,"finalBudget":108}}},{"id":"V1","label":"Value 1","archetype":"value","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[53,44,35,18.5,7.5,63,79,27.5,34,22.5,50,50.5,45.5,40,13.5,31,23.5],"totalPoints":638,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,94.2,92.2,92.1,91.6,91.3,93.1,86,86.1,87.1,88,88.9,89.7,90,90,89.8,90.2],"points":[53,44,35,18.5,7.5,63,79,27.5,34,22.5,50,50.5,45.5,40,13.5,31,23.5],"totalPoints":638,"minBudget":86,"finalBudget":90.2},"C":{"budgets":[100,111.3,100.8,93.5,88,85.3,109.1,107.9,89.8,91.8,99.3,98.5,109.1,96.1,93.4,87,92.8],"points":[53,44,35,18.5,7.5,63,79,27.5,34,22.5,50,50.5,45.5,40,13.5,31,23.5],"totalPoints":638,"minBudget":85.3,"finalBudget":92.8},"E":{"budgets":[100,104.2,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[53,44,35,18.5,7.5,63,79,27.5,34,22.5,50,50.5,45.5,40,13.5,31,23.5],"totalPoints":638,"minBudget":100,"finalBudget":108}}},{"id":"V2","label":"Value 2","archetype":"value","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[71.5,39,38,17.5,12.5,52,65,39,47.5,9.5,57,54.5,59.5,54,11.5,41,29.5],"totalPoints":698.5,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,95.8,93.7,94,93.5,88.7,79.9,71.9,72.2,70.4,69.9,70.4,72.3,73.1,73.8,73.3,73.7],"points":[71.5,39,38,17.5,12.5,52,65,39,47.5,9.5,57,54.5,59.5,54,11.5,41,29.5],"totalPoints":698.5,"minBudget":69.9,"finalBudget":73.7},"C":{"budgets":[100,120,98.4,94.7,87.6,88.8,104,102.9,93.9,96.5,88.2,101.1,111.4,101,98.1,85.9,96.9],"points":[71.5,39,38,17.5,12.5,52,65,39,47.5,9.5,57,54.5,59.5,54,11.5,41,29.5],"totalPoints":698.5,"minBudget":85.9,"finalBudget":96.9},"E":{"budgets":[100,106.7,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[71.5,39,38,17.5,12.5,52,65,39,47.5,9.5,57,54.5,59.5,54,11.5,41,29.5],"totalPoints":698.5,"minBudget":100,"finalBudget":108}}},{"id":"V3","label":"Value 3","archetype":"value","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[59,24,40,8.5,21.5,51,61,43,57.5,20.5,51.5,43.5,63.5,48.5,14.5,39,15.5],"totalPoints":662,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,95.3,92.7,93.2,81.9,77.2,68.1,59.1,59.6,57.9,57.8,58.6,60.2,61.1,62.2,62.4,62.8],"points":[59,24,40,8.5,21.5,51,61,43,57.5,20.5,51.5,43.5,63.5,48.5,14.5,39,15.5],"totalPoints":662,"minBudget":57.8,"finalBudget":62.8},"C":{"budgets":[100,114.8,91.4,95.5,83.7,95.1,103.6,101.5,95.3,99.9,97.6,99,105.1,102.4,96.3,87.5,96.1],"points":[59,24,40,8.5,21.5,51,61,43,57.5,20.5,51.5,43.5,63.5,48.5,14.5,39,15.5],"totalPoints":662,"minBudget":83.7,"finalBudget":96.1},"E":{"budgets":[100,107.4,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[59,24,40,8.5,21.5,51,61,43,57.5,20.5,51.5,43.5,63.5,48.5,14.5,39,15.5],"totalPoints":662,"minBudget":100,"finalBudget":108}}},{"id":"V4","label":"Value 4","archetype":"value","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[36,16,34,43.5,14,46.5,58.5,57,58.5,17,47.5,39.5,68.5,52.5,14.5,26,18.5],"totalPoints":648,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,94.4,89.2,89.1,80.5,75.2,65.8,51.7,53.3,50.9,49.9,50.3,51.3,52.9,54,54.3,55.8],"points":[36,16,34,43.5,14,46.5,58.5,57,58.5,17,47.5,27,68.5,52.5,14.5,26,20.5],"totalPoints":637.5,"minBudget":49.9,"finalBudget":55.8},"C":{"budgets":[100,101.2,87.6,93.2,98.8,89.8,101.5,100.6,100.3,100.3,94.6,97.5,102.8,104.2,97.6,87.5,90.7],"points":[36,16,34,43.5,14,46.5,58.5,57,58.5,17,47.5,39.5,68.5,52.5,14.5,26,18.5],"totalPoints":648,"minBudget":87.5,"finalBudget":90.7},"E":{"budgets":[100,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[36,16,34,43.5,14,46.5,58.5,57,58.5,17,47.5,39.5,68.5,52.5,14.5,26,18.5],"totalPoints":648,"minBudget":100,"finalBudget":108}}},{"id":"V5","label":"Value 5","archetype":"value","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[30.5,20,27,45.5,9,61,28.5,81,53,22,39.5,24.5,89.5,71.5,44.5,20.5,15.5],"totalPoints":683,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,94,89,88.3,79.7,79.2,76.1,71.1,73.8,71.3,70.4,69.7,70.1,74.3,77.1,78.6,79.8],"points":[30.5,20,27,45.5,9,61,28.5,81,53,22,39.5,24.5,89.5,71.5,44.5,20.5,15.5],"totalPoints":683,"minBudget":69.7,"finalBudget":79.8},"C":{"budgets":[100,98,89.5,90.4,99.6,86.3,108.2,90.1,108.9,98.4,98.9,94.6,94.1,111.6,104,103,88.5],"points":[30.5,20,27,45.5,9,61,28.5,81,53,22,39.5,24.5,89.5,71.5,44.5,20.5,15.5],"totalPoints":683,"minBudget":86.3,"finalBudget":88.5},"E":{"budgets":[100,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[30.5,20,27,45.5,9,61,28.5,81,53,22,39.5,24.5,89.5,71.5,44.5,20.5,15.5],"totalPoints":683,"minBudget":100,"finalBudget":108}}},{"id":"V6","label":"Value 6","archetype":"value","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[33.5,20,29,57.5,6,36.5,34.5,82.5,61.5,30.5,37.5,19,77.5,63.5,49.5,23.5,20.5],"totalPoints":682.5,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,94.3,89.7,89.2,91.8,90.9,86.6,76.4,79.5,80.8,81.7,81.3,80.3,83.5,86.1,87.9,89.2],"points":[33.5,20,29,57.5,6,36.5,34.5,82.5,61.5,30.5,37.5,19,77.5,63.5,49.5,23.5,20.5],"totalPoints":682.5,"minBudget":76.4,"finalBudget":89.2},"C":{"budgets":[100,99.8,89.5,91.2,104.8,84.2,96.9,92.2,109.4,101.3,106.2,93.9,91,107.4,101.3,105.6,89.7],"points":[33.5,20,29,57.5,6,36.5,34.5,82.5,61.5,30.5,37.5,19,77.5,63.5,49.5,23.5,20.5],"totalPoints":682.5,"minBudget":84.2,"finalBudget":89.7},"E":{"budgets":[100,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[33.5,20,29,57.5,6,36.5,34.5,82.5,61.5,30.5,37.5,19,77.5,63.5,49.5,23.5,20.5],"totalPoints":682.5,"minBudget":100,"finalBudget":108}}},{"id":"V7","label":"Value 7","archetype":"value","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[25.5,41,31.5,34.5,2,31.5,35.5,80,56.5,15.5,32,28,76.5,68,48.5,19,30],"totalPoints":655.5,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,93.9,90,89.4,89.8,89,84.8,74.5,77.4,78.9,78.8,76.4,76.6,80.3,82.4,84.1,85.6],"points":[25.5,41,31.5,34.5,2,31.5,35.5,80,56.5,15.5,32,28,76.5,68,48.5,19,30],"totalPoints":655.5,"minBudget":74.5,"finalBudget":85.6},"C":{"budgets":[100,95,99.4,92.2,94.9,81.4,94.6,92.5,108.5,99.6,93.3,91.8,96.2,107,102.8,105.1,87.8],"points":[25.5,41,31.5,34.5,2,31.5,35.5,80,56.5,15.5,32,28,76.5,68,48.5,19,30],"totalPoints":655.5,"minBudget":81.4,"finalBudget":87.8},"E":{"budgets":[100,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[25.5,41,31.5,34.5,2,31.5,35.5,80,56.5,15.5,32,28,76.5,68,48.5,19,30],"totalPoints":655.5,"minBudget":100,"finalBudget":108}}},{"id":"V8","label":"Value 8","archetype":"value","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[22.5,41,35,32,6.5,30,46.5,68,59.5,23,30.5,32,73.5,91,51.5,54,29.5],"totalPoints":726,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,94,92.8,92.5,92.7,92.1,86.4,80.9,82.3,80.6,80.5,78,78.3,81.5,86.5,90.3,92.3],"points":[22.5,41,35,32,6.5,30,46.5,68,59.5,23,30.5,32,73.5,91,51.5,54,29.5],"totalPoints":726,"minBudget":78,"finalBudget":92.3},"C":{"budgets":[100,93.3,99.4,93.5,93.8,84.6,93.9,96.4,104.2,100.6,99.7,91.3,98.5,105.9,110.5,106.6,102.3],"points":[22.5,41,35,32,6.5,30,46.5,68,59.5,23,30.5,32,73.5,91,51.5,54,29.5],"totalPoints":726,"minBudget":84.6,"finalBudget":102.3},"E":{"budgets":[100,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[22.5,41,35,32,6.5,30,46.5,68,59.5,23,30.5,32,73.5,91,51.5,54,29.5],"totalPoints":726,"minBudget":100,"finalBudget":108}}},{"id":"A1","label":"Ahorrador 1","archetype":"ahorrador","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[20,27.5,27,1,2.5,6,12.5,22,15.5,4.5,17.5,9,9,-1,14,8,12],"totalPoints":207,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,96.9,95.8,94.4,93.9,94.2,94.4,93.2,94.2,95.2,95.7,95.7,96.6,97.3,97,97.4,97.9],"points":[20,27.5,27,1,2.5,6,12.5,22,15.5,4.5,17.5,9,9,-1,14,8,12],"totalPoints":207,"minBudget":93.2,"finalBudget":97.9},"C":{"budgets":[100,91.8,93,90.4,80.4,81.8,82.8,84.4,87.8,85.4,83.9,86.5,85.2,83.2,80,87.2,83.3],"points":[20,27.5,27,1,2.5,6,12.5,22,15.5,4.5,17.5,9,9,-1,14,8,12],"totalPoints":207,"minBudget":80,"finalBudget":83.3},"E":{"budgets":[100,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[20,27.5,27,1,2.5,6,12.5,22,15.5,4.5,17.5,9,9,-1,14,8,12],"totalPoints":207,"minBudget":100,"finalBudget":108}}},{"id":"A2","label":"Ahorrador 2","archetype":"ahorrador","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[13.5,17.5,25.5,14,35,20.5,4.5,32,19.5,6.5,12,11,18.5,-3.5,8.5,-2,14.5],"totalPoints":247.5,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,96.5,92.7,92.4,92,92.3,92.2,90.6,91.8,92.9,93.4,91.7,92.3,93.5,93.7,93.8,94.2],"points":[13.5,17.5,25.5,14,35,20.5,4.5,32,19.5,6.5,12,11,18.5,-3.5,8.5,-2,14.5],"totalPoints":247.5,"minBudget":90.6,"finalBudget":94.2},"C":{"budgets":[100,88,88.3,89.9,86,104.6,89.5,81.6,91.4,86.8,85.6,84.4,86.3,86.5,80,84.4,80],"points":[13.5,17.5,25.5,14,35,20.5,4.5,32,19.5,6.5,12,11,18.5,-3.5,8.5,-2,14.5],"totalPoints":247.5,"minBudget":80,"finalBudget":80},"E":{"budgets":[100,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[13.5,17.5,25.5,14,35,20.5,4.5,32,19.5,6.5,12,11,18.5,-3.5,8.5,-2,14.5],"totalPoints":247.5,"minBudget":100,"finalBudget":108}}},{"id":"A3","label":"Ahorrador 3","archetype":"ahorrador","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[11.5,10,15,14,32.5,20.5,5.5,29,15.5,12,4.5,17,26,7.5,14.5,-3,11],"totalPoints":243,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,96.1,92,91.6,91.1,91.4,91.3,89.8,91.3,92.6,93.6,90,90.8,91.8,92.3,92.9,93.7],"points":[11.5,10,15,14,32.5,20.5,5.5,29,15.5,12,4.5,17,26,7.5,14.5,-3,11],"totalPoints":243,"minBudget":89.8,"finalBudget":93.7},"C":{"budgets":[100,86.8,84.7,85.8,86,102.8,89.5,81.9,90.3,85.4,90.3,81.7,89.8,89.2,82.5,87.5,80],"points":[11.5,10,15,14,32.5,20.5,5.5,29,15.5,12,4.5,17,26,7.5,14.5,-3,11],"totalPoints":243,"minBudget":80,"finalBudget":80},"E":{"budgets":[100,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[11.5,10,15,14,32.5,20.5,5.5,29,15.5,12,4.5,17,26,7.5,14.5,-3,11],"totalPoints":243,"minBudget":100,"finalBudget":108}}},{"id":"A4","label":"Ahorrador 4","archetype":"ahorrador","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[16,-5,8.5,8.5,29.5,28.5,25,27,7,27,17.5,36,22,7.5,15.5,-5.5,14.5],"totalPoints":279.5,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,95.9,91.2,90.6,90.1,90.4,90.6,86.1,87.3,88.5,89.6,86.4,87.2,85.8,86.8,87.7,88.1],"points":[16,-5,8.5,8.5,29.5,28.5,25,27,7,27,17.5,36,22,7.5,15.5,-5.5,14.5],"totalPoints":279.5,"minBudget":85.8,"finalBudget":88.1},"C":{"budgets":[100,89.4,80,83.3,83.7,100.7,93.2,88.8,89.6,82.4,103.2,86.5,100.8,87.8,82.5,88,80],"points":[16,-5,8.5,8.5,29.5,28.5,25,27,7,27,17.5,36,22,7.5,15.5,-5.5,14.5],"totalPoints":279.5,"minBudget":80,"finalBudget":80},"E":{"budgets":[100,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[16,-5,8.5,8.5,29.5,28.5,25,27,7,27,17.5,36,22,7.5,15.5,-5.5,14.5],"totalPoints":279.5,"minBudget":100,"finalBudget":108}}},{"id":"A5","label":"Ahorrador 5","archetype":"ahorrador","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[10.5,7.5,-6.5,19.5,28.5,20.5,28.5,24.5,3.5,35,17.5,49,30.5,8,28.5,14.5,1.5],"totalPoints":321,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,95.7,91.3,90.2,89.9,90.4,91.5,88.8,90.7,92.3,93.5,91,92.1,90.8,92.4,94.1,94.7],"points":[10.5,7.5,-6.5,19.5,28.5,20.5,28.5,24.5,3.5,35,17.5,49,30.5,8,28.5,14.5,1.5],"totalPoints":321,"minBudget":88.8,"finalBudget":94.7},"C":{"budgets":[100,86.2,83.5,80,88.4,100,89.5,90.1,88.7,81.2,110,86.5,108.3,90.8,82.7,94.7,86],"points":[10.5,7.5,-6.5,19.5,28.5,20.5,28.5,24.5,3.5,35,17.5,49,30.5,8,28.5,14.5,1.5],"totalPoints":321,"minBudget":80,"finalBudget":86},"E":{"budgets":[100,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[10.5,7.5,-6.5,19.5,28.5,20.5,28.5,24.5,3.5,35,17.5,49,30.5,8,28.5,14.5,1.5],"totalPoints":321,"minBudget":100,"finalBudget":108}}},{"id":"M1","label":"Mal arranque · Francesco Bagnaia","archetype":"malArranque","anchor":"Francesco Bagnaia","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[48.5,63.5,72.5,33.5,23,34.5,79.5,75.5,61,14.5,65,31,79,86,67.5,86.5,40.5],"totalPoints":961.5,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,93.3,93,95.5,84,82.6,71.6,63.1,63.9,63.6,62.2,61.6,63.4,66.2,68.7,72.2,74.6],"points":[48.5,63.5,72.5,33.5,23,34.5,77,51.5,47.5,15.5,46.5,40,61.5,59.5,65.5,71,57.5],"totalPoints":868.5,"minBudget":61.6,"finalBudget":74.6},"C":{"budgets":[100,108.6,110,108,94.5,96.2,95.9,108.1,106.9,101.1,92.4,104,97.9,107.9,108.9,114.9,115.7],"points":[48.5,63.5,72.5,33.5,23,34.5,79.5,75.5,61,14.5,65,31,79,86,67.5,86.5,40.5],"totalPoints":961.5,"minBudget":92.4,"finalBudget":115.7},"E":{"budgets":[100,103.1,105.6,106.3,105.8,106,106.4,108,108,108,108,108,108,108,108,108,107.7],"points":[48.5,63.5,72.5,33.5,23,34.5,79.5,75.5,61,14.5,65,31,79,86,67.5,86.5,40.5],"totalPoints":961.5,"minBudget":100,"finalBudget":107.7}}},{"id":"M2","label":"Mal arranque · Francesco Bagnaia (v2)","archetype":"malArranque","anchor":"Francesco Bagnaia","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[48.5,60.5,70.5,68.5,40,61,58.5,63.5,76.5,29,53.5,24.5,51,65,51.5,51.5,39.5],"totalPoints":913,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,93.7,93.2,95.4,97.3,96.3,95.8,91.8,88.1,89.6,89.2,88.9,87.6,88.1,88.5,91.2,93.3],"points":[48.5,60.5,70.5,68.5,40,61,58.5,63.5,76.5,29,53.5,24.5,51,65,51.5,51.5,39.5],"totalPoints":913,"minBudget":87.6,"finalBudget":93.3},"C":{"budgets":[100,108.6,108.6,107.3,109.6,108.1,108.2,100.6,102.6,106.5,104.9,99.8,94.1,98,101.8,106.6,101.3],"points":[48.5,60.5,70.5,68.5,40,61,58.5,63.5,76.5,29,53.5,24.5,51,65,51.5,51.5,39.5],"totalPoints":913,"minBudget":94.1,"finalBudget":101.3},"E":{"budgets":[100,103.9,106.4,107.2,106.8,108,108,108,108,108,108,108,108,108,108,108,108],"points":[48.5,60.5,70.5,68.5,40,61,58.5,63.5,76.5,29,53.5,24.5,51,65,51.5,51.5,39.5],"totalPoints":913,"minBudget":100,"finalBudget":108}}},{"id":"M3","label":"Mal arranque · Alex Marquez","archetype":"malArranque","anchor":"Alex Marquez","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[21.5,66,72.5,74.5,38,33.5,63,49,41.5,22.5,40,42,87,102.5,52,62,47],"totalPoints":914.5,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,92.1,92.4,95.2,86.8,85.8,74.5,60,59.9,60.5,60.1,61,64.3,69.4,74.9,80,83.3],"points":[21.5,66,72.5,74.5,38,33.5,63,49,41.5,22.5,40,42,87,102.5,52,62,47],"totalPoints":914.5,"minBudget":59.9,"finalBudget":83.3},"C":{"budgets":[100,92.7,111.2,108,112.1,106.7,95.5,102.2,97.5,94.4,99.3,94.8,104.2,110.7,114.4,106.9,105.6],"points":[21.5,66,72.5,74.5,38,33.5,63,49,41.5,22.5,40,42,87,102.5,52,62,47],"totalPoints":914.5,"minBudget":92.7,"finalBudget":105.6},"E":{"budgets":[100,101.5,103.9,104.4,103.8,105.1,105.7,108,108,108,108,108,108,108,108,108,107.3],"points":[21.5,66,72.5,74.5,38,33.5,63,49,41.5,22.5,40,42,87,102.5,52,62,47],"totalPoints":914.5,"minBudget":100,"finalBudget":107.3}}},{"id":"M4","label":"Mal arranque · Alex Marquez (v2)","archetype":"malArranque","anchor":"Alex Marquez","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[45,65.5,72.5,102.5,27.5,54.5,42,26.5,48,34.5,35.5,28,52,81.5,42,29.5,39],"totalPoints":826,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,93.8,93.3,96,99.1,98.4,89.4,79,73.8,75.8,76.6,77.7,78,80.2,83,85.3,86],"points":[45,65.5,72.5,102.5,27.5,54.5,42,26.5,48,34.5,35.5,28,52,81.5,42,29.5,39],"totalPoints":826,"minBudget":73.8,"finalBudget":86},"C":{"budgets":[100,106.5,111,108,120,99.3,105.2,94.8,89.4,96.6,109.6,93.1,96.2,98.4,107.4,101.7,92.2],"points":[45,65.5,72.5,102.5,27.5,54.5,42,26.5,48,34.5,35.5,28,52,81.5,42,29.5,39],"totalPoints":826,"minBudget":89.4,"finalBudget":92.2},"E":{"budgets":[100,104,106.6,107.2,106.7,108,108,108,108,108,108,108,108,108,108,108,108],"points":[45,65.5,72.5,102.5,27.5,54.5,42,26.5,48,34.5,35.5,28,52,81.5,42,29.5,39],"totalPoints":826,"minBudget":100,"finalBudget":108}}},{"id":"S1","label":"P5 · 2 favoritos + 2 value","archetype":"estratega","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[25,39,64.5,36,28.5,19.5,78.5,67.5,56,5.5,69,44,81.5,84,65.5,79.5,37.5],"totalPoints":881,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,92,89.9,91.6,80.6,79.7,67.6,60.7,61.1,60.6,59,58.8,61.5,64.4,67.3,71.8,73.5],"points":[25,39,64.5,36,28.5,19.5,78.5,67.5,36.5,10,50,44,62.5,53.5,71.5,60.5,30],"totalPoints":777,"minBudget":58.8,"finalBudget":73.5},"C":{"budgets":[100,94.7,98.4,105,95.5,100,89,107.7,104.1,99.4,84.7,105.5,105.4,108.8,108.2,113.9,112.8],"points":[25,39,64.5,36,28.5,19.5,78.5,67.5,56,5.5,69,44,81.5,84,65.5,79.5,37.5],"totalPoints":881,"minBudget":84.7,"finalBudget":112.8},"E":{"budgets":[100,101.4,107.6,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[25,39,64.5,36,28.5,19.5,78.5,67.5,56,5.5,69,44,81.5,84,65.5,79.5,37.5],"totalPoints":881,"minBudget":100,"finalBudget":108}}},{"id":"S2","label":"P6 · 1 favorito + 3 value","archetype":"estratega","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[53,44,35,18.5,0.5,50,79,47,28.5,11,50,49.5,80.5,67,24.5,53,24.5],"totalPoints":715.5,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,94.2,92.2,92.1,80.9,80.4,71.4,64.3,64.6,64.3,64,64.9,67.9,70.8,73.7,76.4,78.4],"points":[53,44,35,18.5,0.5,50,79,47,28.5,11,50,49.5,80.5,67,24.5,53,24.5],"totalPoints":715.5,"minBudget":64,"finalBudget":78.4},"C":{"budgets":[100,111.3,100.8,93.5,88,80.4,103.1,107.9,96.8,89.9,89.4,98.5,108.6,108.4,102.5,92.7,101.9],"points":[53,44,35,18.5,0.5,50,79,47,28.5,11,50,49.5,80.5,67,24.5,53,24.5],"totalPoints":715.5,"minBudget":80.4,"finalBudget":101.9},"E":{"budgets":[100,104.2,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[53,44,35,18.5,0.5,50,79,47,28.5,11,50,49.5,80.5,67,24.5,53,24.5],"totalPoints":715.5,"minBudget":100,"finalBudget":108}}},{"id":"S3","label":"Ofensivo (precio)","archetype":"estratega","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[25,61,74,51,38,33.5,79.5,75.5,61,14.5,65,31,79,93,60.5,80,47.5],"totalPoints":969,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,92,92.2,95,86.3,85.2,73.9,65.7,67.1,67.3,65.7,65.1,66.4,69.6,73.3,78.6,82],"points":[25,61,74,51,38,33.5,79.5,75.5,61,14.5,65,33,80,86,70.5,68,53],"totalPoints":968.5,"minBudget":65.1,"finalBudget":82},"C":{"budgets":[100,94.7,108.9,108.6,102,106.7,95.5,108.1,106.9,101.1,92.4,104,97.9,107.9,111.2,111.3,113],"points":[25,61,74,51,38,33.5,79.5,75.5,61,14.5,65,31,79,93,60.5,80,47.5],"totalPoints":969,"minBudget":92.4,"finalBudget":113},"E":{"budgets":[100,101.4,103.7,104.3,103.7,105.1,105.7,108,108,108,108,108,108,108,108,108,107.1],"points":[25,61,74,51,38,33.5,79.5,75.5,61,14.5,65,31,79,93,60.5,80,47.5],"totalPoints":969,"minBudget":100,"finalBudget":107.1}}},{"id":"S4","label":"Defensivo (forma)","archetype":"estratega","byOption":{"A":{"budgets":[100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100],"points":[20,100,112.5,73.5,86.5,41.5,84.5,30.5,82,23.5,79,54,64,82,60,83,76.5],"totalPoints":1153,"minBudget":100,"finalBudget":100},"B":{"budgets":[100,93.6,94.9,98.2,98.3,97.9,85.5,77.7,72.7,74.8,75.1,78.2,77,80.1,84.4,90.1,92.9],"points":[20,100,112.5,73.5,86.5,41.5,84.5,30.5,82,23.5,79,54,64,82,60,83,76.5],"totalPoints":1153,"minBudget":72.7,"finalBudget":92.9},"C":{"budgets":[100,91.8,120,120,111.7,120,99.2,109.8,90.9,108.4,100.2,109.2,111.2,102.6,107.5,111,114.3],"points":[20,100,112.5,73.5,86.5,41.5,84.5,30.5,82,23.5,79,54,64,82,60,83,76.5],"totalPoints":1153,"minBudget":90.9,"finalBudget":114.3},"E":{"budgets":[100,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108,108],"points":[20,100,112.5,73.5,86.5,41.5,84.5,30.5,82,23.5,79,54,64,82,60,83,76.5],"totalPoints":1153,"minBudget":100,"finalBudget":108}}}],"priceMovers":[{"name":"Marco Bezzecchi","constructor":"Aprilia","p0":17.60183486238532,"start":17.6,"end":6.7,"delta":-10.9,"wins":5,"podiums":11,"dnf":1,"absent":4},{"name":"Fermin Aldeguer","constructor":"Ducati","p0":12.245871559633027,"start":12.2,"end":6.2,"delta":-6.1,"wins":0,"podiums":0,"dnf":1,"absent":5},{"name":"Joan Mir","constructor":"Honda","p0":7.69908256880734,"start":7.7,"end":1.9,"delta":-5.8,"wins":0,"podiums":0,"dnf":7,"absent":5},{"name":"Alex Marquez","constructor":"Ducati","p0":21.994495412844035,"start":22,"end":16.3,"delta":-5.7,"wins":1,"podiums":2,"dnf":6,"absent":3},{"name":"Johann Zarco","constructor":"Honda","p0":9.702752293577982,"start":9.7,"end":4.9,"delta":-4.8,"wins":0,"podiums":0,"dnf":2,"absent":6},{"name":"Maverick Viñales","constructor":"KTM","p0":6.774311926605504,"start":6.8,"end":2.2,"delta":-4.5,"wins":0,"podiums":0,"dnf":1,"absent":7},{"name":"Ai Ogura","constructor":"Aprilia","p0":7.429357798165138,"start":7.4,"end":3.1,"delta":-4.3,"wins":1,"podiums":4,"dnf":2,"absent":2},{"name":"Franco Morbidelli","constructor":"Ducati","p0":12.900917431192662,"start":12.9,"end":10,"delta":-2.9,"wins":0,"podiums":0,"dnf":2,"absent":0},{"name":"Francesco Bagnaia","constructor":"Ducati","p0":15.097247706422019,"start":15.1,"end":12.6,"delta":-2.5,"wins":0,"podiums":3,"dnf":8,"absent":0},{"name":"Fabio Quartararo","constructor":"Yamaha","p0":11.744954128440368,"start":11.7,"end":9.4,"delta":-2.4,"wins":0,"podiums":0,"dnf":2,"absent":0},{"name":"Fabio Di Giannantonio","constructor":"Ducati","p0":14.095412844036698,"start":14.1,"end":12,"delta":-2.1,"wins":0,"podiums":2,"dnf":1,"absent":0},{"name":"Marc Marquez","constructor":"Ducati","p0":25,"start":25,"end":26.8,"delta":1.8,"wins":6,"podiums":6,"dnf":2,"absent":2}]};
+
+const OPTS = ["A", "B", "C", "E"];
+const COLORS = { A: "#94a3b8", B: "#ef4444", C: "#f59e0b", E: "#22c55e" };
+const NAMES = {
+  A: "A · Fijo",
+  B: "B · Oficial (ratchet)",
+  C: "C · Dinámico",
+  E: "E · Híbrido (recomendado)",
+};
+const B = DATA.params.B;
+const N = DATA.gps.length;
+
+const f1 = (x) => x.toFixed(1);
+const f2 = (x) => x.toFixed(2);
+const f3 = (x) => x.toFixed(3);
+const pct = (x) => (x * 100).toFixed(0) + " %";
+
+function gatePass(m) {
+  return m.giniFinal < 0.05 && m.recoveryWorst > 0.95 && m.diversityAvg > 0.7;
+}
+
+// ---------------------------------------------------------------------------
+// Cabecera
+// ---------------------------------------------------------------------------
+document.getElementById("header-sub").innerHTML =
+  "Opciones <b>A · B · C · E</b> sobre la temporada <b>2026 real</b> (" + N + " GPs, 40 jugadores, precios exógenos) · " +
+  "Parámetros PROVISIONAL: <b>B=" + B + ", t=" + DATA.params.t + ", cmax=" + DATA.params.cmax + "</b> · " +
+  "Generado el <b>" + DATA.generatedAt + "</b> con <code>npm run simulate:viz</code>";
+
+// ---------------------------------------------------------------------------
+// Tarjetas de la puerta T-15
+// ---------------------------------------------------------------------------
+const gateCards = document.getElementById("gate-cards");
+for (const o of OPTS) {
+  const m = DATA.options[o].metrics;
+  const pass = gatePass(m);
+  const div = document.createElement("div");
+  div.className = "card " + (pass ? "pass" : "fail");
+  div.innerHTML =
+    '<div class="card-head">' +
+      '<span class="opt-letter" style="background:' + COLORS[o] + '22;color:' + COLORS[o] + ';border:1px solid ' + COLORS[o] + '55">' + o + "</span>" +
+      '<span class="opt-name">' + NAMES[o] + "</span>" +
+      '<span class="badge ' + (pass ? "pass" : "fail") + '">' + (pass ? "PASA T-15" : "NO PASA") + "</span>" +
+    "</div>" +
+    '<div class="card-metrics">' +
+      '<div><span>Gini final</span><b>' + f3(m.giniFinal) + "</b></div>" +
+      '<div><span>Rec. peor jugador</span><b>' + f2(m.recoveryWorst) + " <i>(" + m.recoveryWorstPlayer + ")</i></b></div>" +
+      '<div><span>Espiral &lt; 0.9·B</span><b>' + m.deathSpiralPlayers.length + "/40</b></div>" +
+      '<div><span>Diversidad</span><b>' + pct(m.diversityAvg) + "</b></div>" +
+      '<div><span>Puntos / jugador</span><b>' + f1(m.avgPoints) + "</b></div>" +
+    "</div>";
+  gateCards.appendChild(div);
+}
+
+// ---------------------------------------------------------------------------
+// Utilidades de gráfico (SVG)
+// ---------------------------------------------------------------------------
+const NS = "http://www.w3.org/2000/svg";
+function svgEl(tag, attrs, parent) {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+
+function niceTicks(min, max, count) {
+  count = count || 6;
+  const span = max - min;
+  if (span <= 0) return [min];
+  const step0 = span / count;
+  const mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const norm = step0 / mag;
+  const step = (norm >= 5 ? 5 : norm >= 2 ? 2 : 1) * mag;
+  const ticks = [];
+  for (let v = Math.ceil(min / step) * step; v <= max + 1e-9; v += step) ticks.push(v);
+  return ticks;
+}
+
+/** Dibuja marco (rejilla + ejes) y devuelve las escalas. */
+function drawFrame(svg, W, H, pad, yMin, yMax, xLabels, yFmt) {
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  const plotW = W - pad.l - pad.r;
+  const plotH = H - pad.t - pad.b;
+  const X = (i) => pad.l + (i / (N - 1)) * plotW;
+  const Y = (v) => pad.t + (1 - (v - yMin) / (yMax - yMin)) * plotH;
+  for (const t of niceTicks(yMin, yMax)) {
+    svgEl("line", { x1: pad.l, x2: W - pad.r, y1: Y(t), y2: Y(t), stroke: "#1c2740", "stroke-width": 1 }, svg);
+    svgEl("text", { x: pad.l - 8, y: Y(t) + 4, "text-anchor": "end", class: "axis" }, svg).textContent = yFmt(t);
+  }
+  xLabels.forEach((lb, i) => {
+    svgEl("text", { x: X(i), y: H - pad.b + 18, "text-anchor": "middle", class: "axis" }, svg).textContent = lb;
+  });
+  return { X, Y, plotW, plotH };
+}
+
+function makeTip(wrap) {
+  const tip = document.createElement("div");
+  tip.className = "tip";
+  wrap.appendChild(tip);
+  return tip;
+}
+
+/** Capa de hover: línea vertical + tooltip. */
+function addHover(svg, wrap, tip, ctx) {
+  const line = svgEl("line", {
+    y1: ctx.pad.t, y2: ctx.H - ctx.pad.b,
+    stroke: "#3b4a68", "stroke-width": 1, "stroke-dasharray": "3,3", visibility: "hidden",
+  }, svg);
+  const rect = svgEl("rect", {
+    x: ctx.pad.l, y: ctx.pad.t,
+    width: ctx.W - ctx.pad.l - ctx.pad.r, height: ctx.H - ctx.pad.t - ctx.pad.b,
+    fill: "transparent",
+  }, svg);
+  rect.addEventListener("mousemove", (e) => {
+    const r = svg.getBoundingClientRect();
+    const scale = ctx.W / r.width;
+    const xView = (e.clientX - r.left) * scale;
+    let i = Math.round(((xView - ctx.pad.l) / (ctx.W - ctx.pad.l - ctx.pad.r)) * (N - 1));
+    i = Math.max(0, Math.min(N - 1, i));
+    line.setAttribute("x1", ctx.X(i));
+    line.setAttribute("x2", ctx.X(i));
+    line.setAttribute("visibility", "visible");
+    const html = ctx.onMove(i);
+    if (html) {
+      tip.innerHTML = html;
+      tip.style.display = "block";
+      const px = ctx.X(i) / scale;
+      const tw = tip.offsetWidth;
+      let left = px + 14;
+      if (left + tw > wrap.clientWidth - 8) left = px - tw - 14;
+      if (left < 4) left = 4;
+      tip.style.left = left + "px";
+      tip.style.top = "14px";
+    }
+  });
+  rect.addEventListener("mouseleave", () => {
+    line.setAttribute("visibility", "hidden");
+    tip.style.display = "none";
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Gráfico 1 — trayectoria del presupuesto por GP
+// ---------------------------------------------------------------------------
+const visible = { A: true, B: true, C: true, E: true };
+const trajWrap = document.getElementById("traj-wrap");
+const trajSvg = svgEl("svg", { viewBox: "0 0 1040 440", class: "chart" }, trajWrap);
+const trajTip = makeTip(trajWrap);
+
+function renderTrajectory() {
+  const W = 1040, H = 440, pad = { l: 56, r: 20, t: 20, b: 44 };
+  const active = OPTS.filter((o) => visible[o]);
+  let lo = B, hi = B + DATA.params.cmax;
+  for (const o of active) {
+    for (const v of DATA.options[o].minByGp) lo = Math.min(lo, v);
+    for (const v of DATA.options[o].maxByGp) hi = Math.max(hi, v);
+  }
+  lo = Math.min(lo, 0.9 * B);
+  const span = hi - lo || 1;
+  lo -= span * 0.06;
+  hi += span * 0.06;
+  const f = drawFrame(trajSvg, W, H, pad, lo, hi, DATA.gps.map((g) => g.shortName), (t) => t.toFixed(0));
+
+  // Umbral de espiral (0.9·B)
+  if (0.9 * B >= lo && 0.9 * B <= hi) {
+    svgEl("line", {
+      x1: pad.l, x2: W - pad.r, y1: f.Y(0.9 * B), y2: f.Y(0.9 * B),
+      stroke: "#ef4444", "stroke-width": 1.2, "stroke-dasharray": "6,4", opacity: 0.7,
+    }, trajSvg);
+    svgEl("text", { x: W - pad.r - 4, y: f.Y(0.9 * B) - 5, "text-anchor": "end", class: "thr" }, trajSvg)
+      .textContent = "0.9·B (umbral de espiral)";
+  }
+  // Línea base B
+  svgEl("line", {
+    x1: pad.l, x2: W - pad.r, y1: f.Y(B), y2: f.Y(B),
+    stroke: "#475569", "stroke-width": 1, "stroke-dasharray": "2,4",
+  }, trajSvg);
+
+  for (const o of active) {
+    const d = DATA.options[o];
+    const ptsMin = d.minByGp.map((v, i) => f.X(i) + "," + f.Y(v)).join(" ");
+    const ptsMax = d.maxByGp.map((v, i) => f.X(i) + "," + f.Y(v)).reverse().join(" ");
+    svgEl("polygon", { points: ptsMin + " " + ptsMax, fill: COLORS[o], opacity: 0.12 }, trajSvg);
+    const ptsAvg = d.avgByGp.map((v, i) => f.X(i) + "," + f.Y(v)).join(" ");
+    svgEl("polyline", {
+      points: ptsAvg, fill: "none", stroke: COLORS[o],
+      "stroke-width": 2.4, "stroke-linejoin": "round",
+    }, trajSvg);
+    d.avgByGp.forEach((v, i) => svgEl("circle", { cx: f.X(i), cy: f.Y(v), r: 2.6, fill: COLORS[o] }, trajSvg));
+  }
+
+  addHover(trajSvg, trajWrap, trajTip, {
+    X: f.X, W, H, pad,
+    onMove: (i) => {
+      const g = DATA.gps[i];
+      let rows = '<div class="tip-title">GP' + g.order + " · " + g.name + ' <span>' + g.date + "</span></div>";
+      for (const o of active) {
+        const d = DATA.options[o];
+        rows += '<div class="tip-row"><i style="background:' + COLORS[o] + '"></i><span><b>' + o + "</b> — " +
+          '<span class="tip-vals">medio <b>' + f1(d.avgByGp[i]) + "</b> · mín <b>" + f1(d.minByGp[i]) +
+          "</b> · máx <b>" + f1(d.maxByGp[i]) + "</b> · Gini <b>" + f3(d.giniByGp[i]) + "</b></span></span></div>";
+      }
+      return rows;
+    },
+  });
+}
+
+const toggles = document.getElementById("opt-toggles");
+for (const o of OPTS) {
+  const lab = document.createElement("label");
+  lab.className = "toggle";
+  lab.innerHTML = '<input type="checkbox" checked><i style="background:' + COLORS[o] + '"></i>' + NAMES[o];
+  lab.querySelector("input").addEventListener("change", (e) => {
+    visible[o] = e.target.checked;
+    renderTrajectory();
+  });
+  toggles.appendChild(lab);
+}
+renderTrajectory();
+
+// ---------------------------------------------------------------------------
+// Gráfico 2 — explorador de jugadores
+// ---------------------------------------------------------------------------
+const sel = document.getElementById("player-select");
+for (const p of DATA.players) {
+  const opt = document.createElement("option");
+  opt.value = p.id;
+  opt.textContent = p.id + " — " + p.label;
+  sel.appendChild(opt);
+}
+
+function playerRecovery(pid, o) {
+  const b = DATA.players.find((p) => p.id === pid).byOption[o].budgets;
+  const last3 = b.slice(-3);
+  return last3.reduce((s, v) => s + v, 0) / 3 / B;
+}
+
+let worstB = DATA.players[0].id;
+let bestE = DATA.players[0].id;
+for (const p of DATA.players) {
+  if (playerRecovery(p.id, "B") < playerRecovery(worstB, "B")) worstB = p.id;
+  if (playerRecovery(p.id, "E") > playerRecovery(bestE, "E")) bestE = p.id;
+}
+const quickDefs = [
+  { id: "M1", label: "M1 · Bagnaia" },
+  { id: "M3", label: "M3 · Á. Márquez" },
+  { id: worstB, label: "Peor bajo B (" + worstB + ")" },
+  { id: bestE, label: "Mejor bajo E (" + bestE + ")" },
+  { id: "S1", label: "S1 · P5" },
+  { id: "S2", label: "S2 · P6" },
+];
+const quickWrap = document.getElementById("quick-picks");
+for (const q of quickDefs) {
+  const btn = document.createElement("button");
+  btn.textContent = q.label;
+  btn.addEventListener("click", () => {
+    sel.value = q.id;
+    renderPlayer();
+  });
+  quickWrap.appendChild(btn);
+}
+
+const playerWrap = document.getElementById("player-wrap");
+const playerSvg = svgEl("svg", { viewBox: "0 0 1040 400", class: "chart" }, playerWrap);
+const playerTip = makeTip(playerWrap);
+
+function renderPlayer() {
+  const pid = sel.value;
+  const p = DATA.players.find((x) => x.id === pid);
+  const W = 1040, H = 400, pad = { l: 56, r: 20, t: 20, b: 44 };
+  let lo = Infinity, hi = -Infinity;
+  for (const o of OPTS) {
+    for (const v of p.byOption[o].budgets) {
+      lo = Math.min(lo, v);
+      hi = Math.max(hi, v);
+    }
+  }
+  lo = Math.min(lo, 0.9 * B);
+  const span = hi - lo || 1;
+  lo -= span * 0.08;
+  hi += span * 0.08;
+  const f = drawFrame(playerSvg, W, H, pad, lo, hi, DATA.gps.map((g) => g.shortName), (t) => t.toFixed(0));
+
+  if (0.9 * B >= lo && 0.9 * B <= hi) {
+    svgEl("line", {
+      x1: pad.l, x2: W - pad.r, y1: f.Y(0.9 * B), y2: f.Y(0.9 * B),
+      stroke: "#ef4444", "stroke-width": 1.2, "stroke-dasharray": "6,4", opacity: 0.7,
+    }, playerSvg);
+    svgEl("text", { x: W - pad.r - 4, y: f.Y(0.9 * B) - 5, "text-anchor": "end", class: "thr" }, playerSvg)
+      .textContent = "0.9·B (umbral de espiral)";
+  }
+
+  for (const o of OPTS) {
+    const d = p.byOption[o];
+    const pts = d.budgets.map((v, i) => f.X(i) + "," + f.Y(v)).join(" ");
+    svgEl("polyline", {
+      points: pts, fill: "none", stroke: COLORS[o],
+      "stroke-width": 2.4, "stroke-linejoin": "round",
+    }, playerSvg);
+    d.budgets.forEach((v, i) => svgEl("circle", { cx: f.X(i), cy: f.Y(v), r: 2.6, fill: COLORS[o] }, playerSvg));
+  }
+
+  addHover(playerSvg, playerWrap, playerTip, {
+    X: f.X, W, H, pad,
+    onMove: (i) => {
+      const g = DATA.gps[i];
+      let rows = '<div class="tip-title">' + p.id + " · " + p.label + "</div>" +
+        '<div class="tip-title" style="margin-top:2px">GP' + g.order + " · " + g.name + "</div>";
+      for (const o of OPTS) {
+        const d = p.byOption[o];
+        rows += '<div class="tip-row"><i style="background:' + COLORS[o] + '"></i><span><b>' + o + "</b> — " +
+          '<span class="tip-vals">presupuesto <b>' + f1(d.budgets[i]) + "</b> · puntos <b>" + f1(d.points[i]) + "</b></span></span></div>";
+      }
+      return rows;
+    },
+  });
+
+  const stats = document.getElementById("player-stats");
+  stats.innerHTML = OPTS.map((o) => {
+    const d = p.byOption[o];
+    const rec = playerRecovery(pid, o);
+    return '<div class="stat" style="border-top:3px solid ' + COLORS[o] + '">' +
+      '<div class="stat-opt">' + NAMES[o] + "</div>" +
+      '<div class="stat-row"><span>Final</span><b>' + f1(d.finalBudget) + "</b></div>" +
+      '<div class="stat-row"><span>Mín</span><b>' + f1(d.minBudget) + "</b></div>" +
+      '<div class="stat-row"><span>Puntos totales</span><b>' + f1(d.totalPoints) + "</b></div>" +
+      '<div class="stat-row"><span>Recuperación</span><b>' + f2(rec) + "</b></div>" +
+    "</div>";
+  }).join("");
+}
+sel.addEventListener("change", renderPlayer);
+renderPlayer();
+
+// ---------------------------------------------------------------------------
+// Métricas de la puerta T-15
+// ---------------------------------------------------------------------------
+function okFor(key, v) {
+  if (key === "giniFinal") return v < 0.05;
+  if (key === "recoveryWorst") return v > 0.95;
+  if (key === "diversityAvg") return v > 0.7;
+  if (key === "spiral") return v === 0;
+  return null;
+}
+const metricsDefs = [
+  { key: "giniFinal", label: "Gini final de los presupuestos", target: "< 0.05", fmt: f3 },
+  { key: "recoveryWorst", label: "Recuperación del peor jugador (media 3 últimos GPs / B)", target: "> 0.95", fmt: f2 },
+  { key: "diversityAvg", label: "Diversidad de lineups (% únicos por GP)", target: "> 70 %", fmt: pct },
+  { key: "spiral", label: "Jugadores en espiral (mínimo < 0.9·B)", target: "0", fmt: (x) => String(x) + " / 40" },
+  { key: "avgPoints", label: "Puntos por jugador (contexto)", target: "—", fmt: f1 },
+];
+const mp = document.getElementById("metrics-panel");
+mp.innerHTML = metricsDefs.map((md) => {
+  const vals = {};
+  for (const o of OPTS) {
+    const m = DATA.options[o].metrics;
+    vals[o] = md.key === "spiral" ? m.deathSpiralPlayers.length : m[md.key];
+  }
+  const vmax = Math.max.apply(null, Object.values(vals).concat([1e-9]));
+  const rows = OPTS.map((o) => {
+    const v = vals[o];
+    const ok = okFor(md.key, v);
+    return '<div class="mrow">' +
+      '<span class="mopt" style="color:' + COLORS[o] + '">' + o + "</span>" +
+      '<span class="mbar"><span style="width:' + (v / vmax) * 100 + "%;background:" + COLORS[o] + '"></span></span>' +
+      '<span class="mval ' + (ok === null ? "" : ok ? "ok" : "ko") + '">' + md.fmt(v) + (ok === null ? "" : ok ? " ✓" : " ✗") + "</span>" +
+    "</div>";
+  }).join("");
+  return '<div class="metric">' +
+    '<div class="metric-head"><span>' + md.label + '</span><span class="metric-target">meta T-15: ' + md.target + "</span></div>" +
+    rows +
+  "</div>";
+}).join("");
+
+// ---------------------------------------------------------------------------
+// Movimientos de precio
+// ---------------------------------------------------------------------------
+const tbl = document.getElementById("movers-table");
+let th = "<thead><tr><th>Piloto</th><th>Constructor</th><th>P0</th><th>Inicio</th><th>Final</th><th>Δ</th><th>Δ %</th><th>V</th><th>P</th><th>DNF</th><th>Aus.</th></tr></thead><tbody>";
+for (const r of DATA.priceMovers) {
+  const dPct = r.start ? (r.delta / r.start) * 100 : 0;
+  const cls = r.delta > 0 ? "up" : r.delta < 0 ? "down" : "";
+  const sign = r.delta > 0 ? "+" : "";
+  const signPct = dPct > 0 ? "+" : "";
+  th += "<tr><td>" + r.name + '</td><td class="mut">' + r.constructor + "</td><td>" + f1(r.p0) + "</td><td>" + f1(r.start) +
+    "</td><td>" + f1(r.end) + '</td><td class="' + cls + '">' + sign + f1(r.delta) + '</td><td class="' + cls + '">' + signPct +
+    f1(dPct) + " %</td><td>" + r.wins + "</td><td>" + r.podiums + "</td><td>" + r.dnf + "</td><td>" + r.absent + "</td></tr>";
+}
+tbl.innerHTML = th + "</tbody>";
+</script>
+</body>
+</html>
