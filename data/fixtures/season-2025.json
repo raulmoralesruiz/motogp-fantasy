@@ -1,0 +1,211 @@
+{
+  "year": 2025,
+  "seasonUuid": "ae6c6f0d-c652-44f8-94aa-420fc5b3dab4",
+  "categoryUuid": "e8c110ad-64aa-4e8e-8a86-f2f152f6a942",
+  "fetchedAt": "2026-10-13T17:42:35.886Z",
+  "standings": [
+    {
+      "riderId": "23e50438-a657-4fb0-a190-3262b5472f29",
+      "name": "Marc Marquez",
+      "points": 545,
+      "team": "Ducati Lenovo Team",
+      "constructor": "Ducati"
+    },
+    {
+      "riderId": "41195f0f-9817-4a4d-913e-c1fbbb351d9b",
+      "name": "Alex Marquez",
+      "points": 467,
+      "team": "BK8 Gresini Racing MotoGP",
+      "constructor": "Ducati"
+    },
+    {
+      "riderId": "e622ec5b-5ccf-457c-a67f-ec028f0ddf6e",
+      "name": "Marco Bezzecchi",
+      "points": 353,
+      "team": "Aprilia Racing",
+      "constructor": "Aprilia"
+    },
+    {
+      "riderId": "ea39a0af-95d3-4a37-81a7-f332efdb9216",
+      "name": "Pedro Acosta",
+      "points": 307,
+      "team": "Red Bull KTM Factory Racing",
+      "constructor": "KTM"
+    },
+    {
+      "riderId": "66b78301-5826-4986-b11e-fa68a7bd77a7",
+      "name": "Francesco Bagnaia",
+      "points": 288,
+      "team": "Ducati Lenovo Team",
+      "constructor": "Ducati"
+    },
+    {
+      "riderId": "525b1551-f10b-4cfd-9b43-59af6fca654b",
+      "name": "Fabio Di Giannantonio",
+      "points": 262,
+      "team": "Pertamina Enduro VR46 Racing Team",
+      "constructor": "Ducati"
+    },
+    {
+      "riderId": "4113c5f7-33c5-4246-b05b-3f81f4ddbd8f",
+      "name": "Franco Morbidelli",
+      "points": 231,
+      "team": "Pertamina Enduro VR46 Racing Team",
+      "constructor": "Ducati"
+    },
+    {
+      "riderId": "71052114-5bce-4307-908c-4cc2bd387aac",
+      "name": "Fermin Aldeguer",
+      "points": 214,
+      "team": "BK8 Gresini Racing MotoGP",
+      "constructor": "Ducati"
+    },
+    {
+      "riderId": "bf95d959-6a60-44f1-84b5-ded861e62578",
+      "name": "Fabio Quartararo",
+      "points": 201,
+      "team": "Monster Energy Yamaha MotoGP Team",
+      "constructor": "Yamaha"
+    },
+    {
+      "riderId": "eec1f7dc-b115-44f6-82aa-73130e5c92cf",
+      "name": "Raul Fernandez",
+      "points": 172,
+      "team": "Trackhouse MotoGP Team",
+      "constructor": "Aprilia"
+    },
+    {
+      "riderId": "ade5ef32-01ea-487c-95ca-491544a668ed",
+      "name": "Brad Binder",
+      "points": 155,
+      "team": "Red Bull KTM Factory Racing",
+      "constructor": "KTM"
+    },
+    {
+      "riderId": "4a439bde-305a-4995-b3e7-783fa99f784a",
+      "name": "Johann Zarco",
+      "points": 148,
+      "team": "CASTROL Honda LCR",
+      "constructor": "Honda"
+    },
+    {
+      "riderId": "5dfc20db-c3c4-4ecd-9c7c-f6cfd042031a",
+      "name": "Luca Marini",
+      "points": 142,
+      "team": "Honda HRC Castrol",
+      "constructor": "Honda"
+    },
+    {
+      "riderId": "00db2312-15f2-4333-be5c-4bbff9d17aec",
+      "name": "Enea Bastianini",
+      "points": 112,
+      "team": "Red Bull KTM Tech3",
+      "constructor": "KTM"
+    },
+    {
+      "riderId": "f55f9c34-8621-437b-ae04-ae2418720204",
+      "name": "Joan Mir",
+      "points": 96,
+      "team": "Honda HRC Castrol",
+      "constructor": "Honda"
+    },
+    {
+      "riderId": "244b6f51-ac33-40ee-876d-9401dc9d1346",
+      "name": "Ai Ogura",
+      "points": 89,
+      "team": "Trackhouse MotoGP Team",
+      "constructor": "Aprilia"
+    },
+    {
+      "riderId": "b0c1fea6-2dd5-4e26-8a18-0ac9fe6870e4",
+      "name": "Jack Miller",
+      "points": 79,
+      "team": "Prima Pramac Yamaha MotoGP",
+      "constructor": "Yamaha"
+    },
+    {
+      "riderId": "71df6f0d-51c3-4cdb-9f5c-51939e6f33f2",
+      "name": "Maverick Viñales",
+      "points": 72,
+      "team": "Red Bull KTM Tech3",
+      "constructor": "KTM"
+    },
+    {
+      "riderId": "04bf0ce4-5062-44fc-9745-ec85a8d8f8d3",
+      "name": "Alex Rins",
+      "points": 68,
+      "team": "Monster Energy Yamaha MotoGP Team",
+      "constructor": "Yamaha"
+    },
+    {
+      "riderId": "50b4fb1f-1785-4a9a-a65c-97d0de9daa22",
+      "name": "Miguel Oliveira",
+      "points": 43,
+      "team": "Prima Pramac Yamaha MotoGP",
+      "constructor": "Yamaha"
+    },
+    {
+      "riderId": "5b9af34e-da94-4ca2-9c4c-6be0fc8b1bbc",
+      "name": "Jorge Martin",
+      "points": 34,
+      "team": "Aprilia Racing",
+      "constructor": "Aprilia"
+    },
+    {
+      "riderId": "b8b255af-e344-4ca7-818b-480c18a11088",
+      "name": "Pol Espargaro",
+      "points": 29,
+      "team": "Red Bull KTM Tech3",
+      "constructor": "KTM"
+    },
+    {
+      "riderId": "a7b4d63f-45b3-402e-b66c-001ed8a62934",
+      "name": "Takaaki Nakagami",
+      "points": 10,
+      "team": "Honda HRC Test Team",
+      "constructor": "Honda"
+    },
+    {
+      "riderId": "a1311c17-1099-4893-bba0-347bf43226a4",
+      "name": "Lorenzo Savadori",
+      "points": 8,
+      "team": "Aprilia Racing",
+      "constructor": "Aprilia"
+    },
+    {
+      "riderId": "eb7f90b1-9373-4089-b2f5-adbc234a3526",
+      "name": "Augusto Fernandez",
+      "points": 8,
+      "team": "Yamaha Factory Racing Team",
+      "constructor": "Yamaha"
+    },
+    {
+      "riderId": "fa8ac04c-8fa2-4c43-9aa5-cc79b1f35fb9",
+      "name": "Somkiat Chantra",
+      "points": 7,
+      "team": "IDEMITSU Honda LCR",
+      "constructor": "Honda"
+    },
+    {
+      "riderId": "eec1a409-dafe-41b8-957a-200f75f57ed5",
+      "name": "Nicolo Bulega",
+      "points": 2,
+      "team": "Ducati Lenovo Team",
+      "constructor": "Ducati"
+    },
+    {
+      "riderId": "a2f51450-cb43-4d32-8eef-bda9ebb435ed",
+      "name": "Aleix Espargaro",
+      "points": 0,
+      "team": "Honda HRC Test Team",
+      "constructor": "Honda"
+    },
+    {
+      "riderId": "7c653b2a-b493-436b-a77e-06a43b37b799",
+      "name": "Michele Pirro",
+      "points": 0,
+      "team": "Ducati Lenovo Team",
+      "constructor": "Ducati"
+    }
+  ]
+}

@@ -1,0 +1,2804 @@
+{
+  "year": 2026,
+  "seasonUuid": "e88b4e43-2209-47aa-8e83-0e0b1cedde6e",
+  "categoryUuid": "e8c110ad-64aa-4e8e-8a86-f2f152f6a942",
+  "fetchedAt": "2026-10-13T17:42:35.886Z",
+  "gps": [
+    {
+      "order": 1,
+      "shortName": "THA",
+      "name": "GRAND PRIX OF THAILAND",
+      "date": "2026-03-01",
+      "results": [
+        {
+          "riderId": "e622ec5b-5ccf-457c-a67f-ec028f0ddf6e",
+          "position": 1,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "ea39a0af-95d3-4a37-81a7-f332efdb9216",
+          "position": 2,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "eec1f7dc-b115-44f6-82aa-73130e5c92cf",
+          "position": 3,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "5b9af34e-da94-4ca2-9c4c-6be0fc8b1bbc",
+          "position": 4,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "244b6f51-ac33-40ee-876d-9401dc9d1346",
+          "position": 5,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "525b1551-f10b-4cfd-9b43-59af6fca654b",
+          "position": 6,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "ade5ef32-01ea-487c-95ca-491544a668ed",
+          "position": 7,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "4113c5f7-33c5-4246-b05b-3f81f4ddbd8f",
+          "position": 8,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "66b78301-5826-4986-b11e-fa68a7bd77a7",
+          "position": 9,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "5dfc20db-c3c4-4ecd-9c7c-f6cfd042031a",
+          "position": 10,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "4a439bde-305a-4995-b3e7-783fa99f784a",
+          "position": 11,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "00db2312-15f2-4333-be5c-4bbff9d17aec",
+          "position": 12,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "e2479f8e-dad8-4191-9a6c-9d4aafa8c3a3",
+          "position": 13,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "bf95d959-6a60-44f1-84b5-ded861e62578",
+          "position": 14,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "04bf0ce4-5062-44fc-9745-ec85a8d8f8d3",
+          "position": 15,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "71df6f0d-51c3-4cdb-9f5c-51939e6f33f2",
+          "position": 16,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "c883a3b8-17ce-419d-b71b-32c252f6fc7e",
+          "position": 17,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "b0c1fea6-2dd5-4e26-8a18-0ac9fe6870e4",
+          "position": 18,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "7c653b2a-b493-436b-a77e-06a43b37b799",
+          "position": 19,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "f55f9c34-8621-437b-ae04-ae2418720204",
+          "position": null,
+          "status": "DNF",
+          "laps": 23
+        },
+        {
+          "riderId": "41195f0f-9817-4a4d-913e-c1fbbb351d9b",
+          "position": null,
+          "status": "DNF",
+          "laps": 21
+        },
+        {
+          "riderId": "23e50438-a657-4fb0-a190-3262b5472f29",
+          "position": null,
+          "status": "DNF",
+          "laps": 20
+        }
+      ]
+    },
+    {
+      "order": 2,
+      "shortName": "BRA",
+      "name": "GRAND PRIX OF BRAZIL",
+      "date": "2026-03-22",
+      "results": [
+        {
+          "riderId": "e622ec5b-5ccf-457c-a67f-ec028f0ddf6e",
+          "position": 1,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "5b9af34e-da94-4ca2-9c4c-6be0fc8b1bbc",
+          "position": 2,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "525b1551-f10b-4cfd-9b43-59af6fca654b",
+          "position": 3,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "23e50438-a657-4fb0-a190-3262b5472f29",
+          "position": 4,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "244b6f51-ac33-40ee-876d-9401dc9d1346",
+          "position": 5,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "41195f0f-9817-4a4d-913e-c1fbbb351d9b",
+          "position": 6,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "ea39a0af-95d3-4a37-81a7-f332efdb9216",
+          "position": 7,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "71052114-5bce-4307-908c-4cc2bd387aac",
+          "position": 8,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "4a439bde-305a-4995-b3e7-783fa99f784a",
+          "position": 9,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "eec1f7dc-b115-44f6-82aa-73130e5c92cf",
+          "position": 10,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "5dfc20db-c3c4-4ecd-9c7c-f6cfd042031a",
+          "position": 11,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "4113c5f7-33c5-4246-b05b-3f81f4ddbd8f",
+          "position": 12,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "e2479f8e-dad8-4191-9a6c-9d4aafa8c3a3",
+          "position": 13,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "04bf0ce4-5062-44fc-9745-ec85a8d8f8d3",
+          "position": 14,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "00db2312-15f2-4333-be5c-4bbff9d17aec",
+          "position": 15,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "bf95d959-6a60-44f1-84b5-ded861e62578",
+          "position": 16,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "c883a3b8-17ce-419d-b71b-32c252f6fc7e",
+          "position": 17,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "71df6f0d-51c3-4cdb-9f5c-51939e6f33f2",
+          "position": 18,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "66b78301-5826-4986-b11e-fa68a7bd77a7",
+          "position": null,
+          "status": "DNF",
+          "laps": 10
+        },
+        {
+          "riderId": "f55f9c34-8621-437b-ae04-ae2418720204",
+          "position": null,
+          "status": "DNF",
+          "laps": 10
+        },
+        {
+          "riderId": "ade5ef32-01ea-487c-95ca-491544a668ed",
+          "position": null,
+          "status": "DNF",
+          "laps": 3
+        },
+        {
+          "riderId": "b0c1fea6-2dd5-4e26-8a18-0ac9fe6870e4",
+          "position": null,
+          "status": "DNF",
+          "laps": 1
+        }
+      ]
+    },
+    {
+      "order": 3,
+      "shortName": "USA",
+      "name": "GRAND PRIX OF THE UNITED STATES",
+      "date": "2026-03-29",
+      "results": [
+        {
+          "riderId": "e622ec5b-5ccf-457c-a67f-ec028f0ddf6e",
+          "position": 1,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "5b9af34e-da94-4ca2-9c4c-6be0fc8b1bbc",
+          "position": 2,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "ea39a0af-95d3-4a37-81a7-f332efdb9216",
+          "position": 3,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "525b1551-f10b-4cfd-9b43-59af6fca654b",
+          "position": 4,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "23e50438-a657-4fb0-a190-3262b5472f29",
+          "position": 5,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "00db2312-15f2-4333-be5c-4bbff9d17aec",
+          "position": 6,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "41195f0f-9817-4a4d-913e-c1fbbb351d9b",
+          "position": 7,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "eec1f7dc-b115-44f6-82aa-73130e5c92cf",
+          "position": 8,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "5dfc20db-c3c4-4ecd-9c7c-f6cfd042031a",
+          "position": 9,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "66b78301-5826-4986-b11e-fa68a7bd77a7",
+          "position": 10,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "71052114-5bce-4307-908c-4cc2bd387aac",
+          "position": 11,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "ade5ef32-01ea-487c-95ca-491544a668ed",
+          "position": 12,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "e2479f8e-dad8-4191-9a6c-9d4aafa8c3a3",
+          "position": 13,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "4113c5f7-33c5-4246-b05b-3f81f4ddbd8f",
+          "position": 14,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "c883a3b8-17ce-419d-b71b-32c252f6fc7e",
+          "position": 15,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "b0c1fea6-2dd5-4e26-8a18-0ac9fe6870e4",
+          "position": 16,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "bf95d959-6a60-44f1-84b5-ded861e62578",
+          "position": 17,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "04bf0ce4-5062-44fc-9745-ec85a8d8f8d3",
+          "position": 18,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "4a439bde-305a-4995-b3e7-783fa99f784a",
+          "position": null,
+          "status": "DNF",
+          "laps": 18
+        },
+        {
+          "riderId": "244b6f51-ac33-40ee-876d-9401dc9d1346",
+          "position": null,
+          "status": "DNF",
+          "laps": 15
+        },
+        {
+          "riderId": "f55f9c34-8621-437b-ae04-ae2418720204",
+          "position": null,
+          "status": "DNF",
+          "laps": 5
+        }
+      ]
+    },
+    {
+      "order": 4,
+      "shortName": "SPA",
+      "name": "GRAND PRIX OF SPAIN",
+      "date": "2026-04-26",
+      "results": [
+        {
+          "riderId": "41195f0f-9817-4a4d-913e-c1fbbb351d9b",
+          "position": 1,
+          "status": "FINISHED",
+          "laps": 25
+        },
+        {
+          "riderId": "e622ec5b-5ccf-457c-a67f-ec028f0ddf6e",
+          "position": 2,
+          "status": "FINISHED",
+          "laps": 25
+        },
+        {
+          "riderId": "525b1551-f10b-4cfd-9b43-59af6fca654b",
+          "position": 3,
+          "status": "FINISHED",
+          "laps": 25
+        },
+        {
+          "riderId": "5b9af34e-da94-4ca2-9c4c-6be0fc8b1bbc",
+          "position": 4,
+          "status": "FINISHED",
+          "laps": 25
+        },
+        {
+          "riderId": "244b6f51-ac33-40ee-876d-9401dc9d1346",
+          "position": 5,
+          "status": "FINISHED",
+          "laps": 25
+        },
+        {
+          "riderId": "eec1f7dc-b115-44f6-82aa-73130e5c92cf",
+          "position": 6,
+          "status": "FINISHED",
+          "laps": 25
+        },
+        {
+          "riderId": "4a439bde-305a-4995-b3e7-783fa99f784a",
+          "position": 7,
+          "status": "FINISHED",
+          "laps": 25
+        },
+        {
+          "riderId": "00db2312-15f2-4333-be5c-4bbff9d17aec",
+          "position": 8,
+          "status": "FINISHED",
+          "laps": 25
+        },
+        {
+          "riderId": "71052114-5bce-4307-908c-4cc2bd387aac",
+          "position": 9,
+          "status": "FINISHED",
+          "laps": 25
+        },
+        {
+          "riderId": "ea39a0af-95d3-4a37-81a7-f332efdb9216",
+          "position": 10,
+          "status": "FINISHED",
+          "laps": 25
+        },
+        {
+          "riderId": "ade5ef32-01ea-487c-95ca-491544a668ed",
+          "position": 11,
+          "status": "FINISHED",
+          "laps": 25
+        },
+        {
+          "riderId": "4113c5f7-33c5-4246-b05b-3f81f4ddbd8f",
+          "position": 12,
+          "status": "FINISHED",
+          "laps": 25
+        },
+        {
+          "riderId": "5dfc20db-c3c4-4ecd-9c7c-f6cfd042031a",
+          "position": 13,
+          "status": "FINISHED",
+          "laps": 25
+        },
+        {
+          "riderId": "bf95d959-6a60-44f1-84b5-ded861e62578",
+          "position": 14,
+          "status": "FINISHED",
+          "laps": 25
+        },
+        {
+          "riderId": "f55f9c34-8621-437b-ae04-ae2418720204",
+          "position": 15,
+          "status": "FINISHED",
+          "laps": 25
+        },
+        {
+          "riderId": "04bf0ce4-5062-44fc-9745-ec85a8d8f8d3",
+          "position": 16,
+          "status": "FINISHED",
+          "laps": 25
+        },
+        {
+          "riderId": "e2479f8e-dad8-4191-9a6c-9d4aafa8c3a3",
+          "position": 17,
+          "status": "FINISHED",
+          "laps": 25
+        },
+        {
+          "riderId": "b0c1fea6-2dd5-4e26-8a18-0ac9fe6870e4",
+          "position": 18,
+          "status": "FINISHED",
+          "laps": 25
+        },
+        {
+          "riderId": "c883a3b8-17ce-419d-b71b-32c252f6fc7e",
+          "position": 19,
+          "status": "FINISHED",
+          "laps": 25
+        },
+        {
+          "riderId": "eb7f90b1-9373-4089-b2f5-adbc234a3526",
+          "position": 20,
+          "status": "FINISHED",
+          "laps": 25
+        },
+        {
+          "riderId": "66b78301-5826-4986-b11e-fa68a7bd77a7",
+          "position": null,
+          "status": "DNF",
+          "laps": 12
+        },
+        {
+          "riderId": "a1311c17-1099-4893-bba0-347bf43226a4",
+          "position": null,
+          "status": "DNF",
+          "laps": 6
+        },
+        {
+          "riderId": "23e50438-a657-4fb0-a190-3262b5472f29",
+          "position": null,
+          "status": "DNF",
+          "laps": 1
+        }
+      ]
+    },
+    {
+      "order": 5,
+      "shortName": "FRA",
+      "name": "GRAND PRIX DE FRANCE",
+      "date": "2026-05-10",
+      "results": [
+        {
+          "riderId": "5b9af34e-da94-4ca2-9c4c-6be0fc8b1bbc",
+          "position": 1,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "e622ec5b-5ccf-457c-a67f-ec028f0ddf6e",
+          "position": 2,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "244b6f51-ac33-40ee-876d-9401dc9d1346",
+          "position": 3,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "525b1551-f10b-4cfd-9b43-59af6fca654b",
+          "position": 4,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "ea39a0af-95d3-4a37-81a7-f332efdb9216",
+          "position": 5,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "bf95d959-6a60-44f1-84b5-ded861e62578",
+          "position": 6,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "00db2312-15f2-4333-be5c-4bbff9d17aec",
+          "position": 7,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "eec1f7dc-b115-44f6-82aa-73130e5c92cf",
+          "position": 8,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "71052114-5bce-4307-908c-4cc2bd387aac",
+          "position": 9,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "5dfc20db-c3c4-4ecd-9c7c-f6cfd042031a",
+          "position": 10,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "4a439bde-305a-4995-b3e7-783fa99f784a",
+          "position": 11,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "04bf0ce4-5062-44fc-9745-ec85a8d8f8d3",
+          "position": 12,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "c883a3b8-17ce-419d-b71b-32c252f6fc7e",
+          "position": 13,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "4113c5f7-33c5-4246-b05b-3f81f4ddbd8f",
+          "position": 14,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "b0c1fea6-2dd5-4e26-8a18-0ac9fe6870e4",
+          "position": 15,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "93d6c1b8-9853-4939-a926-f26593db8eaf",
+          "position": 16,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "ade5ef32-01ea-487c-95ca-491544a668ed",
+          "position": null,
+          "status": "DNF",
+          "laps": 20
+        },
+        {
+          "riderId": "f55f9c34-8621-437b-ae04-ae2418720204",
+          "position": null,
+          "status": "DNF",
+          "laps": 19
+        },
+        {
+          "riderId": "66b78301-5826-4986-b11e-fa68a7bd77a7",
+          "position": null,
+          "status": "DNF",
+          "laps": 15
+        },
+        {
+          "riderId": "e2479f8e-dad8-4191-9a6c-9d4aafa8c3a3",
+          "position": null,
+          "status": "DNF",
+          "laps": 10
+        },
+        {
+          "riderId": "41195f0f-9817-4a4d-913e-c1fbbb351d9b",
+          "position": null,
+          "status": "DNF",
+          "laps": 1
+        }
+      ]
+    },
+    {
+      "order": 6,
+      "shortName": "CAT",
+      "name": "GRAND PRIX OF CATALONIA",
+      "date": "2026-05-17",
+      "results": [
+        {
+          "riderId": "ea39a0af-95d3-4a37-81a7-f332efdb9216",
+          "position": 1,
+          "status": "FINISHED",
+          "laps": 11
+        },
+        {
+          "riderId": "eec1f7dc-b115-44f6-82aa-73130e5c92cf",
+          "position": 2,
+          "status": "FINISHED",
+          "laps": 11
+        },
+        {
+          "riderId": "5b9af34e-da94-4ca2-9c4c-6be0fc8b1bbc",
+          "position": 3,
+          "status": "FINISHED",
+          "laps": 11
+        },
+        {
+          "riderId": "525b1551-f10b-4cfd-9b43-59af6fca654b",
+          "position": 4,
+          "status": "FINISHED",
+          "laps": 11
+        },
+        {
+          "riderId": "4a439bde-305a-4995-b3e7-783fa99f784a",
+          "position": 5,
+          "status": "FINISHED",
+          "laps": 11
+        },
+        {
+          "riderId": "4113c5f7-33c5-4246-b05b-3f81f4ddbd8f",
+          "position": 6,
+          "status": "FINISHED",
+          "laps": 11
+        },
+        {
+          "riderId": "f55f9c34-8621-437b-ae04-ae2418720204",
+          "position": 7,
+          "status": "FINISHED",
+          "laps": 11
+        },
+        {
+          "riderId": "71052114-5bce-4307-908c-4cc2bd387aac",
+          "position": 8,
+          "status": "FINISHED",
+          "laps": 11
+        },
+        {
+          "riderId": "5dfc20db-c3c4-4ecd-9c7c-f6cfd042031a",
+          "position": 9,
+          "status": "FINISHED",
+          "laps": 11
+        },
+        {
+          "riderId": "66b78301-5826-4986-b11e-fa68a7bd77a7",
+          "position": 10,
+          "status": "FINISHED",
+          "laps": 11
+        },
+        {
+          "riderId": "244b6f51-ac33-40ee-876d-9401dc9d1346",
+          "position": 11,
+          "status": "FINISHED",
+          "laps": 11
+        },
+        {
+          "riderId": "e622ec5b-5ccf-457c-a67f-ec028f0ddf6e",
+          "position": 12,
+          "status": "FINISHED",
+          "laps": 11
+        },
+        {
+          "riderId": "bf95d959-6a60-44f1-84b5-ded861e62578",
+          "position": 13,
+          "status": "FINISHED",
+          "laps": 11
+        },
+        {
+          "riderId": "e2479f8e-dad8-4191-9a6c-9d4aafa8c3a3",
+          "position": 14,
+          "status": "FINISHED",
+          "laps": 11
+        },
+        {
+          "riderId": "71df6f0d-51c3-4cdb-9f5c-51939e6f33f2",
+          "position": 15,
+          "status": "FINISHED",
+          "laps": 11
+        },
+        {
+          "riderId": "b0c1fea6-2dd5-4e26-8a18-0ac9fe6870e4",
+          "position": 16,
+          "status": "FINISHED",
+          "laps": 11
+        },
+        {
+          "riderId": "04bf0ce4-5062-44fc-9745-ec85a8d8f8d3",
+          "position": 17,
+          "status": "FINISHED",
+          "laps": 11
+        },
+        {
+          "riderId": "c883a3b8-17ce-419d-b71b-32c252f6fc7e",
+          "position": 18,
+          "status": "FINISHED",
+          "laps": 11
+        },
+        {
+          "riderId": "eb7f90b1-9373-4089-b2f5-adbc234a3526",
+          "position": 19,
+          "status": "FINISHED",
+          "laps": 11
+        },
+        {
+          "riderId": "ade5ef32-01ea-487c-95ca-491544a668ed",
+          "position": 20,
+          "status": "FINISHED",
+          "laps": 11
+        },
+        {
+          "riderId": "41195f0f-9817-4a4d-913e-c1fbbb351d9b",
+          "position": null,
+          "status": "DNF",
+          "laps": 11
+        },
+        {
+          "riderId": "00db2312-15f2-4333-be5c-4bbff9d17aec",
+          "position": null,
+          "status": "DNF",
+          "laps": 9
+        }
+      ]
+    },
+    {
+      "order": 7,
+      "shortName": "ITA",
+      "name": "GRAND PRIX OF ITALY",
+      "date": "2026-05-31",
+      "results": [
+        {
+          "riderId": "e622ec5b-5ccf-457c-a67f-ec028f0ddf6e",
+          "position": 1,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "5b9af34e-da94-4ca2-9c4c-6be0fc8b1bbc",
+          "position": 2,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "66b78301-5826-4986-b11e-fa68a7bd77a7",
+          "position": 3,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "244b6f51-ac33-40ee-876d-9401dc9d1346",
+          "position": 4,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "525b1551-f10b-4cfd-9b43-59af6fca654b",
+          "position": 5,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "ea39a0af-95d3-4a37-81a7-f332efdb9216",
+          "position": 6,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "23e50438-a657-4fb0-a190-3262b5472f29",
+          "position": 7,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "71052114-5bce-4307-908c-4cc2bd387aac",
+          "position": 8,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "eec1f7dc-b115-44f6-82aa-73130e5c92cf",
+          "position": 9,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "e2479f8e-dad8-4191-9a6c-9d4aafa8c3a3",
+          "position": 10,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "ade5ef32-01ea-487c-95ca-491544a668ed",
+          "position": 11,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "f55f9c34-8621-437b-ae04-ae2418720204",
+          "position": 12,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "5dfc20db-c3c4-4ecd-9c7c-f6cfd042031a",
+          "position": 13,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "4113c5f7-33c5-4246-b05b-3f81f4ddbd8f",
+          "position": 14,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "b0c1fea6-2dd5-4e26-8a18-0ac9fe6870e4",
+          "position": 15,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "c883a3b8-17ce-419d-b71b-32c252f6fc7e",
+          "position": 16,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "71df6f0d-51c3-4cdb-9f5c-51939e6f33f2",
+          "position": 17,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "bf95d959-6a60-44f1-84b5-ded861e62578",
+          "position": 18,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "7c653b2a-b493-436b-a77e-06a43b37b799",
+          "position": 19,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "00db2312-15f2-4333-be5c-4bbff9d17aec",
+          "position": null,
+          "status": "DNF",
+          "laps": 11
+        },
+        {
+          "riderId": "ec9adf3a-985f-4eb6-8ffd-54b688f49846",
+          "position": null,
+          "status": "DNF",
+          "laps": 10
+        },
+        {
+          "riderId": "04bf0ce4-5062-44fc-9745-ec85a8d8f8d3",
+          "position": null,
+          "status": "DNF",
+          "laps": 10
+        }
+      ]
+    },
+    {
+      "order": 8,
+      "shortName": "HUN",
+      "name": "GRAND PRIX OF HUNGARY",
+      "date": "2026-06-07",
+      "results": [
+        {
+          "riderId": "23e50438-a657-4fb0-a190-3262b5472f29",
+          "position": 1,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "ea39a0af-95d3-4a37-81a7-f332efdb9216",
+          "position": 2,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "66b78301-5826-4986-b11e-fa68a7bd77a7",
+          "position": 3,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "244b6f51-ac33-40ee-876d-9401dc9d1346",
+          "position": 4,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "5dfc20db-c3c4-4ecd-9c7c-f6cfd042031a",
+          "position": 5,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "e2479f8e-dad8-4191-9a6c-9d4aafa8c3a3",
+          "position": 6,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "92d574d5-d064-4612-bf3e-421d01572512",
+          "position": 7,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "b0c1fea6-2dd5-4e26-8a18-0ac9fe6870e4",
+          "position": 8,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "00db2312-15f2-4333-be5c-4bbff9d17aec",
+          "position": 9,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "ade5ef32-01ea-487c-95ca-491544a668ed",
+          "position": 10,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "c883a3b8-17ce-419d-b71b-32c252f6fc7e",
+          "position": 11,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "525b1551-f10b-4cfd-9b43-59af6fca654b",
+          "position": 12,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "04bf0ce4-5062-44fc-9745-ec85a8d8f8d3",
+          "position": 13,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "4113c5f7-33c5-4246-b05b-3f81f4ddbd8f",
+          "position": 14,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "71df6f0d-51c3-4cdb-9f5c-51939e6f33f2",
+          "position": 15,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "ec9adf3a-985f-4eb6-8ffd-54b688f49846",
+          "position": 16,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "bf95d959-6a60-44f1-84b5-ded861e62578",
+          "position": null,
+          "status": "DNF",
+          "laps": 22
+        },
+        {
+          "riderId": "f55f9c34-8621-437b-ae04-ae2418720204",
+          "position": null,
+          "status": "DNF",
+          "laps": 14
+        },
+        {
+          "riderId": "71052114-5bce-4307-908c-4cc2bd387aac",
+          "position": null,
+          "status": "ABSENT",
+          "laps": 0
+        },
+        {
+          "riderId": "e622ec5b-5ccf-457c-a67f-ec028f0ddf6e",
+          "position": null,
+          "status": "ABSENT",
+          "laps": 0
+        },
+        {
+          "riderId": "eec1f7dc-b115-44f6-82aa-73130e5c92cf",
+          "position": null,
+          "status": "ABSENT",
+          "laps": 0
+        },
+        {
+          "riderId": "5b9af34e-da94-4ca2-9c4c-6be0fc8b1bbc",
+          "position": null,
+          "status": "ABSENT",
+          "laps": 0
+        }
+      ]
+    },
+    {
+      "order": 9,
+      "shortName": "CZE",
+      "name": "GRAND PRIX OF CZECHIA",
+      "date": "2026-06-21",
+      "results": [
+        {
+          "riderId": "23e50438-a657-4fb0-a190-3262b5472f29",
+          "position": 1,
+          "status": "FINISHED",
+          "laps": 21
+        },
+        {
+          "riderId": "244b6f51-ac33-40ee-876d-9401dc9d1346",
+          "position": 2,
+          "status": "FINISHED",
+          "laps": 21
+        },
+        {
+          "riderId": "66b78301-5826-4986-b11e-fa68a7bd77a7",
+          "position": 3,
+          "status": "FINISHED",
+          "laps": 21
+        },
+        {
+          "riderId": "525b1551-f10b-4cfd-9b43-59af6fca654b",
+          "position": 4,
+          "status": "FINISHED",
+          "laps": 21
+        },
+        {
+          "riderId": "f55f9c34-8621-437b-ae04-ae2418720204",
+          "position": 5,
+          "status": "FINISHED",
+          "laps": 21
+        },
+        {
+          "riderId": "71052114-5bce-4307-908c-4cc2bd387aac",
+          "position": 6,
+          "status": "FINISHED",
+          "laps": 21
+        },
+        {
+          "riderId": "eec1f7dc-b115-44f6-82aa-73130e5c92cf",
+          "position": 7,
+          "status": "FINISHED",
+          "laps": 21
+        },
+        {
+          "riderId": "5dfc20db-c3c4-4ecd-9c7c-f6cfd042031a",
+          "position": 8,
+          "status": "FINISHED",
+          "laps": 21
+        },
+        {
+          "riderId": "5b9af34e-da94-4ca2-9c4c-6be0fc8b1bbc",
+          "position": 9,
+          "status": "FINISHED",
+          "laps": 21
+        },
+        {
+          "riderId": "00db2312-15f2-4333-be5c-4bbff9d17aec",
+          "position": 10,
+          "status": "FINISHED",
+          "laps": 21
+        },
+        {
+          "riderId": "e2479f8e-dad8-4191-9a6c-9d4aafa8c3a3",
+          "position": 11,
+          "status": "FINISHED",
+          "laps": 21
+        },
+        {
+          "riderId": "ade5ef32-01ea-487c-95ca-491544a668ed",
+          "position": 12,
+          "status": "FINISHED",
+          "laps": 21
+        },
+        {
+          "riderId": "4113c5f7-33c5-4246-b05b-3f81f4ddbd8f",
+          "position": 13,
+          "status": "FINISHED",
+          "laps": 21
+        },
+        {
+          "riderId": "c883a3b8-17ce-419d-b71b-32c252f6fc7e",
+          "position": 14,
+          "status": "FINISHED",
+          "laps": 21
+        },
+        {
+          "riderId": "71df6f0d-51c3-4cdb-9f5c-51939e6f33f2",
+          "position": 15,
+          "status": "FINISHED",
+          "laps": 21
+        },
+        {
+          "riderId": "b0c1fea6-2dd5-4e26-8a18-0ac9fe6870e4",
+          "position": 16,
+          "status": "FINISHED",
+          "laps": 21
+        },
+        {
+          "riderId": "ec9adf3a-985f-4eb6-8ffd-54b688f49846",
+          "position": 17,
+          "status": "FINISHED",
+          "laps": 21
+        },
+        {
+          "riderId": "ea39a0af-95d3-4a37-81a7-f332efdb9216",
+          "position": null,
+          "status": "DNF",
+          "laps": 20
+        },
+        {
+          "riderId": "04bf0ce4-5062-44fc-9745-ec85a8d8f8d3",
+          "position": null,
+          "status": "DNF",
+          "laps": 17
+        },
+        {
+          "riderId": "bf95d959-6a60-44f1-84b5-ded861e62578",
+          "position": null,
+          "status": "DNF",
+          "laps": 1
+        }
+      ]
+    },
+    {
+      "order": 10,
+      "shortName": "NED",
+      "name": "GRAND PRIX OF THE NETHERLANDS",
+      "date": "2026-06-28",
+      "results": [
+        {
+          "riderId": "244b6f51-ac33-40ee-876d-9401dc9d1346",
+          "position": 1,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "eec1f7dc-b115-44f6-82aa-73130e5c92cf",
+          "position": 2,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "5b9af34e-da94-4ca2-9c4c-6be0fc8b1bbc",
+          "position": 3,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "525b1551-f10b-4cfd-9b43-59af6fca654b",
+          "position": 4,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "41195f0f-9817-4a4d-913e-c1fbbb351d9b",
+          "position": 5,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "00db2312-15f2-4333-be5c-4bbff9d17aec",
+          "position": 6,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "23e50438-a657-4fb0-a190-3262b5472f29",
+          "position": 7,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "bf95d959-6a60-44f1-84b5-ded861e62578",
+          "position": 8,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "04bf0ce4-5062-44fc-9745-ec85a8d8f8d3",
+          "position": 9,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "5dfc20db-c3c4-4ecd-9c7c-f6cfd042031a",
+          "position": 10,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "ade5ef32-01ea-487c-95ca-491544a668ed",
+          "position": 11,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "b0c1fea6-2dd5-4e26-8a18-0ac9fe6870e4",
+          "position": 12,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "71df6f0d-51c3-4cdb-9f5c-51939e6f33f2",
+          "position": 13,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "e2479f8e-dad8-4191-9a6c-9d4aafa8c3a3",
+          "position": 14,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "eb7f90b1-9373-4089-b2f5-adbc234a3526",
+          "position": 15,
+          "status": "FINISHED",
+          "laps": 26
+        },
+        {
+          "riderId": "ec9adf3a-985f-4eb6-8ffd-54b688f49846",
+          "position": 16,
+          "status": "FINISHED",
+          "laps": 25
+        },
+        {
+          "riderId": "66b78301-5826-4986-b11e-fa68a7bd77a7",
+          "position": null,
+          "status": "DNF",
+          "laps": 15
+        },
+        {
+          "riderId": "ea39a0af-95d3-4a37-81a7-f332efdb9216",
+          "position": null,
+          "status": "DNF",
+          "laps": 13
+        },
+        {
+          "riderId": "c883a3b8-17ce-419d-b71b-32c252f6fc7e",
+          "position": null,
+          "status": "DNF",
+          "laps": 13
+        },
+        {
+          "riderId": "4113c5f7-33c5-4246-b05b-3f81f4ddbd8f",
+          "position": null,
+          "status": "DNF",
+          "laps": 9
+        },
+        {
+          "riderId": "e622ec5b-5ccf-457c-a67f-ec028f0ddf6e",
+          "position": null,
+          "status": "DNF",
+          "laps": 1
+        },
+        {
+          "riderId": "f55f9c34-8621-437b-ae04-ae2418720204",
+          "position": null,
+          "status": "ABSENT",
+          "laps": 0
+        }
+      ]
+    },
+    {
+      "order": 11,
+      "shortName": "GER",
+      "name": "GRAND PRIX OF GERMANY",
+      "date": "2026-07-12",
+      "results": [
+        {
+          "riderId": "23e50438-a657-4fb0-a190-3262b5472f29",
+          "position": 1,
+          "status": "FINISHED",
+          "laps": 30
+        },
+        {
+          "riderId": "244b6f51-ac33-40ee-876d-9401dc9d1346",
+          "position": 2,
+          "status": "FINISHED",
+          "laps": 30
+        },
+        {
+          "riderId": "eec1f7dc-b115-44f6-82aa-73130e5c92cf",
+          "position": 3,
+          "status": "FINISHED",
+          "laps": 30
+        },
+        {
+          "riderId": "ea39a0af-95d3-4a37-81a7-f332efdb9216",
+          "position": 4,
+          "status": "FINISHED",
+          "laps": 30
+        },
+        {
+          "riderId": "5b9af34e-da94-4ca2-9c4c-6be0fc8b1bbc",
+          "position": 5,
+          "status": "FINISHED",
+          "laps": 30
+        },
+        {
+          "riderId": "66b78301-5826-4986-b11e-fa68a7bd77a7",
+          "position": 6,
+          "status": "FINISHED",
+          "laps": 30
+        },
+        {
+          "riderId": "bf95d959-6a60-44f1-84b5-ded861e62578",
+          "position": 7,
+          "status": "FINISHED",
+          "laps": 30
+        },
+        {
+          "riderId": "5dfc20db-c3c4-4ecd-9c7c-f6cfd042031a",
+          "position": 8,
+          "status": "FINISHED",
+          "laps": 30
+        },
+        {
+          "riderId": "00db2312-15f2-4333-be5c-4bbff9d17aec",
+          "position": 9,
+          "status": "FINISHED",
+          "laps": 30
+        },
+        {
+          "riderId": "ade5ef32-01ea-487c-95ca-491544a668ed",
+          "position": 10,
+          "status": "FINISHED",
+          "laps": 30
+        },
+        {
+          "riderId": "e2479f8e-dad8-4191-9a6c-9d4aafa8c3a3",
+          "position": 11,
+          "status": "FINISHED",
+          "laps": 30
+        },
+        {
+          "riderId": "b0c1fea6-2dd5-4e26-8a18-0ac9fe6870e4",
+          "position": 12,
+          "status": "FINISHED",
+          "laps": 30
+        },
+        {
+          "riderId": "4113c5f7-33c5-4246-b05b-3f81f4ddbd8f",
+          "position": 13,
+          "status": "FINISHED",
+          "laps": 30
+        },
+        {
+          "riderId": "04bf0ce4-5062-44fc-9745-ec85a8d8f8d3",
+          "position": 14,
+          "status": "FINISHED",
+          "laps": 30
+        },
+        {
+          "riderId": "c883a3b8-17ce-419d-b71b-32c252f6fc7e",
+          "position": 15,
+          "status": "FINISHED",
+          "laps": 30
+        },
+        {
+          "riderId": "71df6f0d-51c3-4cdb-9f5c-51939e6f33f2",
+          "position": null,
+          "status": "DNF",
+          "laps": 26
+        },
+        {
+          "riderId": "ec9adf3a-985f-4eb6-8ffd-54b688f49846",
+          "position": null,
+          "status": "DNF",
+          "laps": 21
+        },
+        {
+          "riderId": "41195f0f-9817-4a4d-913e-c1fbbb351d9b",
+          "position": null,
+          "status": "DNF",
+          "laps": 8
+        },
+        {
+          "riderId": "f55f9c34-8621-437b-ae04-ae2418720204",
+          "position": null,
+          "status": "DNF",
+          "laps": 6
+        },
+        {
+          "riderId": "525b1551-f10b-4cfd-9b43-59af6fca654b",
+          "position": null,
+          "status": "DNF",
+          "laps": 3
+        }
+      ]
+    },
+    {
+      "order": 12,
+      "shortName": "GBR",
+      "name": "GRAND PRIX OF GREAT BRITAIN",
+      "date": "2026-08-09",
+      "results": [
+        {
+          "riderId": "eec1f7dc-b115-44f6-82aa-73130e5c92cf",
+          "position": 1,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "5b9af34e-da94-4ca2-9c4c-6be0fc8b1bbc",
+          "position": 2,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "e622ec5b-5ccf-457c-a67f-ec028f0ddf6e",
+          "position": 3,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "41195f0f-9817-4a4d-913e-c1fbbb351d9b",
+          "position": 4,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "ea39a0af-95d3-4a37-81a7-f332efdb9216",
+          "position": 5,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "525b1551-f10b-4cfd-9b43-59af6fca654b",
+          "position": 6,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "23e50438-a657-4fb0-a190-3262b5472f29",
+          "position": 7,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "ade5ef32-01ea-487c-95ca-491544a668ed",
+          "position": 8,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "5dfc20db-c3c4-4ecd-9c7c-f6cfd042031a",
+          "position": 9,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "e2479f8e-dad8-4191-9a6c-9d4aafa8c3a3",
+          "position": 10,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "4113c5f7-33c5-4246-b05b-3f81f4ddbd8f",
+          "position": 11,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "b0c1fea6-2dd5-4e26-8a18-0ac9fe6870e4",
+          "position": 12,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "b8b255af-e344-4ca7-818b-480c18a11088",
+          "position": 13,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "c883a3b8-17ce-419d-b71b-32c252f6fc7e",
+          "position": 14,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "eb7f90b1-9373-4089-b2f5-adbc234a3526",
+          "position": 15,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "bf95d959-6a60-44f1-84b5-ded861e62578",
+          "position": 16,
+          "status": "FINISHED",
+          "laps": 20
+        },
+        {
+          "riderId": "244b6f51-ac33-40ee-876d-9401dc9d1346",
+          "position": null,
+          "status": "DNF",
+          "laps": 8
+        },
+        {
+          "riderId": "66b78301-5826-4986-b11e-fa68a7bd77a7",
+          "position": null,
+          "status": "DNF",
+          "laps": 7
+        },
+        {
+          "riderId": "ec9adf3a-985f-4eb6-8ffd-54b688f49846",
+          "position": null,
+          "status": "DNF",
+          "laps": 6
+        },
+        {
+          "riderId": "92d574d5-d064-4612-bf3e-421d01572512",
+          "position": null,
+          "status": "DNF",
+          "laps": 5
+        },
+        {
+          "riderId": "00db2312-15f2-4333-be5c-4bbff9d17aec",
+          "position": null,
+          "status": "DNF",
+          "laps": 4
+        },
+        {
+          "riderId": "04bf0ce4-5062-44fc-9745-ec85a8d8f8d3",
+          "position": null,
+          "status": "DNF",
+          "laps": 1
+        },
+        {
+          "riderId": "f55f9c34-8621-437b-ae04-ae2418720204",
+          "position": null,
+          "status": "ABSENT",
+          "laps": 0
+        }
+      ]
+    },
+    {
+      "order": 13,
+      "shortName": "ARA",
+      "name": "GRAND PRIX OF ARAGON",
+      "date": "2026-08-30",
+      "results": [
+        {
+          "riderId": "23e50438-a657-4fb0-a190-3262b5472f29",
+          "position": 1,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "ea39a0af-95d3-4a37-81a7-f332efdb9216",
+          "position": 2,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "e622ec5b-5ccf-457c-a67f-ec028f0ddf6e",
+          "position": 3,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "41195f0f-9817-4a4d-913e-c1fbbb351d9b",
+          "position": 4,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "5b9af34e-da94-4ca2-9c4c-6be0fc8b1bbc",
+          "position": 5,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "71052114-5bce-4307-908c-4cc2bd387aac",
+          "position": 6,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "525b1551-f10b-4cfd-9b43-59af6fca654b",
+          "position": 7,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "00db2312-15f2-4333-be5c-4bbff9d17aec",
+          "position": 8,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "e2479f8e-dad8-4191-9a6c-9d4aafa8c3a3",
+          "position": 9,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "ade5ef32-01ea-487c-95ca-491544a668ed",
+          "position": 10,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "b0c1fea6-2dd5-4e26-8a18-0ac9fe6870e4",
+          "position": 11,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "f55f9c34-8621-437b-ae04-ae2418720204",
+          "position": 12,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "04bf0ce4-5062-44fc-9745-ec85a8d8f8d3",
+          "position": 13,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "5dfc20db-c3c4-4ecd-9c7c-f6cfd042031a",
+          "position": 14,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "4a439bde-305a-4995-b3e7-783fa99f784a",
+          "position": 15,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "b8b255af-e344-4ca7-818b-480c18a11088",
+          "position": 16,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "a1311c17-1099-4893-bba0-347bf43226a4",
+          "position": 17,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "bf95d959-6a60-44f1-84b5-ded861e62578",
+          "position": 18,
+          "status": "FINISHED",
+          "laps": 23
+        },
+        {
+          "riderId": "c883a3b8-17ce-419d-b71b-32c252f6fc7e",
+          "position": null,
+          "status": "DNF",
+          "laps": 20
+        },
+        {
+          "riderId": "eec1f7dc-b115-44f6-82aa-73130e5c92cf",
+          "position": null,
+          "status": "DNF",
+          "laps": 6
+        },
+        {
+          "riderId": "4113c5f7-33c5-4246-b05b-3f81f4ddbd8f",
+          "position": null,
+          "status": "DNF",
+          "laps": 5
+        },
+        {
+          "riderId": "66b78301-5826-4986-b11e-fa68a7bd77a7",
+          "position": null,
+          "status": "DNF",
+          "laps": 5
+        }
+      ]
+    },
+    {
+      "order": 14,
+      "shortName": "RSM",
+      "name": "GRAND PRIX OF SAN MARINO",
+      "date": "2026-09-13",
+      "results": [
+        {
+          "riderId": "23e50438-a657-4fb0-a190-3262b5472f29",
+          "position": 1,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "41195f0f-9817-4a4d-913e-c1fbbb351d9b",
+          "position": 2,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "ea39a0af-95d3-4a37-81a7-f332efdb9216",
+          "position": 3,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "71052114-5bce-4307-908c-4cc2bd387aac",
+          "position": 4,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "5b9af34e-da94-4ca2-9c4c-6be0fc8b1bbc",
+          "position": 5,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "eec1f7dc-b115-44f6-82aa-73130e5c92cf",
+          "position": 6,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "525b1551-f10b-4cfd-9b43-59af6fca654b",
+          "position": 7,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "00db2312-15f2-4333-be5c-4bbff9d17aec",
+          "position": 8,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "5dfc20db-c3c4-4ecd-9c7c-f6cfd042031a",
+          "position": 9,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "bf95d959-6a60-44f1-84b5-ded861e62578",
+          "position": 10,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "ade5ef32-01ea-487c-95ca-491544a668ed",
+          "position": 11,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "c883a3b8-17ce-419d-b71b-32c252f6fc7e",
+          "position": 12,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "4113c5f7-33c5-4246-b05b-3f81f4ddbd8f",
+          "position": 13,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "b8b255af-e344-4ca7-818b-480c18a11088",
+          "position": 14,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "4a439bde-305a-4995-b3e7-783fa99f784a",
+          "position": null,
+          "status": "DNF",
+          "laps": 24
+        },
+        {
+          "riderId": "04bf0ce4-5062-44fc-9745-ec85a8d8f8d3",
+          "position": null,
+          "status": "DNF",
+          "laps": 16
+        },
+        {
+          "riderId": "f55f9c34-8621-437b-ae04-ae2418720204",
+          "position": null,
+          "status": "DNF",
+          "laps": 5
+        },
+        {
+          "riderId": "66b78301-5826-4986-b11e-fa68a7bd77a7",
+          "position": null,
+          "status": "DNF",
+          "laps": 5
+        },
+        {
+          "riderId": "e2479f8e-dad8-4191-9a6c-9d4aafa8c3a3",
+          "position": null,
+          "status": "DNF",
+          "laps": 2
+        },
+        {
+          "riderId": "b0c1fea6-2dd5-4e26-8a18-0ac9fe6870e4",
+          "position": null,
+          "status": "DNF",
+          "laps": 1
+        },
+        {
+          "riderId": "e622ec5b-5ccf-457c-a67f-ec028f0ddf6e",
+          "position": null,
+          "status": "ABSENT",
+          "laps": 0
+        }
+      ]
+    },
+    {
+      "order": 15,
+      "shortName": "AUT",
+      "name": "GRAND PRIX OF AUSTRIA",
+      "date": "2026-09-20",
+      "results": [
+        {
+          "riderId": "ea39a0af-95d3-4a37-81a7-f332efdb9216",
+          "position": 1,
+          "status": "FINISHED",
+          "laps": 28
+        },
+        {
+          "riderId": "5b9af34e-da94-4ca2-9c4c-6be0fc8b1bbc",
+          "position": 2,
+          "status": "FINISHED",
+          "laps": 28
+        },
+        {
+          "riderId": "e622ec5b-5ccf-457c-a67f-ec028f0ddf6e",
+          "position": 3,
+          "status": "FINISHED",
+          "laps": 28
+        },
+        {
+          "riderId": "244b6f51-ac33-40ee-876d-9401dc9d1346",
+          "position": 4,
+          "status": "FINISHED",
+          "laps": 28
+        },
+        {
+          "riderId": "23e50438-a657-4fb0-a190-3262b5472f29",
+          "position": 5,
+          "status": "FINISHED",
+          "laps": 28
+        },
+        {
+          "riderId": "ade5ef32-01ea-487c-95ca-491544a668ed",
+          "position": 6,
+          "status": "FINISHED",
+          "laps": 28
+        },
+        {
+          "riderId": "66b78301-5826-4986-b11e-fa68a7bd77a7",
+          "position": 7,
+          "status": "FINISHED",
+          "laps": 28
+        },
+        {
+          "riderId": "71052114-5bce-4307-908c-4cc2bd387aac",
+          "position": 8,
+          "status": "FINISHED",
+          "laps": 28
+        },
+        {
+          "riderId": "525b1551-f10b-4cfd-9b43-59af6fca654b",
+          "position": 9,
+          "status": "FINISHED",
+          "laps": 28
+        },
+        {
+          "riderId": "4a439bde-305a-4995-b3e7-783fa99f784a",
+          "position": 10,
+          "status": "FINISHED",
+          "laps": 28
+        },
+        {
+          "riderId": "00db2312-15f2-4333-be5c-4bbff9d17aec",
+          "position": 11,
+          "status": "FINISHED",
+          "laps": 28
+        },
+        {
+          "riderId": "eec1f7dc-b115-44f6-82aa-73130e5c92cf",
+          "position": 12,
+          "status": "FINISHED",
+          "laps": 28
+        },
+        {
+          "riderId": "a7b4d63f-45b3-402e-b66c-001ed8a62934",
+          "position": 13,
+          "status": "FINISHED",
+          "laps": 28
+        },
+        {
+          "riderId": "5dfc20db-c3c4-4ecd-9c7c-f6cfd042031a",
+          "position": 14,
+          "status": "FINISHED",
+          "laps": 28
+        },
+        {
+          "riderId": "e2479f8e-dad8-4191-9a6c-9d4aafa8c3a3",
+          "position": 15,
+          "status": "FINISHED",
+          "laps": 28
+        },
+        {
+          "riderId": "b8b255af-e344-4ca7-818b-480c18a11088",
+          "position": 16,
+          "status": "FINISHED",
+          "laps": 28
+        },
+        {
+          "riderId": "bf95d959-6a60-44f1-84b5-ded861e62578",
+          "position": 17,
+          "status": "FINISHED",
+          "laps": 28
+        },
+        {
+          "riderId": "4113c5f7-33c5-4246-b05b-3f81f4ddbd8f",
+          "position": 18,
+          "status": "FINISHED",
+          "laps": 28
+        },
+        {
+          "riderId": "04bf0ce4-5062-44fc-9745-ec85a8d8f8d3",
+          "position": 19,
+          "status": "FINISHED",
+          "laps": 28
+        },
+        {
+          "riderId": "c883a3b8-17ce-419d-b71b-32c252f6fc7e",
+          "position": 20,
+          "status": "FINISHED",
+          "laps": 28
+        },
+        {
+          "riderId": "b0c1fea6-2dd5-4e26-8a18-0ac9fe6870e4",
+          "position": 21,
+          "status": "FINISHED",
+          "laps": 28
+        },
+        {
+          "riderId": "41195f0f-9817-4a4d-913e-c1fbbb351d9b",
+          "position": null,
+          "status": "DNF",
+          "laps": 12
+        }
+      ]
+    },
+    {
+      "order": 16,
+      "shortName": "JPN",
+      "name": "GRAND PRIX OF JAPAN",
+      "date": "2026-10-04",
+      "results": [
+        {
+          "riderId": "23e50438-a657-4fb0-a190-3262b5472f29",
+          "position": 1,
+          "status": "FINISHED",
+          "laps": 24
+        },
+        {
+          "riderId": "5b9af34e-da94-4ca2-9c4c-6be0fc8b1bbc",
+          "position": 2,
+          "status": "FINISHED",
+          "laps": 24
+        },
+        {
+          "riderId": "e622ec5b-5ccf-457c-a67f-ec028f0ddf6e",
+          "position": 3,
+          "status": "FINISHED",
+          "laps": 24
+        },
+        {
+          "riderId": "00db2312-15f2-4333-be5c-4bbff9d17aec",
+          "position": 4,
+          "status": "FINISHED",
+          "laps": 24
+        },
+        {
+          "riderId": "eec1f7dc-b115-44f6-82aa-73130e5c92cf",
+          "position": 5,
+          "status": "FINISHED",
+          "laps": 24
+        },
+        {
+          "riderId": "244b6f51-ac33-40ee-876d-9401dc9d1346",
+          "position": 6,
+          "status": "FINISHED",
+          "laps": 24
+        },
+        {
+          "riderId": "ea39a0af-95d3-4a37-81a7-f332efdb9216",
+          "position": 7,
+          "status": "FINISHED",
+          "laps": 24
+        },
+        {
+          "riderId": "66b78301-5826-4986-b11e-fa68a7bd77a7",
+          "position": 8,
+          "status": "FINISHED",
+          "laps": 24
+        },
+        {
+          "riderId": "71052114-5bce-4307-908c-4cc2bd387aac",
+          "position": 9,
+          "status": "FINISHED",
+          "laps": 24
+        },
+        {
+          "riderId": "5dfc20db-c3c4-4ecd-9c7c-f6cfd042031a",
+          "position": 10,
+          "status": "FINISHED",
+          "laps": 24
+        },
+        {
+          "riderId": "ade5ef32-01ea-487c-95ca-491544a668ed",
+          "position": 11,
+          "status": "FINISHED",
+          "laps": 24
+        },
+        {
+          "riderId": "bf95d959-6a60-44f1-84b5-ded861e62578",
+          "position": 12,
+          "status": "FINISHED",
+          "laps": 24
+        },
+        {
+          "riderId": "fa8ac04c-8fa2-4c43-9aa5-cc79b1f35fb9",
+          "position": 13,
+          "status": "FINISHED",
+          "laps": 24
+        },
+        {
+          "riderId": "71df6f0d-51c3-4cdb-9f5c-51939e6f33f2",
+          "position": 14,
+          "status": "FINISHED",
+          "laps": 24
+        },
+        {
+          "riderId": "4113c5f7-33c5-4246-b05b-3f81f4ddbd8f",
+          "position": 15,
+          "status": "FINISHED",
+          "laps": 24
+        },
+        {
+          "riderId": "04bf0ce4-5062-44fc-9745-ec85a8d8f8d3",
+          "position": 16,
+          "status": "FINISHED",
+          "laps": 24
+        },
+        {
+          "riderId": "c883a3b8-17ce-419d-b71b-32c252f6fc7e",
+          "position": 17,
+          "status": "FINISHED",
+          "laps": 24
+        },
+        {
+          "riderId": "525b1551-f10b-4cfd-9b43-59af6fca654b",
+          "position": 18,
+          "status": "FINISHED",
+          "laps": 24
+        },
+        {
+          "riderId": "b0c1fea6-2dd5-4e26-8a18-0ac9fe6870e4",
+          "position": 19,
+          "status": "FINISHED",
+          "laps": 24
+        },
+        {
+          "riderId": "4a439bde-305a-4995-b3e7-783fa99f784a",
+          "position": 20,
+          "status": "FINISHED",
+          "laps": 22
+        },
+        {
+          "riderId": "41195f0f-9817-4a4d-913e-c1fbbb351d9b",
+          "position": null,
+          "status": "DNF",
+          "laps": 18
+        },
+        {
+          "riderId": "e2479f8e-dad8-4191-9a6c-9d4aafa8c3a3",
+          "position": null,
+          "status": "DNF",
+          "laps": 8
+        }
+      ]
+    },
+    {
+      "order": 17,
+      "shortName": "INA",
+      "name": "GRAND PRIX OF INDONESIA",
+      "date": "2026-10-11",
+      "results": [
+        {
+          "riderId": "e622ec5b-5ccf-457c-a67f-ec028f0ddf6e",
+          "position": 1,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "eec1f7dc-b115-44f6-82aa-73130e5c92cf",
+          "position": 2,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "5b9af34e-da94-4ca2-9c4c-6be0fc8b1bbc",
+          "position": 3,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "244b6f51-ac33-40ee-876d-9401dc9d1346",
+          "position": 4,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "ea39a0af-95d3-4a37-81a7-f332efdb9216",
+          "position": 5,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "23e50438-a657-4fb0-a190-3262b5472f29",
+          "position": 6,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "41195f0f-9817-4a4d-913e-c1fbbb351d9b",
+          "position": 7,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "525b1551-f10b-4cfd-9b43-59af6fca654b",
+          "position": 8,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "bf95d959-6a60-44f1-84b5-ded861e62578",
+          "position": 9,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "00db2312-15f2-4333-be5c-4bbff9d17aec",
+          "position": 10,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "ade5ef32-01ea-487c-95ca-491544a668ed",
+          "position": 11,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "5dfc20db-c3c4-4ecd-9c7c-f6cfd042031a",
+          "position": 12,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "4a439bde-305a-4995-b3e7-783fa99f784a",
+          "position": 13,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "4113c5f7-33c5-4246-b05b-3f81f4ddbd8f",
+          "position": 14,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "04bf0ce4-5062-44fc-9745-ec85a8d8f8d3",
+          "position": 15,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "e2479f8e-dad8-4191-9a6c-9d4aafa8c3a3",
+          "position": 16,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "71df6f0d-51c3-4cdb-9f5c-51939e6f33f2",
+          "position": 17,
+          "status": "FINISHED",
+          "laps": 27
+        },
+        {
+          "riderId": "c883a3b8-17ce-419d-b71b-32c252f6fc7e",
+          "position": null,
+          "status": "DNF",
+          "laps": 8
+        },
+        {
+          "riderId": "b0c1fea6-2dd5-4e26-8a18-0ac9fe6870e4",
+          "position": null,
+          "status": "DNF",
+          "laps": 5
+        },
+        {
+          "riderId": "66b78301-5826-4986-b11e-fa68a7bd77a7",
+          "position": null,
+          "status": "DNF",
+          "laps": 5
+        },
+        {
+          "riderId": "71052114-5bce-4307-908c-4cc2bd387aac",
+          "position": null,
+          "status": "DNF",
+          "laps": 1
+        }
+      ]
+    }
+  ],
+  "roster": [
+    {
+      "riderId": "5b9af34e-da94-4ca2-9c4c-6be0fc8b1bbc",
+      "name": "Jorge Martin",
+      "team": "Aprilia Racing",
+      "constructor": "Aprilia",
+      "number": 89
+    },
+    {
+      "riderId": "23e50438-a657-4fb0-a190-3262b5472f29",
+      "name": "Marc Marquez",
+      "team": "Ducati Lenovo Team",
+      "constructor": "Ducati",
+      "number": 93
+    },
+    {
+      "riderId": "e622ec5b-5ccf-457c-a67f-ec028f0ddf6e",
+      "name": "Marco Bezzecchi",
+      "team": "Aprilia Racing",
+      "constructor": "Aprilia",
+      "number": 72
+    },
+    {
+      "riderId": "244b6f51-ac33-40ee-876d-9401dc9d1346",
+      "name": "Ai Ogura",
+      "team": "SuperFile Trackhouse MotoGP Team",
+      "constructor": "Aprilia",
+      "number": 79
+    },
+    {
+      "riderId": "ea39a0af-95d3-4a37-81a7-f332efdb9216",
+      "name": "Pedro Acosta",
+      "team": "Red Bull KTM Factory Racing",
+      "constructor": "KTM",
+      "number": 37
+    },
+    {
+      "riderId": "525b1551-f10b-4cfd-9b43-59af6fca654b",
+      "name": "Fabio Di Giannantonio",
+      "team": "Pertamina Enduro VR46 Racing Team",
+      "constructor": "Ducati",
+      "number": 49
+    },
+    {
+      "riderId": "eec1f7dc-b115-44f6-82aa-73130e5c92cf",
+      "name": "Raul Fernandez",
+      "team": "SuperFile Trackhouse MotoGP Team",
+      "constructor": "Aprilia",
+      "number": 25
+    },
+    {
+      "riderId": "41195f0f-9817-4a4d-913e-c1fbbb351d9b",
+      "name": "Alex Marquez",
+      "team": "BK8 Gresini Racing MotoGP",
+      "constructor": "Ducati",
+      "number": 73
+    },
+    {
+      "riderId": "66b78301-5826-4986-b11e-fa68a7bd77a7",
+      "name": "Francesco Bagnaia",
+      "team": "Ducati Lenovo Team",
+      "constructor": "Ducati",
+      "number": 63
+    },
+    {
+      "riderId": "71052114-5bce-4307-908c-4cc2bd387aac",
+      "name": "Fermin Aldeguer",
+      "team": "BK8 Gresini Racing MotoGP",
+      "constructor": "Ducati",
+      "number": 54
+    },
+    {
+      "riderId": "00db2312-15f2-4333-be5c-4bbff9d17aec",
+      "name": "Enea Bastianini",
+      "team": "Red Bull KTM Tech3",
+      "constructor": "KTM",
+      "number": 23
+    },
+    {
+      "riderId": "5dfc20db-c3c4-4ecd-9c7c-f6cfd042031a",
+      "name": "Luca Marini",
+      "team": "Honda HRC Castrol",
+      "constructor": "Honda",
+      "number": 10
+    },
+    {
+      "riderId": "ade5ef32-01ea-487c-95ca-491544a668ed",
+      "name": "Brad Binder",
+      "team": "Red Bull KTM Factory Racing",
+      "constructor": "KTM",
+      "number": 33
+    },
+    {
+      "riderId": "bf95d959-6a60-44f1-84b5-ded861e62578",
+      "name": "Fabio Quartararo",
+      "team": "Monster Energy Yamaha MotoGP Team",
+      "constructor": "Yamaha",
+      "number": 20
+    },
+    {
+      "riderId": "e2479f8e-dad8-4191-9a6c-9d4aafa8c3a3",
+      "name": "Diogo Moreira",
+      "team": "Pro Honda LCR",
+      "constructor": "Honda",
+      "number": 11
+    },
+    {
+      "riderId": "4113c5f7-33c5-4246-b05b-3f81f4ddbd8f",
+      "name": "Franco Morbidelli",
+      "team": "Pertamina Enduro VR46 Racing Team",
+      "constructor": "Ducati",
+      "number": 21
+    },
+    {
+      "riderId": "4a439bde-305a-4995-b3e7-783fa99f784a",
+      "name": "Johann Zarco",
+      "team": "Castrol Honda LCR",
+      "constructor": "Honda",
+      "number": 5
+    },
+    {
+      "riderId": "f55f9c34-8621-437b-ae04-ae2418720204",
+      "name": "Joan Mir",
+      "team": "Honda HRC Castrol",
+      "constructor": "Honda",
+      "number": 36
+    },
+    {
+      "riderId": "b0c1fea6-2dd5-4e26-8a18-0ac9fe6870e4",
+      "name": "Jack Miller",
+      "team": "Prima Pramac Yamaha MotoGP",
+      "constructor": "Yamaha",
+      "number": 43
+    },
+    {
+      "riderId": "04bf0ce4-5062-44fc-9745-ec85a8d8f8d3",
+      "name": "Alex Rins",
+      "team": "Monster Energy Yamaha MotoGP Team",
+      "constructor": "Yamaha",
+      "number": 42
+    },
+    {
+      "riderId": "c883a3b8-17ce-419d-b71b-32c252f6fc7e",
+      "name": "Toprak Razgatlioglu",
+      "team": "Prima Pramac Yamaha MotoGP",
+      "constructor": "Yamaha",
+      "number": 7
+    },
+    {
+      "riderId": "71df6f0d-51c3-4cdb-9f5c-51939e6f33f2",
+      "name": "Maverick Viñales",
+      "team": "Red Bull KTM Tech3",
+      "constructor": "KTM",
+      "number": 12
+    },
+    {
+      "riderId": "92d574d5-d064-4612-bf3e-421d01572512",
+      "name": "Iker Lecuona",
+      "team": "BK8 Gresini Racing MotoGP",
+      "constructor": "Ducati",
+      "number": 27
+    },
+    {
+      "riderId": "eb7f90b1-9373-4089-b2f5-adbc234a3526",
+      "name": "Augusto Fernandez",
+      "team": "Yamaha Factory Racing",
+      "constructor": "Yamaha",
+      "number": 47
+    },
+    {
+      "riderId": "b8b255af-e344-4ca7-818b-480c18a11088",
+      "name": "Pol Espargaro",
+      "team": "Red Bull KTM Tech3",
+      "constructor": "KTM",
+      "number": 44
+    },
+    {
+      "riderId": "fa8ac04c-8fa2-4c43-9aa5-cc79b1f35fb9",
+      "name": "Somkiat Chantra",
+      "team": "Honda HRC Castrol",
+      "constructor": "Honda",
+      "number": 15
+    },
+    {
+      "riderId": "a7b4d63f-45b3-402e-b66c-001ed8a62934",
+      "name": "Takaaki Nakagami",
+      "team": "Honda HRC Castrol",
+      "constructor": "Honda",
+      "number": 30
+    },
+    {
+      "riderId": "ec9adf3a-985f-4eb6-8ffd-54b688f49846",
+      "name": "Cal Crutchlow",
+      "team": "Castrol Honda LCR",
+      "constructor": "Honda",
+      "number": 35
+    },
+    {
+      "riderId": "93d6c1b8-9853-4939-a926-f26593db8eaf",
+      "name": "Jonas Folger",
+      "team": "Red Bull KTM Tech3",
+      "constructor": "KTM",
+      "number": 94
+    },
+    {
+      "riderId": "a1311c17-1099-4893-bba0-347bf43226a4",
+      "name": "Lorenzo Savadori",
+      "team": "SuperFile Trackhouse MotoGP Team",
+      "constructor": "Aprilia",
+      "number": 32
+    },
+    {
+      "riderId": "7c653b2a-b493-436b-a77e-06a43b37b799",
+      "name": "Michele Pirro",
+      "team": "BK8 Gresini Racing MotoGP",
+      "constructor": "Ducati",
+      "number": 51
+    },
+    {
+      "riderId": "a2f51450-cb43-4d32-8eef-bda9ebb435ed",
+      "name": "Aleix Espargaro",
+      "team": "Honda HRC Castrol",
+      "constructor": "Honda",
+      "number": 41
+    }
+  ],
+  "standings": [
+    {
+      "riderId": "5b9af34e-da94-4ca2-9c4c-6be0fc8b1bbc",
+      "name": "Jorge Martin",
+      "points": 355,
+      "team": "Aprilia Racing",
+      "constructor": "Aprilia"
+    },
+    {
+      "riderId": "23e50438-a657-4fb0-a190-3262b5472f29",
+      "name": "Marc Marquez",
+      "points": 353,
+      "team": "Ducati Lenovo Team",
+      "constructor": "Ducati"
+    },
+    {
+      "riderId": "e622ec5b-5ccf-457c-a67f-ec028f0ddf6e",
+      "name": "Marco Bezzecchi",
+      "points": 309,
+      "team": "Aprilia Racing",
+      "constructor": "Aprilia"
+    },
+    {
+      "riderId": "244b6f51-ac33-40ee-876d-9401dc9d1346",
+      "name": "Ai Ogura",
+      "points": 259,
+      "team": "SuperFile Trackhouse MotoGP Team",
+      "constructor": "Aprilia"
+    },
+    {
+      "riderId": "ea39a0af-95d3-4a37-81a7-f332efdb9216",
+      "name": "Pedro Acosta",
+      "points": 258,
+      "team": "Red Bull KTM Factory Racing",
+      "constructor": "KTM"
+    },
+    {
+      "riderId": "525b1551-f10b-4cfd-9b43-59af6fca654b",
+      "name": "Fabio Di Giannantonio",
+      "points": 245,
+      "team": "Pertamina Enduro VR46 Racing Team",
+      "constructor": "Ducati"
+    },
+    {
+      "riderId": "eec1f7dc-b115-44f6-82aa-73130e5c92cf",
+      "name": "Raul Fernandez",
+      "points": 236,
+      "team": "SuperFile Trackhouse MotoGP Team",
+      "constructor": "Aprilia"
+    },
+    {
+      "riderId": "41195f0f-9817-4a4d-913e-c1fbbb351d9b",
+      "name": "Alex Marquez",
+      "points": 172,
+      "team": "BK8 Gresini Racing MotoGP",
+      "constructor": "Ducati"
+    },
+    {
+      "riderId": "66b78301-5826-4986-b11e-fa68a7bd77a7",
+      "name": "Francesco Bagnaia",
+      "points": 166,
+      "team": "Ducati Lenovo Team",
+      "constructor": "Ducati"
+    },
+    {
+      "riderId": "71052114-5bce-4307-908c-4cc2bd387aac",
+      "name": "Fermin Aldeguer",
+      "points": 125,
+      "team": "BK8 Gresini Racing MotoGP",
+      "constructor": "Ducati"
+    },
+    {
+      "riderId": "00db2312-15f2-4333-be5c-4bbff9d17aec",
+      "name": "Enea Bastianini",
+      "points": 122,
+      "team": "Red Bull KTM Tech3",
+      "constructor": "KTM"
+    },
+    {
+      "riderId": "5dfc20db-c3c4-4ecd-9c7c-f6cfd042031a",
+      "name": "Luca Marini",
+      "points": 108,
+      "team": "Honda HRC Castrol",
+      "constructor": "Honda"
+    },
+    {
+      "riderId": "ade5ef32-01ea-487c-95ca-491544a668ed",
+      "name": "Brad Binder",
+      "points": 104,
+      "team": "Red Bull KTM Factory Racing",
+      "constructor": "KTM"
+    },
+    {
+      "riderId": "bf95d959-6a60-44f1-84b5-ded861e62578",
+      "name": "Fabio Quartararo",
+      "points": 74,
+      "team": "Monster Energy Yamaha MotoGP Team",
+      "constructor": "Yamaha"
+    },
+    {
+      "riderId": "e2479f8e-dad8-4191-9a6c-9d4aafa8c3a3",
+      "name": "Diogo Moreira",
+      "points": 74,
+      "team": "Pro Honda LCR",
+      "constructor": "Honda"
+    },
+    {
+      "riderId": "4113c5f7-33c5-4246-b05b-3f81f4ddbd8f",
+      "name": "Franco Morbidelli",
+      "points": 59,
+      "team": "Pertamina Enduro VR46 Racing Team",
+      "constructor": "Ducati"
+    },
+    {
+      "riderId": "4a439bde-305a-4995-b3e7-783fa99f784a",
+      "name": "Johann Zarco",
+      "points": 51,
+      "team": "Castrol Honda LCR",
+      "constructor": "Honda"
+    },
+    {
+      "riderId": "f55f9c34-8621-437b-ae04-ae2418720204",
+      "name": "Joan Mir",
+      "points": 33,
+      "team": "Honda HRC Castrol",
+      "constructor": "Honda"
+    },
+    {
+      "riderId": "b0c1fea6-2dd5-4e26-8a18-0ac9fe6870e4",
+      "name": "Jack Miller",
+      "points": 28,
+      "team": "Prima Pramac Yamaha MotoGP",
+      "constructor": "Yamaha"
+    },
+    {
+      "riderId": "04bf0ce4-5062-44fc-9745-ec85a8d8f8d3",
+      "name": "Alex Rins",
+      "points": 25,
+      "team": "Monster Energy Yamaha MotoGP Team",
+      "constructor": "Yamaha"
+    },
+    {
+      "riderId": "c883a3b8-17ce-419d-b71b-32c252f6fc7e",
+      "name": "Toprak Razgatlioglu",
+      "points": 18,
+      "team": "Prima Pramac Yamaha MotoGP",
+      "constructor": "Yamaha"
+    },
+    {
+      "riderId": "71df6f0d-51c3-4cdb-9f5c-51939e6f33f2",
+      "name": "Maverick Viñales",
+      "points": 12,
+      "team": "Red Bull KTM Tech3",
+      "constructor": "KTM"
+    },
+    {
+      "riderId": "92d574d5-d064-4612-bf3e-421d01572512",
+      "name": "Iker Lecuona",
+      "points": 9,
+      "team": "BK8 Gresini Racing MotoGP",
+      "constructor": "Ducati"
+    },
+    {
+      "riderId": "eb7f90b1-9373-4089-b2f5-adbc234a3526",
+      "name": "Augusto Fernandez",
+      "points": 6,
+      "team": "Yamaha Factory Racing",
+      "constructor": "Yamaha"
+    },
+    {
+      "riderId": "b8b255af-e344-4ca7-818b-480c18a11088",
+      "name": "Pol Espargaro",
+      "points": 5,
+      "team": "Red Bull KTM Tech3",
+      "constructor": "KTM"
+    },
+    {
+      "riderId": "fa8ac04c-8fa2-4c43-9aa5-cc79b1f35fb9",
+      "name": "Somkiat Chantra",
+      "points": 3,
+      "team": "Honda HRC Castrol",
+      "constructor": "Honda"
+    },
+    {
+      "riderId": "a7b4d63f-45b3-402e-b66c-001ed8a62934",
+      "name": "Takaaki Nakagami",
+      "points": 3,
+      "team": "Honda HRC Castrol",
+      "constructor": "Honda"
+    },
+    {
+      "riderId": "ec9adf3a-985f-4eb6-8ffd-54b688f49846",
+      "name": "Cal Crutchlow",
+      "points": 0,
+      "team": "Castrol Honda LCR",
+      "constructor": "Honda"
+    },
+    {
+      "riderId": "93d6c1b8-9853-4939-a926-f26593db8eaf",
+      "name": "Jonas Folger",
+      "points": 0,
+      "team": "Red Bull KTM Tech3",
+      "constructor": "KTM"
+    },
+    {
+      "riderId": "a1311c17-1099-4893-bba0-347bf43226a4",
+      "name": "Lorenzo Savadori",
+      "points": 0,
+      "team": "SuperFile Trackhouse MotoGP Team",
+      "constructor": "Aprilia"
+    },
+    {
+      "riderId": "7c653b2a-b493-436b-a77e-06a43b37b799",
+      "name": "Michele Pirro",
+      "points": 0,
+      "team": "BK8 Gresini Racing MotoGP",
+      "constructor": "Ducati"
+    },
+    {
+      "riderId": "a2f51450-cb43-4d32-8eef-bda9ebb435ed",
+      "name": "Aleix Espargaro",
+      "points": 0,
+      "team": "Honda HRC Castrol",
+      "constructor": "Honda"
+    }
+  ]
+}

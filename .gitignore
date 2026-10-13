@@ -1,0 +1,27 @@
+# Dependencias
+node_modules/
+
+# Builds
+dist/
+build/
+.next/
+out/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Variables de entorno (nunca en el repo — ver security.md)
+.env
+.env.*
+!.env.example
+
+# Cobertura y cachés
+coverage/
+.nyc_output/
+*.tsbuildinfo
+.vitest/
+
+# Sistema
+.DS_Store
+Thumbs.db
