@@ -15,14 +15,14 @@ interface ResultsSource {
 }
 
 interface NormalizedEventResults {
-  event: EventType;            // 'q2' | 'sprint' | 'race'
-  status: 'provisional' | 'definitive' | 'cancelled';
+  event: EventType; // 'q2' | 'sprint' | 'race'
+  status: "provisional" | "definitive" | "cancelled";
   entries: Array<{
-    riderRef: string;          // referencia estable del piloto (se mapea a riders.id)
-    position: number | null;   // null si DNF/non-starter
+    riderRef: string; // referencia estable del piloto (se mapea a riders.id)
+    position: number | null; // null si DNF/non-starter
     finished: boolean;
-    penalties: string[];       // p. ej. ['time-penalty', 'dq']
-    bonuses: string[];         // p. ej. ['fastest-lap', 'pole']
+    penalties: string[]; // p. ej. ['time-penalty', 'dq']
+    bonuses: string[]; // p. ej. ['fastest-lap', 'pole']
     raw: Record<string, unknown>; // payload original (auditoría)
   }>;
   fetchedAt: string;
@@ -37,6 +37,7 @@ interface NormalizedEventResults {
 ## 2. Fuentes evaluadas
 
 ### 2.1 PulseLive (pública, sin auth) — `VERIFICADA EN VIVO`
+
 - Base: `https://api.motogp.pulselive.com/motogp/v1` (GET, sin clave).
 - **Verificado:** la API está en vivo y responde. Endpoints clave:
   - `/results/seasons`, `/results/events?seasonUuid=&isFinished=`
@@ -52,27 +53,30 @@ interface NormalizedEventResults {
 - **Uso recomendado:** **fuente primaria del MVP** (con entrada manual como respaldo). Se trata como "fuente no garantizada": si falla, el admin importa manualmente.
 
 ### 2.2 Sportradar (comercial, licenciado) — `ALTERNATIVA`
+
 - Proveedor de datos deportivos con contrato/licencia.
 - **Ventajas:** SLA, datos ricos y estables, autorización contractual.
 - **Riesgos:** coste por volumen; requiere negociación.
 - **Uso recomendado:** **fuente de producción a medio plazo** cuando el producto tenga tracción. Se implementa como otro adapter del mismo contrato.
 
 ### 2.3 Bases comunitarias (moto-db, PyMotoGP, etc.) — `FALLBACK`
+
 - Bases de datos comunitarias de resultados históricos.
 - **Uso recomendado:** **backfill histórico** (temporadas pasadas) y cross-check. No como fuente primaria en vivo.
 
 ### 2.4 Entrada manual (admin) — `ÚLTIMO RECURSO (SIEMPRE DISPONIBLE)`
+
 - El admin introduce resultados a mano (por evento) con validación.
 - **Siempre disponible** como respaldo de cualquier fuente.
 - Cada entrada manual queda **auditada** (quién, cuándo, valores).
 
 ## 3. Estrategia de fuentes por fase
 
-| Fase | Fuente primaria | Respaldo | Justificación |
-|---|---|---|---|
-| MVP | PulseLive (pública) | Entrada manual | Sin coste, verificada en vivo; manual cubre fallos |
-| Producción | Sportradar (licenciado) | PulseLive + manual | SLA y autorización contractual |
-| Histórico | Bases comunitarias | Manual | Backfill de temporadas pasadas |
+| Fase       | Fuente primaria         | Respaldo           | Justificación                                      |
+| ---------- | ----------------------- | ------------------ | -------------------------------------------------- |
+| MVP        | PulseLive (pública)     | Entrada manual     | Sin coste, verificada en vivo; manual cubre fallos |
+| Producción | Sportradar (licenciado) | PulseLive + manual | SLA y autorización contractual                     |
+| Histórico  | Bases comunitarias      | Manual             | Backfill de temporadas pasadas                     |
 
 > **Ninguna integración se da por disponible sin verificación.** PulseLive se verificó en vivo en la fase 2. Sportradar y las comunitarias **no** se han verificado contractualmente; se tratan como "por validar" antes de depender de ellas.
 
@@ -109,13 +113,13 @@ interface NormalizedEventResults {
 
 ## 6. Riesgos de integración
 
-| Riesgo | Mitigación |
-|---|---|
-| PulseLive cambia/bloquea | Adapter intercambiable + entrada manual siempre disponible |
-| Mapeo de identidades roto | Validación + alerta de "sin mapear" + acción del admin |
+| Riesgo                          | Mitigación                                                    |
+| ------------------------------- | ------------------------------------------------------------- |
+| PulseLive cambia/bloquea        | Adapter intercambiable + entrada manual siempre disponible    |
+| Mapeo de identidades roto       | Validación + alerta de "sin mapear" + acción del admin        |
 | Datos incompletos (bonos/penal) | El admin completa manualmente; se guarda `raw` para auditoría |
-| Fuente con SLA insuficiente | En producción, Sportradar licenciado |
-| Importación duplicada | Clave natural idempotente + tests |
+| Fuente con SLA insuficiente     | En producción, Sportradar licenciado                          |
+| Importación duplicada           | Clave natural idempotente + tests                             |
 
 ## 7. Decisiones pendientes
 

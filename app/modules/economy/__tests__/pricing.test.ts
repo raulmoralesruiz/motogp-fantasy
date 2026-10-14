@@ -28,7 +28,13 @@ describe("computeNextPrice — ejemplos verificables (AGENTS.md §7)", () => {
   it("P0=20, prev=20, W=50 → 20", () => {
     // W = 0.5·100 + 0.3·0 + 0.2·0 = 50 → objetivo = 20·(0.75+0.25) = 20
     expect(
-      computeNextPrice({ prevPrice: 20, P0: 20, perfCurrent: 100, perfPrev1: 0, perfPrev2: 0 }),
+      computeNextPrice({
+        prevPrice: 20,
+        P0: 20,
+        perfCurrent: 100,
+        perfPrev1: 0,
+        perfPrev2: 0,
+      }),
     ).toBeCloseTo(20);
   });
 
@@ -36,7 +42,13 @@ describe("computeNextPrice — ejemplos verificables (AGENTS.md §7)", () => {
     // W=100 → objetivo = 1.25·P0 = 25. Suavizado = 20 + 0.5·5 = 22.5.
     // Acotado a [0.85·20, 1.15·20] = [17, 23] → 22.5.
     expect(
-      computeNextPrice({ prevPrice: 20, P0: 20, perfCurrent: 100, perfPrev1: 100, perfPrev2: 100 }),
+      computeNextPrice({
+        prevPrice: 20,
+        P0: 20,
+        perfCurrent: 100,
+        perfPrev1: 100,
+        perfPrev2: 100,
+      }),
     ).toBeCloseTo(22.5);
   });
 
@@ -44,7 +56,13 @@ describe("computeNextPrice — ejemplos verificables (AGENTS.md §7)", () => {
     // W=0 → objetivo = 0.75·P0 = 15. Suavizado = 20 + 0.5·(−5) = 17.5.
     // Acotado a [17, 23] → 17.5 (dentro). Con prev=20 y objetivo 15 el paso da 17.5.
     expect(
-      computeNextPrice({ prevPrice: 20, P0: 20, perfCurrent: 0, perfPrev1: 0, perfPrev2: 0 }),
+      computeNextPrice({
+        prevPrice: 20,
+        P0: 20,
+        perfCurrent: 0,
+        perfPrev1: 0,
+        perfPrev2: 0,
+      }),
     ).toBeCloseTo(17.5);
   });
 

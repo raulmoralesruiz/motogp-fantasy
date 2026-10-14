@@ -1,0 +1,36 @@
+# Infraestructura local de desarrollo (Fase 0, T-01).
+# En producción (VPS) se usa un docker-compose equivalente — ver docs/architecture/overview.md.
+services:
+  postgres:
+    image: postgres:16
+    container_name: motogp-postgres
+    environment:
+      POSTGRES_USER: motogp
+      POSTGRES_PASSWORD: motogp
+      POSTGRES_DB: motogp
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U motogp -d motogp"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7
+    container_name: motogp-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
+  redisdata:

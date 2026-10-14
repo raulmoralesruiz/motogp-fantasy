@@ -9,6 +9,7 @@ El MVP demuestra la **ventaja central** (economía justa y transparente) con el 
 ## 2. INCLUIDO en el MVP
 
 ### Producto
+
 - **Registro/login** con email+contraseña y nombre de usuario.
 - **Una temporada** con N GPs (el admin los crea).
 - **Lineup 2+2+1+1** con constructor ≠ equipo, oro/plata.
@@ -23,6 +24,7 @@ El MVP demuestra la **ventaja central** (economía justa y transparente) con el 
 - **Responsive** (móvil/tablet/escritorio).
 
 ### Técnico
+
 - Stack recomendado (ver `architecture/overview.md`): TypeScript, Next.js, PostgreSQL, ORM+migraciones, auth, validación compartida, API tipada, jobs en background, tests, CI/CD, monitoreo, secrets.
 - **Validación server-side** de presupuesto/lineup/lockout.
 - **Idempotencia** de importación de resultados.
@@ -31,28 +33,28 @@ El MVP demuestra la **ventaja central** (economía justa y transparente) con el 
 
 ## 3. DIFERIDO (post-MVP, con justificación)
 
-| Característica | Razón del diferimiento |
-|---|---|
-| **Cobertura en vivo (streaming)** | Complejidad alta (websocket, timing en vivo); el MVP importa por sesión. No es la ventaja central. |
-| **Sportradar / proveedor licenciado** | Requiere contrato/licencia; el MVP funciona con fuente pública + manual. Se añade como adaptador (ver `integrations.md`). |
-| **Ligas temporales y personalizadas avanzadas** | El MVP cubre privada + pública; los demás tipos reutilizan el mismo motor. |
-| **Notificaciones push/email** | Conveniencia; no bloquea el flujo central. |
-| **Chat / multijugador en tiempo real** | Fuera del alcance del producto central. |
-| **Estadísticas avanzadas / analítica de jugadores** | Value-add; el MVP muestra histórico de precios y puntos básicos. |
-| **OAuth / SSO** | El email+contraseña es suficiente para el MVP. |
-| **Modo espectador / ver lineups de otros** | Privacidad por defecto; se habilita como opción. |
-| **i18n completo** | El MVP es en español; la arquitectura permite añadir idiomas. |
-| **App nativa** | El PWA responsive cubre la necesidad; la app nativa es optimización posterior. |
+| Característica                                      | Razón del diferimiento                                                                                                    |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **Cobertura en vivo (streaming)**                   | Complejidad alta (websocket, timing en vivo); el MVP importa por sesión. No es la ventaja central.                        |
+| **Sportradar / proveedor licenciado**               | Requiere contrato/licencia; el MVP funciona con fuente pública + manual. Se añade como adaptador (ver `integrations.md`). |
+| **Ligas temporales y personalizadas avanzadas**     | El MVP cubre privada + pública; los demás tipos reutilizan el mismo motor.                                                |
+| **Notificaciones push/email**                       | Conveniencia; no bloquea el flujo central.                                                                                |
+| **Chat / multijugador en tiempo real**              | Fuera del alcance del producto central.                                                                                   |
+| **Estadísticas avanzadas / analítica de jugadores** | Value-add; el MVP muestra histórico de precios y puntos básicos.                                                          |
+| **OAuth / SSO**                                     | El email+contraseña es suficiente para el MVP.                                                                            |
+| **Modo espectador / ver lineups de otros**          | Privacidad por defecto; se habilita como opción.                                                                          |
+| **i18n completo**                                   | El MVP es en español; la arquitectura permite añadir idiomas.                                                             |
+| **App nativa**                                      | El PWA responsive cubre la necesidad; la app nativa es optimización posterior.                                            |
 
 ## 4. DEMAND-DRIVEN (solo si hay demanda)
 
-| Característica | Señal de demanda |
-|---|---|
-| Ligas con reglas de entrada a medida | Peticiones de organizadores |
-| Torneos / eliminatorias | Peticiones de ligas públicas grandes |
-| Mercados de "draft" (elección por rondas) | Peticiones de variedad |
-| API pública para integraciones de terceros | Peticiones de desarrolladores |
-| Temas / personalización visual | Peticiones cosméticas |
+| Característica                             | Señal de demanda                     |
+| ------------------------------------------ | ------------------------------------ |
+| Ligas con reglas de entrada a medida       | Peticiones de organizadores          |
+| Torneos / eliminatorias                    | Peticiones de ligas públicas grandes |
+| Mercados de "draft" (elección por rondas)  | Peticiones de variedad               |
+| API pública para integraciones de terceros | Peticiones de desarrolladores        |
+| Temas / personalización visual             | Peticiones cosméticas                |
 
 ## 5. Criterios de aceptación del MVP (resumen)
 

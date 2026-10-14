@@ -1,0 +1,66 @@
+{
+  "rulesVersion": "scoring-v1",
+  "description": "Golden file del módulo scoring, versión scoring-v1. Fuente de verdad: docs/product/scoring.md §5. Si una regla cambia, este archivo se actualiza de forma explícita y revisada — AGENTS.md §7.",
+  "cases": [
+    {
+      "id": "ejemplo-completo-scoring-md-5",
+      "fn": "lineupPoints",
+      "args": {
+        "lineup": {
+          "gold": ["A", "C"],
+          "silver": ["E", "H"],
+          "constructor": "X",
+          "team": "X-team"
+        },
+        "riderPoints": { "A": 56, "C": 32, "E": 17, "H": -4 },
+        "ctorPoints": { "X": 38 },
+        "teamPoints": { "X-team": 38 }
+      },
+      "expected": 170.5
+    },
+    {
+      "id": "tabla-carrera-principal-1-15-y-16",
+      "fn": "mainRacePositionPoints",
+      "args": {
+        "positions": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 20]
+      },
+      "expected": [25, 20, 16, 13, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0]
+    },
+    {
+      "id": "bono-ganador-1er-puesto",
+      "fn": "riderMainPoints",
+      "args": { "status": "FINISHED", "position": 1 },
+      "expected": 30
+    },
+    {
+      "id": "dnf-penalizacion",
+      "fn": "riderMainPoints",
+      "args": { "status": "DNF", "position": null },
+      "expected": -5
+    },
+    {
+      "id": "absent-sin-penalizacion",
+      "fn": "riderMainPoints",
+      "args": { "status": "ABSENT", "position": null },
+      "expected": 0
+    },
+    {
+      "id": "top2-un-piloto",
+      "fn": "topTwoAverage",
+      "args": { "values": [10] },
+      "expected": 10
+    },
+    {
+      "id": "top2-vacio",
+      "fn": "topTwoAverage",
+      "args": { "values": [] },
+      "expected": 0
+    },
+    {
+      "id": "top2-media-de-2-mejores",
+      "fn": "topTwoAverage",
+      "args": { "values": [56, 20, 6] },
+      "expected": 38
+    }
+  ]
+}

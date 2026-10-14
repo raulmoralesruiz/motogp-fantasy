@@ -10,19 +10,19 @@ Cada Gran Premio (GP), cada jugador compone un **lineup** de activos ficticios c
 
 Un lineup válido contiene **exactamente**:
 
-| Rol | Cantidad | Nota |
-|---|---|---|
-| Pilotos **oro** | 2 | Puntúan al 100% |
-| Pilotos **plata** | 2 | Puntúan al 50% |
-| **Constructor** | 1 | Fabricante de la moto |
-| **Equipo** | 1 | Escuadra/escudería |
+| Rol               | Cantidad | Nota                  |
+| ----------------- | -------- | --------------------- |
+| Pilotos **oro**   | 2        | Puntúan al 100%       |
+| Pilotos **plata** | 2        | Puntúan al 50%        |
+| **Constructor**   | 1        | Fabricante de la moto |
+| **Equipo**        | 1        | Escuadra/escudería    |
 
 **Total: 4 pilotos + 1 constructor + 1 equipo.**
 
 ### 2.1 Constructor ≠ Equipo (distinción obligatoria)
 
-- **Constructor** = fabricante de la moto (ej. ficticios: *Apex, Corsa, Titan, Vega*). Varios equipos compiten con el mismo constructor.
-- **Equipo** = escuadra concreta que inscribe pilotos (ej. *Apex Factory*, *Apex II*, ambos con motos Apex).
+- **Constructor** = fabricante de la moto (ej. ficticios: _Apex, Corsa, Titan, Vega_). Varios equipos compiten con el mismo constructor.
+- **Equipo** = escuadra concreta que inscribe pilotos (ej. _Apex Factory_, _Apex II_, ambos con motos Apex).
 - Son activos **distintos**, con precios **distintos** y puntuación **distinta**. Nunca son intercambiables.
 - Un constructor puede tener varios equipos (factory + satélite). Un equipo pertenece a exactamente un constructor.
 
@@ -107,6 +107,7 @@ Un lineup válido contiene **exactamente**:
 ## 11. Decisiones tomadas vs pendientes
 
 **Tomadas (en este documento):**
+
 - Composición 2+2+1+1.
 - Constructor ≠ equipo (activos distintos).
 - Oro 100% / plata 50%.
@@ -116,6 +117,7 @@ Un lineup válido contiene **exactamente**:
 - Lineups compartidos entre ligas.
 
 **Pendientes (backlog):**
+
 - Valores exactos de `B` y carry.
 - Tablas de puntuación definitivas.
 - Límites de concentración (máx pilotos por constructor/equipo en un lineup).

@@ -1,0 +1,101 @@
+{
+  "source": "Resultados ficticios anonimizados, coherentes con la narrativa §7.1 (lesión de B en GP3–GP4; ascenso de J). Ver README.md.",
+  "gps": [
+    {
+      "round": 1,
+      "results": [
+        { "riderId": "rider-a", "position": 1, "status": "FINISHED" },
+        { "riderId": "rider-c", "position": 2, "status": "FINISHED" },
+        { "riderId": "rider-b", "position": 3, "status": "FINISHED" },
+        { "riderId": "rider-d", "position": 4, "status": "FINISHED" },
+        { "riderId": "rider-e", "position": 5, "status": "FINISHED" },
+        { "riderId": "rider-f", "position": 6, "status": "FINISHED" },
+        { "riderId": "rider-g", "position": 7, "status": "FINISHED" },
+        { "riderId": "rider-h", "position": 8, "status": "FINISHED" },
+        { "riderId": "rider-j", "position": 9, "status": "FINISHED" },
+        { "riderId": "rider-i", "position": 10, "status": "FINISHED" },
+        { "riderId": "rider-k", "position": 11, "status": "FINISHED" }
+      ]
+    },
+    {
+      "round": 2,
+      "results": [
+        { "riderId": "rider-a", "position": 1, "status": "FINISHED" },
+        { "riderId": "rider-b", "position": 2, "status": "FINISHED" },
+        { "riderId": "rider-c", "position": 3, "status": "FINISHED" },
+        { "riderId": "rider-e", "position": 4, "status": "FINISHED" },
+        { "riderId": "rider-d", "position": 5, "status": "FINISHED" },
+        { "riderId": "rider-f", "position": 6, "status": "FINISHED" },
+        { "riderId": "rider-h", "position": 7, "status": "FINISHED" },
+        { "riderId": "rider-g", "position": 8, "status": "FINISHED" },
+        { "riderId": "rider-j", "position": 9, "status": "FINISHED" },
+        { "riderId": "rider-k", "position": 10, "status": "FINISHED" },
+        { "riderId": "rider-i", "position": 11, "status": "FINISHED" }
+      ]
+    },
+    {
+      "round": 3,
+      "results": [
+        { "riderId": "rider-a", "position": 1, "status": "FINISHED" },
+        { "riderId": "rider-c", "position": 2, "status": "FINISHED" },
+        { "riderId": "rider-d", "position": 3, "status": "FINISHED" },
+        { "riderId": "rider-e", "position": 4, "status": "FINISHED" },
+        { "riderId": "rider-f", "position": 5, "status": "FINISHED" },
+        { "riderId": "rider-g", "position": 6, "status": "FINISHED" },
+        { "riderId": "rider-h", "position": 7, "status": "FINISHED" },
+        { "riderId": "rider-j", "position": 8, "status": "FINISHED" },
+        { "riderId": "rider-k", "position": 9, "status": "FINISHED" },
+        { "riderId": "rider-i", "position": 10, "status": "FINISHED" },
+        { "riderId": "rider-b", "position": null, "status": "ABSENT" }
+      ]
+    },
+    {
+      "round": 4,
+      "results": [
+        { "riderId": "rider-a", "position": 1, "status": "FINISHED" },
+        { "riderId": "rider-c", "position": 2, "status": "FINISHED" },
+        { "riderId": "rider-e", "position": 3, "status": "FINISHED" },
+        { "riderId": "rider-d", "position": 4, "status": "FINISHED" },
+        { "riderId": "rider-f", "position": 5, "status": "FINISHED" },
+        { "riderId": "rider-g", "position": 6, "status": "FINISHED" },
+        { "riderId": "rider-h", "position": 7, "status": "FINISHED" },
+        { "riderId": "rider-j", "position": 8, "status": "FINISHED" },
+        { "riderId": "rider-k", "position": 9, "status": "FINISHED" },
+        { "riderId": "rider-i", "position": 10, "status": "FINISHED" },
+        { "riderId": "rider-b", "position": null, "status": "ABSENT" }
+      ]
+    },
+    {
+      "round": 5,
+      "results": [
+        { "riderId": "rider-a", "position": 1, "status": "FINISHED" },
+        { "riderId": "rider-c", "position": 2, "status": "FINISHED" },
+        { "riderId": "rider-e", "position": 3, "status": "FINISHED" },
+        { "riderId": "rider-j", "position": 4, "status": "FINISHED" },
+        { "riderId": "rider-d", "position": 5, "status": "FINISHED" },
+        { "riderId": "rider-f", "position": 6, "status": "FINISHED" },
+        { "riderId": "rider-h", "position": 7, "status": "FINISHED" },
+        { "riderId": "rider-g", "position": 8, "status": "FINISHED" },
+        { "riderId": "rider-k", "position": 9, "status": "FINISHED" },
+        { "riderId": "rider-b", "position": 10, "status": "FINISHED" },
+        { "riderId": "rider-i", "position": 11, "status": "FINISHED" }
+      ]
+    },
+    {
+      "round": 6,
+      "results": [
+        { "riderId": "rider-a", "position": 1, "status": "FINISHED" },
+        { "riderId": "rider-c", "position": 2, "status": "FINISHED" },
+        { "riderId": "rider-e", "position": 3, "status": "FINISHED" },
+        { "riderId": "rider-j", "position": 4, "status": "FINISHED" },
+        { "riderId": "rider-d", "position": 5, "status": "FINISHED" },
+        { "riderId": "rider-f", "position": 6, "status": "FINISHED" },
+        { "riderId": "rider-h", "position": 7, "status": "FINISHED" },
+        { "riderId": "rider-g", "position": 8, "status": "FINISHED" },
+        { "riderId": "rider-b", "position": 9, "status": "FINISHED" },
+        { "riderId": "rider-k", "position": 10, "status": "FINISHED" },
+        { "riderId": "rider-i", "position": 11, "status": "FINISHED" }
+      ]
+    }
+  ]
+}

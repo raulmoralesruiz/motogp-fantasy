@@ -1,0 +1,11 @@
+# Contexto de build de Docker (T-02): solo lo que necesita el Dockerfile.
+.git
+.github
+node_modules
+.next
+coverage
+.env
+.env.*
+*.md
+docs
+tmp

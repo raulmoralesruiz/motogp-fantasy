@@ -1,0 +1,712 @@
+// Fantasy MotoGP Independiente — esquema Prisma (T-06, WP3).
+//
+// Fuente de verdad: docs/architecture/data-model.md
+//   - entidades §2, relaciones §3, constraints e índices §4,
+//     fuente de verdad vs derivado §5, notas de modelado §8.
+//
+// Convenciones:
+// - IDs: uuid (§8) para evitar enumeración.
+// - Timestamps createdAt/updatedAt en todas las entidades (§8).
+// - Invariantes duros como constraints de BD (§4):
+//     lineups unique (user, gp) · results unique (gp, event, rider) ·
+//     prices unique (asset_type, asset_id, gp) ·
+//     rider_affiliations unique (rider, gp) ·
+//     league_members unique (league, user) ·
+//     season_rules unique (season, version).
+// - Lo que NO se puede expresar como constraint de Prisma vive en SQL raw
+//   (migración 0002): trigger de composición 2 oro + 2 plata + 1 constructor
+//   + 1 equipo sobre lineup_slots (un CHECK no puede contar otras filas),
+//   vista derivada price_history e índice parcial único para el precio de
+//   apertura (gp_id NULL).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Enumerados ───────────────────────────────────────────────────────────────
+
+enum SeasonStatus {
+  planned
+  active
+  finished
+  archived
+}
+
+enum GpStatus {
+  scheduled
+  locked
+  finished
+  cancelled
+}
+
+enum WeekendEventType {
+  q1
+  q2
+  sprint
+  race
+}
+
+enum WeekendEventStatus {
+  scheduled
+  finished
+  cancelled
+}
+
+enum AssetType {
+  rider
+  constructor
+  team
+}
+
+enum PriceReason {
+  formula
+  manual
+}
+
+enum LineupStatus {
+  draft
+  locked
+  submitted
+}
+
+enum SlotType {
+  gold
+  silver
+  constructor
+  team
+}
+
+enum LineupChangeType {
+  add
+  remove
+  swap
+  gold_silver
+}
+
+enum BudgetMovementType {
+  base
+  carry
+  spend
+  adjust
+}
+
+enum LeagueType {
+  private
+  public
+}
+
+enum LeagueVisibility {
+  public
+  unlisted
+  private
+}
+
+enum LeagueEntryMode {
+  code
+  invite
+  mixed
+}
+
+enum LeagueStatus {
+  planned
+  active
+  finished
+  archived
+}
+
+enum LeagueMemberRole {
+  admin
+  member
+}
+
+enum LeagueMemberStatus {
+  active
+  left
+  kicked
+}
+
+enum LeagueInviteStatus {
+  active
+  revoked
+}
+
+enum ResultStatus {
+  provisional
+  definitive
+  corrected
+}
+
+enum ResultSource {
+  auto
+  manual
+}
+
+enum ResultsEventStatus {
+  scheduled
+  finished
+  neutralized
+  cancelled
+}
+
+enum RoleName {
+  user
+  global_admin
+}
+
+// ── Identidad ────────────────────────────────────────────────────────────────
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  username     String    @unique
+  // GDPR (security.md §1.11, política D-06): eliminación = anonimización.
+  isAnonymized Boolean   @default(false) @map("is_anonymized")
+  anonymizedAt DateTime? @map("anonymized_at") @db.Timestamptz
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  profile         Profile?
+  sessions        Session[]
+  userRoles       UserRole[]
+  lineups         Lineup[]
+  lineupChanges   LineupChange[]
+  budgetMovements BudgetMovement[]
+  leagueMembers   LeagueMember[]
+  leagueInvites   LeagueInvite[]
+  resultsHistory  ResultsHistory[]
+  scores          Score[]
+  rankings        Ranking[]
+  auditLog        AuditLog[]
+
+  @@map("users")
+}
+
+model Profile {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @unique @map("user_id") @db.Uuid
+  displayName String   @map("display_name") // seudónimo público
+  avatarUrl   String?  @map("avatar_url")
+  preferences Json?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+model Session {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  token     String    @unique // token opaco (cookie HttpOnly, security.md)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz
+  ip        String?
+  userAgent String?   @map("user_agent")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        RoleName @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  userRoles UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  roleId    String   @map("role_id") @db.Uuid
+  grantedAt DateTime @default(now()) @map("granted_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@map("user_roles")
+}
+
+// ── Temporadas y GPs ─────────────────────────────────────────────────────────
+
+model Season {
+  id        String       @id @default(uuid()) @db.Uuid
+  name      String
+  year      Int
+  startDate DateTime?    @map("start_date") @db.Timestamptz
+  endDate   DateTime?    @map("end_date") @db.Timestamptz
+  status    SeasonStatus @default(planned)
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  rules SeasonRule[]
+  gps   Gp[]
+
+  @@map("seasons")
+}
+
+// Versión de reglas por temporada (JSONB completo: B, carry, tablas, límites).
+// Inmutable una vez publicada: unique (season, version) y nunca se muta.
+model SeasonRule {
+  id        String   @id @default(uuid()) @db.Uuid
+  seasonId  String   @map("season_id") @db.Uuid
+  version   String // rules_version, p. ej. "economy-v1"
+  rules     Json // seasonRulesSchema (validado en la app)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  season Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  @@unique([seasonId, version])
+  @@map("season_rules")
+}
+
+model Circuit {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  country   String
+  location  String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  gps Gp[]
+
+  @@unique([name, country])
+  @@map("circuits")
+}
+
+model Gp {
+  id        String    @id @default(uuid()) @db.Uuid
+  seasonId  String    @map("season_id") @db.Uuid
+  round     Int // orden en la temporada (1-based)
+  name      String
+  circuitId String    @map("circuit_id") @db.Uuid
+  date      DateTime  @db.Timestamptz
+  status    GpStatus  @default(scheduled)
+  lockoutAt DateTime? @map("lockout_at") @db.Timestamptz // cierre de lineups
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  season          Season           @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  circuit         Circuit          @relation(fields: [circuitId], references: [id])
+  weekendEvents   WeekendEvent[]
+  riderAffiliations RiderAffiliation[]
+  prices          Price[]
+  lineups         Lineup[]
+  lineupChanges   LineupChange[]
+  budgetMovements BudgetMovement[]
+  results         Result[]
+  resultsEvents   ResultsEvent[]
+  scores          Score[]
+  rankings        Ranking[]
+
+  @@unique([seasonId, round])
+  @@map("gps")
+}
+
+model WeekendEvent {
+  id        String             @id @default(uuid()) @db.Uuid
+  gpId      String             @map("gp_id") @db.Uuid
+  type      WeekendEventType
+  orderNum  Int                @map("order_num") // orden dentro del GP
+  startTime DateTime?          @map("start_time") @db.Timestamptz
+  status    WeekendEventStatus @default(scheduled)
+  createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  gp            Gp             @relation(fields: [gpId], references: [id], onDelete: Cascade)
+  results       Result[]
+  resultsEvents ResultsEvent[]
+
+  @@unique([gpId, type, orderNum])
+  @@map("weekend_events")
+}
+
+// ── Mercado ──────────────────────────────────────────────────────────────────
+
+model Rider {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique
+  number    Int? // dorsal
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  affiliations RiderAffiliation[]
+  results      Result[]
+
+  @@map("riders")
+}
+
+model Constructor {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  teams        Team[]
+  affiliations RiderAffiliation[]
+
+  @@map("constructors")
+}
+
+model Team {
+  id            String   @id @default(uuid()) @db.Uuid
+  name          String   @unique
+  constructorId String   @map("constructor_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  constructor  Constructor        @relation(fields: [constructorId], references: [id])
+  affiliations RiderAffiliation[]
+
+  @@map("teams")
+}
+
+// Afiliación por GP: permite cambios de equipo/constructor a mitad de
+// temporada. unique (rider, gp) → una afiliación por piloto por GP.
+model RiderAffiliation {
+  id            String   @id @default(uuid()) @db.Uuid
+  riderId       String   @map("rider_id") @db.Uuid
+  teamId        String   @map("team_id") @db.Uuid
+  constructorId String   @map("constructor_id") @db.Uuid
+  gpId          String   @map("gp_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  rider       Rider       @relation(fields: [riderId], references: [id], onDelete: Cascade)
+  team        Team        @relation(fields: [teamId], references: [id])
+  constructor Constructor @relation(fields: [constructorId], references: [id])
+  gp          Gp          @relation(fields: [gpId], references: [id], onDelete: Cascade)
+
+  @@unique([riderId, gpId])
+  @@map("rider_affiliations")
+}
+
+// Precio por activo por GP. gp_id NULL = precio de apertura (P0) de la
+// temporada (índice parcial único en la migración 0002). Referencia
+// polimórfica (asset_type + asset_id) sin FK: los activos viven en tablas
+// distintas (riders/constructors/teams).
+model Price {
+  id           String      @id @default(uuid()) @db.Uuid
+  assetType    AssetType   @map("asset_type")
+  assetId      String      @map("asset_id") @db.Uuid
+  gpId         String?     @map("gp_id") @db.Uuid
+  price        Decimal     @db.Decimal(10, 2)
+  reason       PriceReason @default(formula)
+  rulesVersion String?     @map("rules_version")
+  createdBy    String?     @map("created_by") @db.Uuid
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  gp Gp? @relation(fields: [gpId], references: [id], onDelete: Cascade)
+
+  @@unique([assetType, assetId, gpId])
+  @@map("prices")
+}
+
+// ── Lineups ──────────────────────────────────────────────────────────────────
+
+// unique (user, gp) → a lo sumo 1 lineup por usuario por GP (invariante 3).
+model Lineup {
+  id        String       @id @default(uuid()) @db.Uuid
+  userId    String       @map("user_id") @db.Uuid
+  gpId      String       @map("gp_id") @db.Uuid
+  status    LineupStatus @default(draft)
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gp      Gp             @relation(fields: [gpId], references: [id], onDelete: Cascade)
+  slots   LineupSlot[]
+  changes LineupChange[]
+  scores  Score[]
+
+  @@unique([userId, gpId])
+  @@index([gpId])
+  @@map("lineups")
+}
+
+// Slot del lineup. La composición exacta (2 oro + 2 plata + 1 constructor +
+// 1 equipo) la garantiza el trigger de la migración 0002 (invariante 1).
+model LineupSlot {
+  id        String    @id @default(uuid()) @db.Uuid
+  lineupId  String    @map("lineup_id") @db.Uuid
+  slotType  SlotType  @map("slot_type")
+  assetType AssetType @map("asset_type")
+  assetId   String    @map("asset_id") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  lineup Lineup @relation(fields: [lineupId], references: [id], onDelete: Cascade)
+
+  @@index([lineupId])
+  @@index([assetType, assetId])
+  @@map("lineup_slots")
+}
+
+// Historial de cambios (auditable): cada transferencia queda registrada.
+model LineupChange {
+  id         String           @id @default(uuid()) @db.Uuid
+  lineupId   String           @map("lineup_id") @db.Uuid
+  gpId       String           @map("gp_id") @db.Uuid
+  type       LineupChangeType @map("type")
+  assetType  AssetType        @map("asset_type")
+  assetId    String           @map("asset_id") @db.Uuid
+  costBefore Decimal?         @map("cost_before") @db.Decimal(10, 2)
+  costAfter  Decimal?         @map("cost_after") @db.Decimal(10, 2)
+  reason     String?
+  userId     String           @map("user_id") @db.Uuid
+  createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  lineup Lineup @relation(fields: [lineupId], references: [id], onDelete: Cascade)
+  gp     Gp     @relation(fields: [gpId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([lineupId])
+  @@map("lineup_changes")
+}
+
+// ── Economía ─────────────────────────────────────────────────────────────────
+
+// Movimientos de presupuesto: fuente de verdad de la que se deriva el saldo
+// (no se almacena un "saldo" suelto — data-model.md §5).
+model BudgetMovement {
+  id           String               @id @default(uuid()) @db.Uuid
+  userId       String               @map("user_id") @db.Uuid
+  gpId         String               @map("gp_id") @db.Uuid
+  type         BudgetMovementType   @map("type")
+  amount       Decimal              @db.Decimal(10, 2)
+  reference    String? // p. ej. id del lineup que motiva el gasto
+  rulesVersion String?              @map("rules_version")
+  createdAt    DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gp   Gp   @relation(fields: [gpId], references: [id], onDelete: Cascade)
+
+  @@index([userId, gpId])
+  @@map("budget_movements")
+}
+
+// ── Ligas ────────────────────────────────────────────────────────────────────
+
+model League {
+  id         String           @id @default(uuid()) @db.Uuid
+  name       String
+  type       LeagueType       @default(private)
+  visibility LeagueVisibility @default(private)
+  minMembers Int              @default(2) @map("min_members")
+  maxMembers Int              @default(50) @map("max_members")
+  entryMode  LeagueEntryMode  @default(code) @map("entry_mode")
+  startDate  DateTime?        @map("start_date") @db.Timestamptz
+  endDate    DateTime?        @map("end_date") @db.Timestamptz
+  status     LeagueStatus     @default(planned)
+  createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  members  LeagueMember[]
+  invites  LeagueInvite[]
+  rankings Ranking[]
+
+  @@map("leagues")
+}
+
+// unique (league, user) → no se duplica membresía. Soft delete: left/kicked.
+model LeagueMember {
+  id        String             @id @default(uuid()) @db.Uuid
+  leagueId  String             @map("league_id") @db.Uuid
+  userId    String             @map("user_id") @db.Uuid
+  role      LeagueMemberRole   @default(member) // el admin de liga vive aquí
+  status    LeagueMemberStatus @default(active)
+  joinedAt  DateTime           @default(now()) @map("joined_at") @db.Timestamptz
+  leftAt    DateTime?          @map("left_at") @db.Timestamptz
+  createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, userId])
+  @@index([userId])
+  @@map("league_members")
+}
+
+// Invitaciones/códigos de liga: ≥8 caracteres de alta entropia, revocables,
+// no enumerables (security.md §4).
+model LeagueInvite {
+  id         String             @id @default(uuid()) @db.Uuid
+  leagueId   String             @map("league_id") @db.Uuid
+  code       String             @unique
+  createdBy  String             @map("created_by") @db.Uuid
+  status     LeagueInviteStatus @default(active)
+  expiresAt  DateTime?          @map("expires_at") @db.Timestamptz
+  maxUses    Int?               @map("max_uses")
+  usedCount  Int                @default(0) @map("used_count")
+  createdAt  DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  league  League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  creator User   @relation(fields: [createdBy], references: [id])
+
+  @@index([leagueId])
+  @@map("league_invites")
+}
+
+// ── Resultados ───────────────────────────────────────────────────────────────
+
+// Metadatos del evento de resultado (neutralizada/cancelada/versión).
+model ResultsEvent {
+  id             String               @id @default(uuid()) @db.Uuid
+  gpId           String               @map("gp_id") @db.Uuid
+  eventId        String               @map("event_id") @db.Uuid
+  status         ResultsEventStatus   @default(scheduled)
+  neutralized    Boolean              @default(false)
+  cancelled      Boolean              @default(false)
+  resultsVersion String?              @map("results_version")
+  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  gp    Gp         @relation(fields: [gpId], references: [id], onDelete: Cascade)
+  event WeekendEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([gpId, eventId])
+  @@map("results_events")
+}
+
+// Resultado por piloto por evento. unique (gp, event, rider) → idempotencia
+// de importación (invariante 6). No se borran: se corrigen (results_history).
+model Result {
+  id             String       @id @default(uuid()) @db.Uuid
+  gpId           String       @map("gp_id") @db.Uuid
+  eventId        String       @map("event_id") @db.Uuid
+  riderId        String       @map("rider_id") @db.Uuid
+  position       Int?
+  rawPoints      Decimal?     @map("raw_points") @db.Decimal(10, 2)
+  status         ResultStatus @default(provisional)
+  resultsVersion String?      @map("results_version")
+  source         ResultSource @default(manual)
+  sourceName     String?      @map("source_name") // nombre+versión de la fuente
+  raw            Json? // payload original de la fuente (auditoría)
+  importedAt     DateTime     @default(now()) @map("imported_at") @db.Timestamptz
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  gp      Gp           @relation(fields: [gpId], references: [id], onDelete: Cascade)
+  event   WeekendEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  rider   Rider        @relation(fields: [riderId], references: [id], onDelete: Cascade)
+  history      ResultsHistory[]
+
+  @@unique([gpId, eventId, riderId])
+  @@index([eventId])
+  @@index([riderId])
+  @@map("results")
+}
+
+// Histórico de correcciones: anterior → nuevo, motivo, actor, versión.
+model ResultsHistory {
+  id             String   @id @default(uuid()) @db.Uuid
+  resultId       String   @map("result_id") @db.Uuid
+  beforeData     Json     @map("before_data")
+  afterData      Json     @map("after_data")
+  reason         String
+  resultsVersion String?  @map("results_version")
+  userId         String?  @map("user_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  result Result @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id])
+
+  @@index([resultId])
+  @@map("results_history")
+}
+
+// ── Puntuación y rankings (derivados) ────────────────────────────────────────
+
+// Derivado de results + rules: recalculable, versionado (rules_version +
+// results_version). No hay cambios retroactivos silenciosos.
+model Score {
+  id             String   @id @default(uuid()) @db.Uuid
+  lineupId       String   @map("lineup_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  gpId           String   @map("gp_id") @db.Uuid
+  pointsTotal    Decimal  @map("points_total") @db.Decimal(10, 2)
+  breakdown      Json // por piloto/constructor/equipo/bonos/penalizaciones
+  rulesVersion   String   @map("rules_version")
+  resultsVersion String   @map("results_version")
+  computedAt     DateTime @default(now()) @map("computed_at") @db.Timestamptz
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  lineup Lineup @relation(fields: [lineupId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gp     Gp     @relation(fields: [gpId], references: [id], onDelete: Cascade)
+
+  @@unique([lineupId, resultsVersion])
+  @@index([userId, gpId])
+  @@index([gpId])
+  @@map("scores")
+}
+
+// Derivado de scores: por (league, gp) y general (gp NULL). Los puntos por
+// GP de un usuario son los mismos en todas sus ligas (invariante 4).
+model Ranking {
+  id             String    @id @default(uuid()) @db.Uuid
+  leagueId       String    @map("league_id") @db.Uuid
+  gpId           String?   @map("gp_id") @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  position       Int
+  points         Decimal   @db.Decimal(10, 2)
+  tiebreakers    Json?
+  resultsVersion String    @map("results_version")
+  computedAt     DateTime  @default(now()) @map("computed_at") @db.Timestamptz
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  gp     Gp?    @relation(fields: [gpId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([leagueId, gpId])
+  @@index([leagueId])
+  @@map("rankings")
+}
+
+// ── Admin ────────────────────────────────────────────────────────────────────
+
+// Auditoría append-only (T-09 añadirá la protección contra UPDATE/DELETE).
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @map("actor_id") @db.Uuid // NULL = sistema
+  action     String
+  entity     String
+  entityId   String   @map("entity_id")
+  beforeData Json?    @map("before_data")
+  afterData  Json?    @map("after_data")
+  ip         String?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  actor User? @relation(fields: [actorId], references: [id])
+
+  @@index([actorId, createdAt])
+  @@index([entity, entityId])
+  @@map("audit_log")
+}

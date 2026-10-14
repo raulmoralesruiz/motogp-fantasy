@@ -1,0 +1,126 @@
+{
+  "rulesVersion": "economy-v1",
+  "description": "Golden file del módulo economy (presupuesto + precios), versión economy-v1. Fuente de verdad: docs/product/economy.md §4. Si una regla cambia, este archivo se actualiza de forma explícita y revisada — AGENTS.md §7.",
+  "cases": [
+    {
+      "id": "presupuesto-e-carry-8",
+      "fn": "presupuestoE",
+      "args": {
+        "params": { "B": 100, "t": 0.25, "cmax": 8 },
+        "ctx": {
+          "sinUsarPrevio": 8,
+          "valorEquipo": 0,
+          "puntosJugador": 0,
+          "mediaPuntos": 0
+        }
+      },
+      "expected": 102
+    },
+    {
+      "id": "presupuesto-e-tope-cmax",
+      "fn": "presupuestoE",
+      "args": {
+        "params": { "B": 100, "t": 0.25, "cmax": 8 },
+        "ctx": {
+          "sinUsarPrevio": 40,
+          "valorEquipo": 0,
+          "puntosJugador": 0,
+          "mediaPuntos": 0
+        }
+      },
+      "expected": 108
+    },
+    {
+      "id": "presupuesto-a-fijo",
+      "fn": "presupuestoA",
+      "args": { "params": { "B": 100, "t": 0.25, "cmax": 8 } },
+      "expected": 100
+    },
+    {
+      "id": "presupuesto-b-ratchet",
+      "fn": "presupuestoB",
+      "args": {
+        "ctx": {
+          "sinUsarPrevio": 5,
+          "valorEquipo": 95,
+          "puntosJugador": 0,
+          "mediaPuntos": 0
+        }
+      },
+      "expected": 100
+    },
+    {
+      "id": "presupuesto-c-techo",
+      "fn": "presupuestoC",
+      "args": {
+        "params": { "B": 100, "t": 0.25, "cmax": 8 },
+        "ctx": {
+          "sinUsarPrevio": 0,
+          "valorEquipo": 0,
+          "puntosJugador": 200,
+          "mediaPuntos": 100
+        }
+      },
+      "expected": 120
+    },
+    {
+      "id": "presupuesto-c-suelo",
+      "fn": "presupuestoC",
+      "args": {
+        "params": { "B": 100, "t": 0.25, "cmax": 8 },
+        "ctx": {
+          "sinUsarPrevio": 0,
+          "valorEquipo": 0,
+          "puntosJugador": 0,
+          "mediaPuntos": 100
+        }
+      },
+      "expected": 80
+    },
+    {
+      "id": "presupuesto-dispatcher-opcion-e",
+      "fn": "presupuesto",
+      "args": {
+        "opcion": "E",
+        "params": { "B": 100, "t": 0.25, "cmax": 8 },
+        "ctx": {
+          "sinUsarPrevio": 8,
+          "valorEquipo": 0,
+          "puntosJugador": 0,
+          "mediaPuntos": 0
+        }
+      },
+      "expected": 102
+    },
+    {
+      "id": "precio-estable-w50",
+      "fn": "computeNextPrice",
+      "args": {
+        "prevPrice": 20,
+        "P0": 20,
+        "perfCurrent": 100,
+        "perfPrev1": 0,
+        "perfPrev2": 0
+      },
+      "expected": 20
+    },
+    {
+      "id": "precio-lesion",
+      "fn": "injuryPrice",
+      "args": { "prevPrice": 20, "P0": 20 },
+      "expected": 10
+    },
+    {
+      "id": "precio-baja-temporada",
+      "fn": "seasonAbsencePrice",
+      "args": { "P0": 20 },
+      "expected": 5
+    },
+    {
+      "id": "serie-precio-lesion-gp3",
+      "fn": "buildPriceSeries",
+      "args": { "P0": 20, "perfByGp": [100, 0, 0], "outByGp": [false, false, true] },
+      "expected": [20, 20, 10]
+    }
+  ]
+}

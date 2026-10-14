@@ -18,10 +18,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { BudgetParams } from "../../app/modules/economy/index.js";
-import type {
-  PrevSeasonFixture,
-  SeasonFixture,
-} from "../../app/shared/types/index.js";
+import type { PrevSeasonFixture, SeasonFixture } from "../../app/shared/types/index.js";
 import { loadMarket } from "./dataset.js";
 import { computeMetrics } from "./metrics.js";
 import { runOption } from "./options.js";
@@ -76,7 +73,16 @@ async function main(): Promise<void> {
 
   console.log("");
   console.log(
-    ["Opción", "Gini fin", "Rec. peor", "Rec. malArr", "P5-P6 fin", "Espiral", "Diversidad", "Pts/jug"].join("  "),
+    [
+      "Opción",
+      "Gini fin",
+      "Rec. peor",
+      "Rec. malArr",
+      "P5-P6 fin",
+      "Espiral",
+      "Diversidad",
+      "Pts/jug",
+    ].join("  "),
   );
   console.log(metrics.map(line).join("\n"));
 

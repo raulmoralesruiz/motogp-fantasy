@@ -1,0 +1,142 @@
+{
+  "source": "docs/product/economy.md §7.1 — dataset ficticio canónico (todos los datos son ficticios)",
+  "baseBudget": 100,
+  "nGps": 6,
+  "riders": [
+    {
+      "id": "rider-a",
+      "name": "Piloto A",
+      "constructor": "ctor-x",
+      "team": "team-x",
+      "p0": 24,
+      "prices": [24, 24, 25, 25, 26, 26],
+      "narrative": "Superestrella estable"
+    },
+    {
+      "id": "rider-b",
+      "name": "Piloto B",
+      "constructor": "ctor-x",
+      "team": "team-x",
+      "p0": 22,
+      "prices": [22, 22, 8, 8, 8, 9],
+      "narrative": "Superestrella → lesionada GP3–GP4"
+    },
+    {
+      "id": "rider-c",
+      "name": "Piloto C",
+      "constructor": "ctor-y",
+      "team": "team-y",
+      "p0": 18,
+      "prices": [18, 19, 19, 20, 20, 20],
+      "narrative": "Favorita en ascenso"
+    },
+    {
+      "id": "rider-d",
+      "name": "Piloto D",
+      "constructor": "ctor-y",
+      "team": "team-y",
+      "p0": 16,
+      "prices": [16, 16, 15, 15, 14, 14],
+      "narrative": "Favorita en bajada"
+    },
+    {
+      "id": "rider-e",
+      "name": "Piloto E",
+      "constructor": "ctor-z",
+      "team": "team-z",
+      "p0": 12,
+      "prices": [12, 12, 13, 13, 14, 14],
+      "narrative": "Media en ascenso"
+    },
+    {
+      "id": "rider-f",
+      "name": "Piloto F",
+      "constructor": "ctor-z",
+      "team": "team-z",
+      "p0": 11,
+      "prices": [11, 11, 11, 12, 12, 12],
+      "narrative": "Media estable"
+    },
+    {
+      "id": "rider-g",
+      "name": "Piloto G",
+      "constructor": "ctor-w",
+      "team": "team-w",
+      "p0": 10,
+      "prices": [10, 9, 9, 8, 8, 8],
+      "narrative": "Media en bajada"
+    },
+    {
+      "id": "rider-h",
+      "name": "Piloto H",
+      "constructor": "ctor-w",
+      "team": "team-w",
+      "p0": 6,
+      "prices": [6, 6, 6, 7, 7, 7],
+      "narrative": "Barata en ascenso"
+    },
+    {
+      "id": "rider-i",
+      "name": "Piloto I",
+      "constructor": "ctor-x",
+      "team": "team-x",
+      "p0": 5,
+      "prices": [5, 5, 5, 5, 5, 5],
+      "narrative": "Barata estable"
+    },
+    {
+      "id": "rider-j",
+      "name": "Piloto J",
+      "constructor": "ctor-z",
+      "team": "team-z",
+      "p0": 5,
+      "prices": [5, 6, 8, 11, 14, 17],
+      "narrative": "Infravalorada en ascenso"
+    },
+    {
+      "id": "rider-k",
+      "name": "Piloto K",
+      "constructor": "ctor-w",
+      "team": "team-w",
+      "p0": 4,
+      "prices": [4, 4, 4, 4, 4, 4],
+      "narrative": "Barata estable"
+    }
+  ],
+  "constructors": [
+    { "id": "ctor-x", "name": "Constructor X", "p0": 8, "prices": [8, 8, 8, 8, 8, 8] },
+    { "id": "ctor-y", "name": "Constructor Y", "p0": 7, "prices": [7, 7, 7, 7, 7, 7] },
+    { "id": "ctor-z", "name": "Constructor Z", "p0": 6, "prices": [6, 6, 6, 6, 6, 6] },
+    { "id": "ctor-w", "name": "Constructor W", "p0": 5, "prices": [5, 5, 5, 5, 5, 5] }
+  ],
+  "teams": [
+    {
+      "id": "team-x",
+      "name": "Equipo X",
+      "constructor": "ctor-x",
+      "p0": 6,
+      "prices": [6, 6, 6, 6, 6, 6]
+    },
+    {
+      "id": "team-y",
+      "name": "Equipo Y",
+      "constructor": "ctor-y",
+      "p0": 5,
+      "prices": [5, 5, 5, 5, 5, 5]
+    },
+    {
+      "id": "team-z",
+      "name": "Equipo Z",
+      "constructor": "ctor-z",
+      "p0": 4,
+      "prices": [4, 4, 4, 4, 4, 4]
+    },
+    {
+      "id": "team-w",
+      "name": "Equipo W",
+      "constructor": "ctor-w",
+      "p0": 3,
+      "prices": [3, 3, 3, 3, 3, 3]
+    }
+  ]
+}

@@ -166,13 +166,18 @@ async function fetchGps(seasonUuid: string, categoryUuid: string): Promise<Gp[]>
       date: race.date.slice(0, 10),
       results: cls.classification.map(mapResult),
     });
-    console.log(`  GP ${i + 1}/${finished.length} ${ev.short_name} (${cls.classification.length} pilotos)`);
+    console.log(
+      `  GP ${i + 1}/${finished.length} ${ev.short_name} (${cls.classification.length} pilotos)`,
+    );
     await sleep(250);
   }
   return gps;
 }
 
-async function fetchRawStandings(seasonUuid: string, categoryUuid: string): Promise<RawStandings> {
+async function fetchRawStandings(
+  seasonUuid: string,
+  categoryUuid: string,
+): Promise<RawStandings> {
   return (await getJson(
     `${BASE}/results/standings?seasonUuid=${seasonUuid}&categoryUuid=${categoryUuid}`,
   )) as RawStandings;
@@ -183,7 +188,8 @@ async function main(): Promise<void> {
   const seasons = await fetchSeasons();
   const uuid26 = seasons.get(YEAR);
   const uuid25 = seasons.get(PREV_YEAR);
-  if (!uuid26 || !uuid25) throw new Error(`Temporadas ${YEAR}/${PREV_YEAR} no encontradas`);
+  if (!uuid26 || !uuid25)
+    throw new Error(`Temporadas ${YEAR}/${PREV_YEAR} no encontradas`);
   const categoryUuid = await fetchMotoGpCategory(uuid26);
 
   console.log(`\nClasificación ${YEAR}:`);

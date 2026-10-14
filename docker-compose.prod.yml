@@ -1,0 +1,77 @@
+# Producción — TrueNAS Scale (T-02, WP4).
+# Compatible con `docker compose` (CLI) y Portainer (Stack).
+#
+# La imagen web NO se construye aquí (Portainer no tiene contexto de build):
+# la construye deploy.sh (o a mano: docker build -t motogp-web:latest .).
+#
+# Las variables ${...} se leen del .env (CLI) o de las Variables del stack
+# (Portainer). Ver docs/operations/deploy.md.
+services:
+  web:
+    image: motogp-web:latest
+    container_name: motogp-web
+    environment:
+      NODE_ENV: production
+      # Next.js standalone enlaza a process.env.HOSTNAME; Docker lo fija al
+      # container-ID por defecto y el healthcheck interno (127.0.0.1) fallaría.
+      HOSTNAME: 0.0.0.0
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      SESSION_SECRET: ${SESSION_SECRET}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+    ports:
+      # Solo la web expone puerto a la LAN (Postgres/Redis quedan en red interna).
+      - "${WEB_HOST_PORT:-22020}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      # node:slim no trae curl/wget: usamos el fetch global de Node 24.
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  postgres:
+    image: postgres:16
+    container_name: motogp-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      # Bind-mount en el pool (el usuario prefiere bind-mounts a volúmenes nombrados).
+      # Antes del primer arranque: sudo chown -R 999:999 /mnt/data-nas/motogp/pgdata
+      - /mnt/data-nas/motogp/pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # $$ = interpolación del shell del contenedor (no de compose).
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    container_name: motogp-redis
+    # appendonly: persistencia básica (BullMQ lo agradece).
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      # Antes del primer arranque: sudo chown -R 999:999 /mnt/data-nas/motogp/redisdata
+      - /mnt/data-nas/motogp/redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped

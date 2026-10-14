@@ -24,9 +24,14 @@ export interface ReportInput {
 }
 
 const f = (x: number, d = 1): string => (Number.isNaN(x) ? "—" : x.toFixed(d));
-const pct = (x: number, d = 0): string => (Number.isNaN(x) ? "—" : `${(x * 100).toFixed(d)}%`);
+const pct = (x: number, d = 0): string =>
+  Number.isNaN(x) ? "—" : `${(x * 100).toFixed(d)}%`;
 
-function gpTrajectoryTable(market: Market, result: OptionResult, metrics: OptionMetrics): string {
+function gpTrajectoryTable(
+  market: Market,
+  result: OptionResult,
+  metrics: OptionMetrics,
+): string {
   const rows = market.gps.map((gp, i) => {
     const budgets = result.players.map((p) => p.byGp[i]?.budget ?? 0);
     const min = Math.min(...budgets);
@@ -77,7 +82,10 @@ function priceMoversTable(market: Market): string {
   const sorted = [...movers].sort((a, b) => b.delta - a.delta);
   // Solo pilotos que realmente subieron (Δ > 0) y los que bajaron (Δ < 0).
   const up = sorted.filter((m) => m.delta > 1e-9).slice(0, 5);
-  const down = sorted.filter((m) => m.delta < -1e-9).slice(-5).reverse();
+  const down = sorted
+    .filter((m) => m.delta < -1e-9)
+    .slice(-5)
+    .reverse();
   const row = (m: (typeof movers)[number]): string =>
     `| ${m.r.name} | ${m.r.constructor} | ${f(m.r.p0)} | ${f(m.final)} | ${m.delta >= 0 ? "+" : ""}${pct(m.delta)} |`;
   const empty = "| — | — | — | — | — |";
@@ -98,7 +106,9 @@ function priceMoversTable(market: Market): string {
 
 function standingsTable(standings: StandingEntry[], n = 10): string {
   const top = [...standings].sort((a, b) => b.points - a.points).slice(0, n);
-  const rows = top.map((s, i) => `| ${i + 1} | ${s.name} | ${s.team ?? "—"} | ${s.points} |`);
+  const rows = top.map(
+    (s, i) => `| ${i + 1} | ${s.name} | ${s.team ?? "—"} | ${s.points} |`,
+  );
   return ["| # | Piloto | Equipo | Puntos |", "|---|---|---|---|", ...rows].join("\n");
 }
 
@@ -127,18 +137,20 @@ function gateTable(metrics: OptionMetrics[]): string {
 }
 
 function comparisonTable(metrics: OptionMetrics[]): string {
-  const rows = metrics.map((m) => [
-    `| ${m.option}`,
-    `| ${f(m.giniFinal, 3)} / ${f(m.giniAvg, 3)}`,
-    `| ${f(m.recoveryWorst, 2)} (${m.recoveryWorstPlayer})`,
-    `| ${f(m.recoveryMalArranque, 2)}`,
-    `| ${f(m.p5p6FinalDivergence, 1)} / ${f(m.p5p6MaxDivergence, 1)}`,
-    `| ${m.deathSpiralPlayers.length} (${m.deathSpiralPlayers.slice(0, 6).join(", ") || "—"})`,
-    `| ${m.finalBelowBase.length}`,
-    `| ${pct(m.diversityAvg)}`,
-    `| ${pct(m.concentrationPct)}`,
-    `| ${f(m.avgPoints, 1)} |`,
-  ].join(" "));
+  const rows = metrics.map((m) =>
+    [
+      `| ${m.option}`,
+      `| ${f(m.giniFinal, 3)} / ${f(m.giniAvg, 3)}`,
+      `| ${f(m.recoveryWorst, 2)} (${m.recoveryWorstPlayer})`,
+      `| ${f(m.recoveryMalArranque, 2)}`,
+      `| ${f(m.p5p6FinalDivergence, 1)} / ${f(m.p5p6MaxDivergence, 1)}`,
+      `| ${m.deathSpiralPlayers.length} (${m.deathSpiralPlayers.slice(0, 6).join(", ") || "—"})`,
+      `| ${m.finalBelowBase.length}`,
+      `| ${pct(m.diversityAvg)}`,
+      `| ${pct(m.concentrationPct)}`,
+      `| ${f(m.avgPoints, 1)} |`,
+    ].join(" "),
+  );
   return [
     "| Opción | Gini fin / media | Recuperación peor | Rec. mal arranque | P5–P6 fin / máx | Espiral (<0.9B) | Final <0.9B | Diversidad | Concentración | Puntos/jugador |",
     "|---|---|---|---|---|---|---|---|---|---|",
@@ -147,7 +159,17 @@ function comparisonTable(metrics: OptionMetrics[]): string {
 }
 
 export function buildReport(input: ReportInput): string {
-  const { market, players, results, metrics, params, standings26, standings25, fetchedAt, generatedAt } = input;
+  const {
+    market,
+    players,
+    results,
+    metrics,
+    params,
+    standings26,
+    standings25,
+    fetchedAt,
+    generatedAt,
+  } = input;
   const nGps = market.nGps;
   const bagnaia = market.riders.find((r) => r.name.toLowerCase().includes("bagnaia"));
   const alex = market.riders.find((r) => r.name.toLowerCase().includes("alex marquez"));
@@ -158,25 +180,34 @@ export function buildReport(input: ReportInput): string {
 
   const mE = metrics.find((m) => m.option === "E");
   const mB = metrics.find((m) => m.option === "B");
-  const ePass = mE ? mE.giniFinal < 0.05 && mE.recoveryWorst > 0.95 && mE.diversityAvg > 0.7 : false;
+  const ePass = mE
+    ? mE.giniFinal < 0.05 && mE.recoveryWorst > 0.95 && mE.diversityAvg > 0.7
+    : false;
 
   // Trayectoria de M1 en la opción B (para la conclusión, data-driven).
   const m1B = mB
-    ? results.find((r) => r.option === "B")?.players.find((p) => p.player.id === "M1")?.byGp ?? []
+    ? (results.find((r) => r.option === "B")?.players.find((p) => p.player.id === "M1")
+        ?.byGp ?? [])
     : [];
   const m1Budgets = m1B.map((g) => g.budget);
   const m1Min = m1Budgets.length ? Math.min(...m1Budgets) : NaN;
   const m1MinGp = m1Budgets.length ? m1Budgets.indexOf(m1Min) + 1 : NaN;
-  const m1Final = m1Budgets.length ? m1Budgets[m1Budgets.length - 1] ?? NaN : NaN;
+  const m1Final = m1Budgets.length ? (m1Budgets[m1Budgets.length - 1] ?? NaN) : NaN;
 
   const sections: string[] = [];
 
   sections.push(`# Simulación 2026 — Comparación de opciones económicas (A / B / C / E)`);
   sections.push("");
   sections.push(`> **Generado por:** \`npm run simulate\` el ${generatedAt}`);
-  sections.push(`> **Datos:** temporada 2026 real (PulseLive, fetch ${fetchedAt.slice(0, 10)}): ${nGps} GPs terminados, ${market.riders.length} pilotos full-time en el mercado, ${market.constructors.length} constructores, ${market.teams.length} equipos.`);
-  sections.push(`> **Versiones:** scoring-v1 · pricing-v1 · parámetros PROVISIONAL (B=${params.B}, t=${params.t}, cmax=${params.cmax}, Pmax=60/30; en la simulación, rescaleado a 30/30 — §3.3).`);
-  sections.push(`> **Población:** ${players.length} jugadores arquetípicos deterministas.`);
+  sections.push(
+    `> **Datos:** temporada 2026 real (PulseLive, fetch ${fetchedAt.slice(0, 10)}): ${nGps} GPs terminados, ${market.riders.length} pilotos full-time en el mercado, ${market.constructors.length} constructores, ${market.teams.length} equipos.`,
+  );
+  sections.push(
+    `> **Versiones:** scoring-v1 · pricing-v1 · parámetros PROVISIONAL (B=${params.B}, t=${params.t}, cmax=${params.cmax}, Pmax=60/30; en la simulación, rescaleado a 30/30 — §3.3).`,
+  );
+  sections.push(
+    `> **Población:** ${players.length} jugadores arquetípicos deterministas.`,
+  );
   sections.push("");
   sections.push("---");
   sections.push("");
@@ -188,15 +219,21 @@ export function buildReport(input: ReportInput): string {
     "Comparar las opciones económicas A (fijo), B (oficial, ratchet), C (dinámico) y E (híbrido, recomendado) sobre la **temporada 2026 real**, para decidir la mecánica de presupuesto del producto y cerrar la puerta de re-simulación **T-15** (Gini < 0.05, recuperación > 0.95, diversidad > 70%).",
   );
   sections.push("");
-  sections.push("La pregunta central: **¿qué mecánica evita que una mala racha (lesiones, caídas, precio que sube) arrastre al jugador a una espiral de la muerte?**");
+  sections.push(
+    "La pregunta central: **¿qué mecánica evita que una mala racha (lesiones, caídas, precio que sube) arrastre al jugador a una espiral de la muerte?**",
+  );
   sections.push("");
 
   // -------------------------------------------------------------------------
   sections.push("## 2. Datos reales 2026");
   sections.push("");
   sections.push(`- **${nGps} GPs** terminados (del 1 al ${nGps}).`);
-  sections.push(`- **Mercado de pilotos:** ${market.riders.length} full-time (listados en ≥10 GPs). Los pilotos de prueba/puntuales se excluyen del mercado pero puntúan para su constructor/equipo (campo completo).`);
-  sections.push(`- **Constructores:** ${market.constructors.length}. **Equipos:** ${market.teams.length}.`);
+  sections.push(
+    `- **Mercado de pilotos:** ${market.riders.length} full-time (listados en ≥10 GPs). Los pilotos de prueba/puntuales se excluyen del mercado pero puntúan para su constructor/equipo (campo completo).`,
+  );
+  sections.push(
+    `- **Constructores:** ${market.constructors.length}. **Equipos:** ${market.teams.length}.`,
+  );
   sections.push("");
   sections.push("### 2.1 Top 10 real 2026 (puntos de carrera principal)");
   sections.push("");
@@ -214,8 +251,12 @@ export function buildReport(input: ReportInput): string {
   sections.push("");
   sections.push("| Activo | P0 |");
   sections.push("|---|---|");
-  sections.push("| Piloto | `4 + 21 × (pts2025 / máx2025)` (top 2025 = 25, suelo 4; novatos = 4) |");
-  sections.push("| Constructor | `5 + 3 × (fuerza / máxFuerza)` (fuerza = Σ pts2025 de sus pilotos full-time, afiliación 2026) |");
+  sections.push(
+    "| Piloto | `4 + 21 × (pts2025 / máx2025)` (top 2025 = 25, suelo 4; novatos = 4) |",
+  );
+  sections.push(
+    "| Constructor | `5 + 3 × (fuerza / máxFuerza)` (fuerza = Σ pts2025 de sus pilotos full-time, afiliación 2026) |",
+  );
   sections.push("| Equipo | `3 + 3 × (fuerza / máxFuerza)` |");
   sections.push("");
   sections.push("### 3.2 Motor de precios (pricing-v1) — EXÓGENO");
@@ -242,13 +283,27 @@ export function buildReport(input: ReportInput): string {
   sections.push("");
   sections.push("| Arquetipo | N | Comportamiento de pilotos | Constructor/equipo |");
   sections.push("|---|---|---|---|");
-  sections.push("| Favoritista (F1–F6) | 6 | Precio actual desc (sigue el mercado); variante k salta los k primeros | El más caro |");
-  sections.push("| Gastador (G1–G5) | 5 | P0 desc (compra la estrella aunque caiga) | El más caro |");
-  sections.push("| Equilibrado (E1–E8) | 8 | Media de ranking precio + forma | El más equilibrado |");
-  sections.push("| Value (V1–V8) | 8 | Mejor forma/precio (valueScore desc) | El mejor value |");
-  sections.push("| Ahorrador (A1–A5) | 5 | Precio actual asc (maximiza carry) | El más barato |");
-  sections.push(`| Mal arranque (M1–M4) | 4 | Ancla fija: ${bagnaia?.name ?? "Bagnaia"} (M1/M2) y ${alex?.name ?? "Alex Márquez"} (M3/M4) | El de la ancla |`);
-  sections.push("| Estratega (S1–S4) | 4 | S1 (P5): 2 favoritos + 2 value · S2 (P6): 1 favorito + 3 value · S3: ofensivo (precio) · S4: defensivo (forma) | Según mezcla |");
+  sections.push(
+    "| Favoritista (F1–F6) | 6 | Precio actual desc (sigue el mercado); variante k salta los k primeros | El más caro |",
+  );
+  sections.push(
+    "| Gastador (G1–G5) | 5 | P0 desc (compra la estrella aunque caiga) | El más caro |",
+  );
+  sections.push(
+    "| Equilibrado (E1–E8) | 8 | Media de ranking precio + forma | El más equilibrado |",
+  );
+  sections.push(
+    "| Value (V1–V8) | 8 | Mejor forma/precio (valueScore desc) | El mejor value |",
+  );
+  sections.push(
+    "| Ahorrador (A1–A5) | 5 | Precio actual asc (maximiza carry) | El más barato |",
+  );
+  sections.push(
+    `| Mal arranque (M1–M4) | 4 | Ancla fija: ${bagnaia?.name ?? "Bagnaia"} (M1/M2) y ${alex?.name ?? "Alex Márquez"} (M3/M4) | El de la ancla |`,
+  );
+  sections.push(
+    "| Estratega (S1–S4) | 4 | S1 (P5): 2 favoritos + 2 value · S2 (P6): 1 favorito + 3 value · S3: ofensivo (precio) · S4: defensivo (forma) | Según mezcla |",
+  );
   sections.push("");
   sections.push("### 3.5 Construcción de lineup");
   sections.push("");
@@ -261,12 +316,16 @@ export function buildReport(input: ReportInput): string {
   sections.push("| Opción | Fórmula (GP *r+1*) |");
   sections.push("|---|---|");
   sections.push("| A (fijo) | `B` |");
-  sections.push("| B (oficial, ratchet) | `valor de mercado del lineup a precios nuevos + sin usar` |");
-  sections.push("| C (dinámico) | `clamp(B × (1 + 0.2 × clamp(rel, −1, 1)), 0.8B, 1.2B)`, `rel = (puntos − media)/media` |");
+  sections.push(
+    "| B (oficial, ratchet) | `valor de mercado del lineup a precios nuevos + sin usar` |",
+  );
+  sections.push(
+    "| C (dinámico) | `clamp(B × (1 + 0.2 × clamp(rel, −1, 1)), 0.8B, 1.2B)`, `rel = (puntos − media)/media` |",
+  );
   sections.push("| E (híbrido, RECOMENDADO) | `B + min(t × sin_usar_previo, cmax)` |");
   sections.push("");
   sections.push(
-    "GP1 = B para todas. En B, el \"valor del equipo\" se valora a los **precios nuevos** (los publicados tras la carrera, i.e. los del GP siguiente): es el ratchet — si tu estrella gana, su precio sube y tu cap sube; si rinde mal, tu cap se hunde.",
+    'GP1 = B para todas. En B, el "valor del equipo" se valora a los **precios nuevos** (los publicados tras la carrera, i.e. los del GP siguiente): es el ratchet — si tu estrella gana, su precio sube y tu cap sube; si rinde mal, tu cap se hunde.',
   );
   sections.push("");
 

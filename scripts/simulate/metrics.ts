@@ -74,11 +74,7 @@ export function gini(values: number[]): number {
 }
 
 function lineupKey(l: Lineup): string {
-  return [
-    [...l.gold, ...l.silver].sort().join(","),
-    l.constructor,
-    l.team,
-  ].join("|");
+  return [[...l.gold, ...l.silver].sort().join(","), l.constructor, l.team].join("|");
 }
 
 export function computeMetrics(

@@ -139,7 +139,9 @@ async function main(): Promise<void> {
 
   const template = await readFile(TEMPLATE_PATH, "utf-8");
   if (!template.includes("/*__DATA__*/")) {
-    throw new Error("La plantilla viz-template.html no contiene el marcador /*__DATA__*/");
+    throw new Error(
+      "La plantilla viz-template.html no contiene el marcador /*__DATA__*/",
+    );
   }
   const html = template.replace("/*__DATA__*/", JSON.stringify(data));
   await writeFile(OUTPUT_PATH, html, "utf-8");

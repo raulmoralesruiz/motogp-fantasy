@@ -109,7 +109,9 @@ function riderOrder(player: Player, market: Market, gpIdx: number): string[] {
     case "gastador":
       // Sigue el P0 (estrella), no el precio actual.
       order = [...riders].sort(
-        (a, b) => b.p0 - a.p0 || (priceRank.get(a.riderId) ?? 0) - (priceRank.get(b.riderId) ?? 0),
+        (a, b) =>
+          b.p0 - a.p0 ||
+          (priceRank.get(a.riderId) ?? 0) - (priceRank.get(b.riderId) ?? 0),
       );
       break;
     case "ahorrador":
@@ -121,7 +123,8 @@ function riderOrder(player: Player, market: Market, gpIdx: number): string[] {
     case "equilibrado":
       order = [...riders].sort(
         (a, b) =>
-          (priceRank.get(a.riderId) ?? 0) + (perfRank.get(a.riderId) ?? 0) -
+          (priceRank.get(a.riderId) ?? 0) +
+          (perfRank.get(a.riderId) ?? 0) -
           ((priceRank.get(b.riderId) ?? 0) + (perfRank.get(b.riderId) ?? 0)),
       );
       break;
@@ -177,8 +180,14 @@ function groupMode(player: Player): GroupMode {
   }
 }
 
-function groupOrder(player: Player, market: Market, gpIdx: number, kind: "constructor" | "team"): string[] {
-  const groups: MarketGroup[] = kind === "constructor" ? market.constructors : market.teams;
+function groupOrder(
+  player: Player,
+  market: Market,
+  gpIdx: number,
+  kind: "constructor" | "team",
+): string[] {
+  const groups: MarketGroup[] =
+    kind === "constructor" ? market.constructors : market.teams;
   const byPrice = [...groups].sort((a, b) => b.price[gpIdx]! - a.price[gpIdx]!);
   const byPerf = [...groups].sort(
     (a, b) => weightedPerfAt(b.perfByGp, gpIdx) - weightedPerfAt(a.perfByGp, gpIdx),
@@ -186,7 +195,10 @@ function groupOrder(player: Player, market: Market, gpIdx: number, kind: "constr
   const priceRank = new Map(byPrice.map((g, i) => [g.name, i + 1]));
   const perfRank = new Map(byPerf.map((g, i) => [g.name, i + 1]));
   const valueScore = new Map(
-    groups.map((g) => [g.name, (perfRank.get(g.name) ?? 0) - (priceRank.get(g.name) ?? 0)]),
+    groups.map((g) => [
+      g.name,
+      (perfRank.get(g.name) ?? 0) - (priceRank.get(g.name) ?? 0),
+    ]),
   );
 
   switch (groupMode(player)) {
@@ -204,7 +216,8 @@ function groupOrder(player: Player, market: Market, gpIdx: number, kind: "constr
       return [...groups]
         .sort(
           (a, b) =>
-            (priceRank.get(a.name) ?? 0) + (perfRank.get(a.name) ?? 0) -
+            (priceRank.get(a.name) ?? 0) +
+            (perfRank.get(a.name) ?? 0) -
             ((priceRank.get(b.name) ?? 0) + (perfRank.get(b.name) ?? 0)),
         )
         .map((g) => g.name);
@@ -258,7 +271,9 @@ function pickRiders(
   }
   // Fallback: presupuesto muy ajustado → completa con los más baratos.
   if (picked.length < 4) {
-    const byPriceAsc = [...market.riders].sort((a, b) => a.price[gpIdx]! - b.price[gpIdx]!);
+    const byPriceAsc = [...market.riders].sort(
+      (a, b) => a.price[gpIdx]! - b.price[gpIdx]!,
+    );
     for (const r of byPriceAsc) {
       if (picked.length >= 4) break;
       if (picked.some((p) => p.riderId === r.riderId)) continue;
@@ -350,24 +365,88 @@ export function createPopulation(market: Market): Player[] {
   const players: Player[] = [];
   const add = (p: Player) => players.push(p);
 
-  for (let i = 1; i <= 6; i++) add({ id: `F${i}`, label: `Favoritista ${i}`, archetype: "favoritista", variant: i - 1 });
-  for (let i = 1; i <= 5; i++) add({ id: `G${i}`, label: `Gastador ${i}`, archetype: "gastador", variant: i - 1 });
-  for (let i = 1; i <= 8; i++) add({ id: `E${i}`, label: `Equilibrado ${i}`, archetype: "equilibrado", variant: i - 1 });
-  for (let i = 1; i <= 8; i++) add({ id: `V${i}`, label: `Value ${i}`, archetype: "value", variant: i - 1 });
-  for (let i = 1; i <= 5; i++) add({ id: `A${i}`, label: `Ahorrador ${i}`, archetype: "ahorrador", variant: i - 1 });
+  for (let i = 1; i <= 6; i++)
+    add({
+      id: `F${i}`,
+      label: `Favoritista ${i}`,
+      archetype: "favoritista",
+      variant: i - 1,
+    });
+  for (let i = 1; i <= 5; i++)
+    add({ id: `G${i}`, label: `Gastador ${i}`, archetype: "gastador", variant: i - 1 });
+  for (let i = 1; i <= 8; i++)
+    add({
+      id: `E${i}`,
+      label: `Equilibrado ${i}`,
+      archetype: "equilibrado",
+      variant: i - 1,
+    });
+  for (let i = 1; i <= 8; i++)
+    add({ id: `V${i}`, label: `Value ${i}`, archetype: "value", variant: i - 1 });
+  for (let i = 1; i <= 5; i++)
+    add({ id: `A${i}`, label: `Ahorrador ${i}`, archetype: "ahorrador", variant: i - 1 });
 
   const bagnaia = market.riders.find((r) => r.name.toLowerCase().includes("bagnaia"));
   const alex = market.riders.find((r) => r.name.toLowerCase().includes("alex marquez"));
-  if (!bagnaia || !alex) throw new Error("Anclas malArranque no encontradas (Bagnaia / Alex Márquez)");
-  add({ id: "M1", label: `Mal arranque · ${bagnaia.name}`, archetype: "malArranque", variant: 0, anchorRiderId: bagnaia.riderId });
-  add({ id: "M2", label: `Mal arranque · ${bagnaia.name} (v2)`, archetype: "malArranque", variant: 1, anchorRiderId: bagnaia.riderId });
-  add({ id: "M3", label: `Mal arranque · ${alex.name}`, archetype: "malArranque", variant: 0, anchorRiderId: alex.riderId });
-  add({ id: "M4", label: `Mal arranque · ${alex.name} (v2)`, archetype: "malArranque", variant: 1, anchorRiderId: alex.riderId });
+  if (!bagnaia || !alex)
+    throw new Error("Anclas malArranque no encontradas (Bagnaia / Alex Márquez)");
+  add({
+    id: "M1",
+    label: `Mal arranque · ${bagnaia.name}`,
+    archetype: "malArranque",
+    variant: 0,
+    anchorRiderId: bagnaia.riderId,
+  });
+  add({
+    id: "M2",
+    label: `Mal arranque · ${bagnaia.name} (v2)`,
+    archetype: "malArranque",
+    variant: 1,
+    anchorRiderId: bagnaia.riderId,
+  });
+  add({
+    id: "M3",
+    label: `Mal arranque · ${alex.name}`,
+    archetype: "malArranque",
+    variant: 0,
+    anchorRiderId: alex.riderId,
+  });
+  add({
+    id: "M4",
+    label: `Mal arranque · ${alex.name} (v2)`,
+    archetype: "malArranque",
+    variant: 1,
+    anchorRiderId: alex.riderId,
+  });
 
-  add({ id: "S1", label: "P5 · 2 favoritos + 2 value", archetype: "estratega", variant: 0, mix: "p5" });
-  add({ id: "S2", label: "P6 · 1 favorito + 3 value", archetype: "estratega", variant: 0, mix: "p6" });
-  add({ id: "S3", label: "Ofensivo (precio)", archetype: "estratega", variant: 0, mix: "ofensivo" });
-  add({ id: "S4", label: "Defensivo (forma)", archetype: "estratega", variant: 0, mix: "defensivo" });
+  add({
+    id: "S1",
+    label: "P5 · 2 favoritos + 2 value",
+    archetype: "estratega",
+    variant: 0,
+    mix: "p5",
+  });
+  add({
+    id: "S2",
+    label: "P6 · 1 favorito + 3 value",
+    archetype: "estratega",
+    variant: 0,
+    mix: "p6",
+  });
+  add({
+    id: "S3",
+    label: "Ofensivo (precio)",
+    archetype: "estratega",
+    variant: 0,
+    mix: "ofensivo",
+  });
+  add({
+    id: "S4",
+    label: "Defensivo (forma)",
+    archetype: "estratega",
+    variant: 0,
+    mix: "defensivo",
+  });
 
   return players;
 }

@@ -1,0 +1,81 @@
+name: CI
+
+# CI (T-01/T-07/T-02): puertas de calidad en cada PR y push a main.
+# T-02 (WP4): coverage gate, docker build (valida el Dockerfile) y gitleaks (T-19).
+# El deploy NO se hace desde CI: el TrueNAS no tiene IP pública (modelo pull;
+# ./deploy.sh desde el servidor — ver docs/operations/deploy.md).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: lint + typecheck + unit + coverage + integración + build
+    runs-on: ubuntu-latest
+    env:
+      # Valores ficticios: el build no conecta con BD/Redis (solo genera tipos).
+      DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci?schema=public"
+      REDIS_URL: "redis://localhost:6379"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests unit + coverage gate (T-02)
+        run: npm run test:coverage
+
+      - name: Tests de integración (Testcontainers)
+        run: npm run test:integration
+
+      - name: Check pure modules (T-03)
+        run: npm run check:purity
+
+      - name: Build
+        run: npm run build
+
+  docker:
+    name: Docker build (T-02)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build de la imagen (sin push; valida el Dockerfile)
+        run: |
+          docker build \
+            --build-arg NEXT_PUBLIC_APP_URL=https://motogp.raulmorales.eu \
+            -t motogp-web:ci .
+
+  secrets:
+    name: Gitleaks (T-19)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (historial completo)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

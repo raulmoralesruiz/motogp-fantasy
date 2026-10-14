@@ -23,15 +23,8 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import {
-  buildPriceSeries,
-  perf,
-  PMAX_GROUP,
-} from "../../app/modules/economy/index.js";
-import {
-  groupTopTwoAverage,
-  riderMainPoints,
-} from "../../app/modules/scoring/index.js";
+import { buildPriceSeries, perf, PMAX_GROUP } from "../../app/modules/economy/index.js";
+import { groupTopTwoAverage, riderMainPoints } from "../../app/modules/scoring/index.js";
 import type {
   Gp,
   PrevSeasonFixture,
@@ -141,10 +134,7 @@ export function weightedPerfAt(perfByGp: number[], gpIdx: number): number {
   return 0.5 * p0 + 0.3 * p1 + 0.2 * p2;
 }
 
-export async function loadMarket(
-  year = 2026,
-  prevYear = 2025,
-): Promise<Market> {
+export async function loadMarket(year = 2026, prevYear = 2025): Promise<Market> {
   const fixture26 = await readJson<SeasonFixture>(
     join(FIXTURES_DIR, `season-${year}.json`),
   );
@@ -200,10 +190,7 @@ export async function loadMarket(
     .filter((r) => (listedCount.get(r.riderId) ?? 0) >= FULL_TIME_MIN_GPS)
     .map((r) => {
       const p25 = pts25.get(r.riderId) ?? 0;
-      const p0 =
-        p25 > 0
-          ? P0_RIDER_MIN + P0_RIDER_SPAN * (p25 / maxPts25)
-          : P0_RIDER_MIN;
+      const p0 = p25 > 0 ? P0_RIDER_MIN + P0_RIDER_SPAN * (p25 / maxPts25) : P0_RIDER_MIN;
       const perfByGp: number[] = [];
       const outByGp: boolean[] = [];
       let wins = 0;
@@ -258,10 +245,7 @@ export async function loadMarket(
       const riderIds = marketRiders
         .filter((r) => (kind === "constructor" ? r.constructor : r.team) === name)
         .map((r) => r.riderId);
-      const strength25 = riderIds.reduce(
-        (s, id) => s + (pts25.get(id) ?? 0),
-        0,
-      );
+      const strength25 = riderIds.reduce((s, id) => s + (pts25.get(id) ?? 0), 0);
       return { name, kind, strength25, p0: 0, perfByGp: [], price: [], riderIds };
     });
     const maxStrength = Math.max(1, ...groups.map((g) => g.strength25));
@@ -271,7 +255,11 @@ export async function loadMarket(
           ? P0_CTOR_MIN + P0_CTOR_SPAN * (g.strength25 / maxStrength)
           : P0_TEAM_MIN + P0_TEAM_SPAN * (g.strength25 / maxStrength);
       const perfByGp = Array.from({ length: nGps }, (_, i) =>
-        perf((kind === "constructor" ? ctorPointsByGp[i] : teamPointsByGp[i])!.get(g.name) ?? 0, PMAX_GROUP),
+        perf(
+          (kind === "constructor" ? ctorPointsByGp[i] : teamPointsByGp[i])!.get(g.name) ??
+            0,
+          PMAX_GROUP,
+        ),
       );
       g.p0 = p0;
       g.perfByGp = perfByGp;

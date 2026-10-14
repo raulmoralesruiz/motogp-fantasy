@@ -1,0 +1,42 @@
+{
+  "name": "Temporada Ficticia",
+  "year": 2099,
+  "gps": [
+    {
+      "round": 1,
+      "name": "GP Ficticio 1",
+      "circuit": "Circuito Ficticio 1",
+      "date": "2099-05-01T12:00:00Z"
+    },
+    {
+      "round": 2,
+      "name": "GP Ficticio 2",
+      "circuit": "Circuito Ficticio 2",
+      "date": "2099-05-08T12:00:00Z"
+    },
+    {
+      "round": 3,
+      "name": "GP Ficticio 3",
+      "circuit": "Circuito Ficticio 3",
+      "date": "2099-05-15T12:00:00Z"
+    },
+    {
+      "round": 4,
+      "name": "GP Ficticio 4",
+      "circuit": "Circuito Ficticio 4",
+      "date": "2099-05-22T12:00:00Z"
+    },
+    {
+      "round": 5,
+      "name": "GP Ficticio 5",
+      "circuit": "Circuito Ficticio 5",
+      "date": "2099-05-29T12:00:00Z"
+    },
+    {
+      "round": 6,
+      "name": "GP Ficticio 6",
+      "circuit": "Circuito Ficticio 6",
+      "date": "2099-06-05T12:00:00Z"
+    }
+  ]
+}

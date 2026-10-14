@@ -46,30 +46,42 @@ describe("presupuestoA", () => {
 
 describe("presupuestoB (oficial, ratchet)", () => {
   it("cap = valor de mercado + sin usar", () => {
-    expect(presupuestoB({ ...ctxBase, valorEquipo: 89, sinUsarPrevio: 14 })).toBeCloseTo(103);
+    expect(presupuestoB({ ...ctxBase, valorEquipo: 89, sinUsarPrevio: 14 })).toBeCloseTo(
+      103,
+    );
     // Ejemplo verificable de la simulación ficticia: cap 89 vs 103.
   });
 });
 
 describe("presupuestoC (dinámico con límites)", () => {
   it("empate con la media → B", () => {
-    expect(presupuestoC(params, { ...ctxBase, puntosJugador: 100, mediaPuntos: 100 })).toBeCloseTo(100);
+    expect(
+      presupuestoC(params, { ...ctxBase, puntosJugador: 100, mediaPuntos: 100 }),
+    ).toBeCloseTo(100);
   });
 
   it("muy por encima de la media → 1.2B (techo)", () => {
-    expect(presupuestoC(params, { ...ctxBase, puntosJugador: 200, mediaPuntos: 100 })).toBeCloseTo(120);
+    expect(
+      presupuestoC(params, { ...ctxBase, puntosJugador: 200, mediaPuntos: 100 }),
+    ).toBeCloseTo(120);
   });
 
   it("muy por debajo de la media → 0.8B (suelo)", () => {
     // rel = (0−100)/100 = −1 → 100·(1−0.2) = 80.
-    expect(presupuestoC(params, { ...ctxBase, puntosJugador: 0, mediaPuntos: 100 })).toBeCloseTo(80);
+    expect(
+      presupuestoC(params, { ...ctxBase, puntosJugador: 0, mediaPuntos: 100 }),
+    ).toBeCloseTo(80);
   });
 
   it("desviación −90% → 0.82B (dentro del rango)", () => {
-    expect(presupuestoC(params, { ...ctxBase, puntosJugador: 10, mediaPuntos: 100 })).toBeCloseTo(82);
+    expect(
+      presupuestoC(params, { ...ctxBase, puntosJugador: 10, mediaPuntos: 100 }),
+    ).toBeCloseTo(82);
   });
 
   it("desviación intermedia: +50% sobre la media → 1.1B", () => {
-    expect(presupuestoC(params, { ...ctxBase, puntosJugador: 150, mediaPuntos: 100 })).toBeCloseTo(110);
+    expect(
+      presupuestoC(params, { ...ctxBase, puntosJugador: 150, mediaPuntos: 100 }),
+    ).toBeCloseTo(110);
   });
 });

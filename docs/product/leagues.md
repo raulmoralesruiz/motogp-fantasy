@@ -8,24 +8,24 @@ Una **liga** es un grupo de usuarios que comparten un ranking. Un usuario puede 
 
 **Reglas globales vs por liga:**
 
-| Aspecto | Ámbito |
-|---|---|
-| Presupuesto, precios, puntuación, lockout, transfers | **Global** (por temporada) |
-| Miembros, invitaciones, visibilidad, nombre, min/máx miembros | **Por liga** |
-| Restricción de entrada (solo invitados / abierta) | **Por liga** |
+| Aspecto                                                       | Ámbito                     |
+| ------------------------------------------------------------- | -------------------------- |
+| Presupuesto, precios, puntuación, lockout, transfers          | **Global** (por temporada) |
+| Miembros, invitaciones, visibilidad, nombre, min/máx miembros | **Por liga**               |
+| Restricción de entrada (solo invitados / abierta)             | **Por liga**               |
 
 > Racional: las reglas de juego globales garantizan que los puntos sean comparables y que un lineup valga lo mismo en todas las ligas. Permitir reglas por liga rompería la comparabilidad y multiplicaría la complejidad de validación.
 
 ## 2. Tipos de liga
 
-| Tipo | Visibilidad | Entrada | Duración | Caso de uso |
-|---|---|---|---|---|
-| **Privada** | Oculta | Solo por código/invitación | Temporal o de temporada | Amigos, familia |
-| **Pública** | Visible en directorio | Abierta (con límite) | De temporada | Comunidad general |
-| **Amigos** | Oculta | Solo por invitación directa | Temporal | Círculo cercano |
-| **Temporal** | Según config | Según config | Ventana de fechas/horas | Reto de un fin de semana |
-| **De temporada** | Según config | Según config | Una temporada completa | Liga principal |
-| **Personalizada** | Según config | Según config | Según config | Reglas de membresía a medida |
+| Tipo              | Visibilidad           | Entrada                     | Duración                | Caso de uso                  |
+| ----------------- | --------------------- | --------------------------- | ----------------------- | ---------------------------- |
+| **Privada**       | Oculta                | Solo por código/invitación  | Temporal o de temporada | Amigos, familia              |
+| **Pública**       | Visible en directorio | Abierta (con límite)        | De temporada            | Comunidad general            |
+| **Amigos**        | Oculta                | Solo por invitación directa | Temporal                | Círculo cercano              |
+| **Temporal**      | Según config          | Según config                | Ventana de fechas/horas | Reto de un fin de semana     |
+| **De temporada**  | Según config          | Según config                | Una temporada completa  | Liga principal               |
+| **Personalizada** | Según config          | Según config                | Según config            | Reglas de membresía a medida |
 
 ## 3. Creación de liga
 
@@ -47,16 +47,16 @@ Una **liga** es un grupo de usuarios que comparten un ranking. Un usuario puede 
 
 ## 5. Roles y permisos
 
-| Acción | Admin de liga | Miembro |
-|---|---|---|
-| Ver ranking y miembros | ✅ | ✅ |
-| Colocar/cambiar lineup | ✅ | ✅ |
-| Invitar usuarios (si el modo lo permite) | ✅ | ⚠️ solo si el admin lo habilita |
-| Expulsar miembro | ✅ | ❌ |
-| Cambiar nombre/descripción/visibilidad | ✅ | ❌ |
-| Revocar código / generar nuevo | ✅ | ❌ |
-| Cerrar la liga | ✅ | ❌ |
-| Transferir admin | ✅ | ❌ |
+| Acción                                   | Admin de liga | Miembro                         |
+| ---------------------------------------- | ------------- | ------------------------------- |
+| Ver ranking y miembros                   | ✅            | ✅                              |
+| Colocar/cambiar lineup                   | ✅            | ✅                              |
+| Invitar usuarios (si el modo lo permite) | ✅            | ⚠️ solo si el admin lo habilita |
+| Expulsar miembro                         | ✅            | ❌                              |
+| Cambiar nombre/descripción/visibilidad   | ✅            | ❌                              |
+| Revocar código / generar nuevo           | ✅            | ❌                              |
+| Cerrar la liga                           | ✅            | ❌                              |
+| Transferir admin                         | ✅            | ❌                              |
 
 - **Admin vs miembro:** el admin gestiona la liga; el miembro solo juega.
 - **Creador** puede ceder el rol de admin.

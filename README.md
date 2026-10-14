@@ -2,7 +2,7 @@
 
 > Un juego de fantasy de MotoGP **propio** (sin licencias ni APIs oficiales), jugable en cualquier navegador, **multi-liga**, con una economía diseñada para ser **justa y transparente**.
 >
-> **Estado:** Planificación v1 (revisada en fase 6). Solo documentación; no hay código todavía. La implementación empieza en la **Fase 0** de `docs/roadmap.md`.
+> **Estado:** Fase 0 en curso (E1: bootstrap + módulos puros). `docs/` sigue siendo la fuente de verdad de las reglas; `app/` contiene el monolito (Next.js) y los módulos puros `economy`/`scoring` con tests.
 
 ## Resumen ejecutivo
 
@@ -12,11 +12,13 @@
 
 **Evidencia (simulación con datos ficticios, `economy.md` §7):**
 
-| Métrica | Oficial (ratchet) | Recomendado (base + carry) |
-|---|---|---|
-| 2 jugadores con mismo arranque (coste 69, cap 100) | terminan con cap **89 vs 103** | ambos terminan en **108** |
-| Peor arranque (P4): recuperación media GP4–6 / GP1 | **0.83** (no recupera) | **1.08** (recupera y supera) |
-| Gini de riqueza final | **0.0653** | **0.0412** (37% más igualitario) |
+| Métrica                                            | Oficial (ratchet)              | Recomendado (base + carry)       |
+| -------------------------------------------------- | ------------------------------ | -------------------------------- |
+| 2 jugadores con mismo arranque (coste 69, cap 100) | terminan con cap **89 vs 103** | ambos terminan en **108**        |
+| Peor arranque (P4): recuperación media GP4–6 / GP1 | **0.83** (no recupera)         | **1.08** (recupera y supera)     |
+| Gini de riqueza final                              | **0.0653**                     | **0.0412** (37% más igualitario) |
+
+**Evidencia (simulación con datos reales 2026, `simulacion-2026.md`):** con 40 jugadores simulados sobre la temporada real, el modelo oficial deja **36/40** jugadores por debajo del 90% de la base en algún GP (26/40 terminan por debajo; Gini final 0.063); la opción E deja **0/40** (Gini 0.001). Explicación no técnica: `por-que-opcion-e.md`.
 
 **Puntuación.** Tablas versionadas por temporada (`scoring-vN`), sin doble conteo, oro 100% / plata 50%, constructor y equipo puntúan por media de sus 2 mejores pilotos. Ejemplo completo verificado: un lineup puntúa **170.5** en un GP con sprint (`scoring.md` §5). Resultados provisionales → definitivos con **recálculo auditable y versionado**.
 
@@ -32,25 +34,27 @@
 
 ## Mapa de documentos
 
-| Documento | Qué contiene |
-|---|---|
-| `AGENTS.md` | Instrucciones operativas para agentes (módulos, invariantes, versionado, puertas de calidad) |
-| `docs/product/vision.md` | Propuesta de valor, diferenciación, principios, métricas, riesgos |
-| `docs/product/game-rules.md` | Reglas de juego: composición 2+2+1+1, presupuesto, precios, transfers, lockout, invariantes |
-| `docs/product/economy.md` | **Documento central:** problema del ratchet, opciones A–E, modelo recomendado, fórmula de precios, simulaciones |
-| `docs/product/economia-guia.md` | Guía accesible de `economy.md`: glosario, opciones en lenguaje claro, motor de precios paso a paso, GP completo, calibración |
-| `docs/product/scoring.md` | Tablas de puntuación versionadas, bonos/penalizaciones, ejemplo 170.5, casos límite |
-| `docs/product/leagues.md` | Tipos de liga, invitaciones, permisos, min/máx, rankings, desempates, privacidad, anti-abuso |
-| `docs/product/user-flows.md` | Flujos de usuario y pantallas (~18), mobile-first |
-| `docs/product/mvp.md` | Alcance del MVP, diferimientos, criterios de aceptación |
-| `docs/architecture/overview.md` | Stack, módulos, flujo de datos, transacciones/concurrencia |
-| `docs/architecture/data-model.md` | Esquema relacional (PostgreSQL), constraints, fuente de verdad vs derivado |
-| `docs/architecture/integrations.md` | Contrato `ResultsSource`, fuentes evaluadas (PulseLive/Sportradar/comunitarias/manual), pipeline |
-| `docs/architecture/security.md` | Amenazas y controles, RBAC, auditoría, GDPR, backups |
-| `docs/architecture/testing.md` | Capas de testing (7), casos límite, ejemplos verificables, puertas de CI |
-| `docs/decisions/0001…0007` | ADRs: stack, economía, puntuación, fuente de datos, ligas, monolito, pipeline de resultados |
-| `docs/roadmap.md` | Fases 0–5 + post-MVP, hitos, camino crítico |
-| `docs/backlog.md` | Epics, user stories, tareas técnicas, dependencias, prioridades, criterios de aceptación verificables |
+| Documento                           | Qué contiene                                                                                                                 |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `AGENTS.md`                         | Instrucciones operativas para agentes (módulos, invariantes, versionado, puertas de calidad)                                 |
+| `docs/product/vision.md`            | Propuesta de valor, diferenciación, principios, métricas, riesgos                                                            |
+| `docs/product/game-rules.md`        | Reglas de juego: composición 2+2+1+1, presupuesto, precios, transfers, lockout, invariantes                                  |
+| `docs/product/economy.md`           | **Documento central:** problema del ratchet, opciones A–E, modelo recomendado, fórmula de precios, simulaciones              |
+| `docs/product/economia-guia.md`     | Guía accesible de `economy.md`: glosario, opciones en lenguaje claro, motor de precios paso a paso, GP completo, calibración |
+| `docs/product/simulacion-2026.md`   | Comparación A/B/C/E sobre la temporada 2026 real (PulseLive): puerta T-15, trayectorias por GP, casos nombrados              |
+| `docs/product/por-que-opcion-e.md`  | Explicación no técnica: por qué la opción E supera al modelo oficial (ejemplos con datos reales 2026)                        |
+| `docs/product/scoring.md`           | Tablas de puntuación versionadas, bonos/penalizaciones, ejemplo 170.5, casos límite                                          |
+| `docs/product/leagues.md`           | Tipos de liga, invitaciones, permisos, min/máx, rankings, desempates, privacidad, anti-abuso                                 |
+| `docs/product/user-flows.md`        | Flujos de usuario y pantallas (~18), mobile-first                                                                            |
+| `docs/product/mvp.md`               | Alcance del MVP, diferimientos, criterios de aceptación                                                                      |
+| `docs/architecture/overview.md`     | Stack, módulos, flujo de datos, transacciones/concurrencia                                                                   |
+| `docs/architecture/data-model.md`   | Esquema relacional (PostgreSQL), constraints, fuente de verdad vs derivado                                                   |
+| `docs/architecture/integrations.md` | Contrato `ResultsSource`, fuentes evaluadas (PulseLive/Sportradar/comunitarias/manual), pipeline                             |
+| `docs/architecture/security.md`     | Amenazas y controles, RBAC, auditoría, GDPR, backups                                                                         |
+| `docs/architecture/testing.md`      | Capas de testing (7), casos límite, ejemplos verificables, puertas de CI                                                     |
+| `docs/decisions/0001…0007`          | ADRs: stack, economía, puntuación, fuente de datos, ligas, monolito, pipeline de resultados                                  |
+| `docs/roadmap.md`                   | Fases 0–5 + post-MVP, hitos, camino crítico                                                                                  |
+| `docs/backlog.md`                   | Epics, user stories, tareas técnicas, dependencias, prioridades, criterios de aceptación verificables                        |
 
 ## Orden de lectura recomendado
 

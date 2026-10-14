@@ -1,566 +1,949 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Simulación económica 2026 · Fantasy MotoGP Independiente</title>
-<style>
-  :root {
-    --bg: #0b0f17;
-    --panel: #111827;
-    --panel2: #0f1522;
-    --border: #1f2a3d;
-    --text: #e5e7eb;
-    --muted: #8fa3bf;
-    --accent: #f97316;
-    --a: #94a3b8;
-    --b: #ef4444;
-    --c: #f59e0b;
-    --e: #22c55e;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    line-height: 1.5;
-  }
-  .wrap { max-width: 1120px; margin: 0 auto; padding: 28px 20px 64px; }
-  header { border-bottom: 1px solid var(--border); padding-bottom: 18px; }
-  h1 { font-size: 25px; margin: 0 0 8px; letter-spacing: -0.02em; }
-  h1 .flag { color: var(--accent); }
-  .sub { color: var(--muted); font-size: 14px; margin: 0; }
-  .sub b { color: var(--text); font-weight: 600; }
-  .sub code { background: #1a2336; padding: 1px 6px; border-radius: 5px; font-size: 12.5px; }
-  .section { margin-top: 36px; }
-  h2 { font-size: 18px; margin: 0 0 6px; letter-spacing: -0.01em; }
-  .desc { color: var(--muted); font-size: 13.5px; margin: 0 0 14px; max-width: 880px; }
-  .desc b { color: var(--text); }
-  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
-  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
-  .card.pass { border-color: #14532d; }
-  .card.fail { border-color: #58201f; }
-  .card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-  .opt-letter { font-weight: 800; font-size: 15px; width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex: none; }
-  .opt-name { font-size: 13.5px; font-weight: 600; flex: 1; }
-  .badge { font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
-  .badge.pass { background: #052e16; color: #4ade80; border: 1px solid #14532d; }
-  .badge.fail { background: #2d0a0a; color: #f87171; border: 1px solid #58201f; }
-  .card-metrics { display: grid; gap: 5px; }
-  .card-metrics div { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--muted); }
-  .card-metrics b { color: var(--text); font-weight: 600; }
-  .card-metrics i { font-style: normal; color: var(--muted); }
-  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 12px; }
-  .controls > label { font-size: 13px; color: var(--muted); }
-  .controls label.toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; user-select: none; color: var(--muted); }
-  .controls label.toggle:hover { color: var(--text); }
-  .controls label.toggle i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex: none; }
-  .controls label.toggle input { accent-color: var(--accent); margin: 0; }
-  select { background: #0d1424; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 13.5px; max-width: 360px; }
-  .quick { display: inline-flex; flex-wrap: wrap; gap: 6px; }
-  .quick button { background: #0d1424; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 4px 11px; font-size: 12.5px; cursor: pointer; }
-  .quick button:hover { color: var(--text); border-color: #33456b; }
-  .chart-wrap { position: relative; }
-  svg.chart { width: 100%; height: auto; display: block; }
-  text.axis { fill: #7d8fae; font-size: 11px; font-family: inherit; }
-  text.thr { fill: #f87171; font-size: 10.5px; font-family: inherit; }
-  .tip { position: absolute; display: none; background: rgba(13, 20, 36, 0.95); border: 1px solid #2a3a5c; border-radius: 10px; padding: 10px 12px; font-size: 12.5px; pointer-events: none; z-index: 5; min-width: 220px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6); }
-  .tip-title { font-weight: 700; font-size: 13px; }
-  .tip-title span { color: var(--muted); font-weight: 400; font-size: 11.5px; }
-  .tip-row { margin-top: 7px; display: flex; gap: 7px; align-items: flex-start; }
-  .tip-row i { width: 9px; height: 9px; border-radius: 2px; margin-top: 4px; flex: none; }
-  .tip-vals { color: var(--muted); }
-  .tip-vals b { color: var(--text); font-weight: 600; }
-  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 10px; margin-top: 14px; }
-  .stat { background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
-  .stat-opt { font-size: 12px; font-weight: 700; margin-bottom: 6px; color: var(--muted); }
-  .stat-row { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--muted); }
-  .stat-row b { color: var(--text); font-weight: 600; }
-  .metric { margin-bottom: 18px; }
-  .metric:last-child { margin-bottom: 0; }
-  .metric-head { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
-  .metric-target { color: var(--muted); font-weight: 400; font-size: 12px; white-space: nowrap; }
-  .mrow { display: grid; grid-template-columns: 20px 1fr 110px; align-items: center; gap: 10px; margin-top: 4px; }
-  .mopt { font-weight: 800; font-size: 12.5px; }
-  .mbar { background: #0d1424; border-radius: 5px; height: 14px; overflow: hidden; }
-  .mbar span { display: block; height: 100%; border-radius: 5px; opacity: 0.85; }
-  .mval { font-size: 12.5px; text-align: right; color: var(--muted); white-space: nowrap; }
-  .mval.ok { color: #4ade80; }
-  .mval.ko { color: #f87171; }
-  .table-wrap { overflow-x: auto; }
-  table { border-collapse: collapse; width: 100%; font-size: 13px; }
-  th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; padding: 6px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
-  td { padding: 6px 10px; border-bottom: 1px solid #16203a; white-space: nowrap; }
-  td.mut { color: var(--muted); }
-  td.up { color: #4ade80; }
-  td.down { color: #f87171; }
-  footer { margin-top: 44px; border-top: 1px solid var(--border); padding-top: 20px; color: var(--muted); font-size: 13px; }
-  footer h2 { color: var(--text); margin-bottom: 10px; }
-  .method { margin: 0 0 12px; padding-left: 20px; }
-  .method li { margin-bottom: 6px; }
-  .method b { color: var(--text); }
-  .fineprint { font-size: 12.5px; max-width: 880px; }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  @media (max-width: 640px) {
-    .wrap { padding: 20px 12px 48px; }
-    h1 { font-size: 20px; }
-    .mrow { grid-template-columns: 16px 1fr 92px; }
-  }
-</style>
-</head>
-<body>
-<div class="wrap">
-  <header>
-    <h1><span class="flag">▮▮</span> Simulación económica 2026 — comparación interactiva</h1>
-    <p class="sub" id="header-sub"></p>
-  </header>
-
-  <section class="section">
-    <h2>Puerta T-15 — veredicto por opción</h2>
-    <p class="desc">La puerta del MVP exige, re-ejecutando la simulación con los parámetros definitivos: <b>Gini &lt; 0.05</b> (igualdad de presupuestos), <b>recuperación del peor jugador &gt; 0.95</b> (nadie queda hundido) y <b>diversidad de lineups &gt; 70 %</b>. Los parámetros mostrados son <b>PROVISIONAL</b> (B=100, t=0.25, cmax=8): la calibración definitiva (D-01/D-02) y la re-simulación T-15 son obligatorias antes del MVP.</p>
-    <div class="cards" id="gate-cards"></div>
-  </section>
-
-  <section class="section">
-    <h2>Trayectoria del presupuesto por GP</h2>
-    <p class="desc">Banda = rango (mín–máx) de los 40 jugadores; línea = media del campo. La línea roja discontinua marca <b>0.9·B</b>: si el presupuesto de un jugador cae por debajo y no vuelve, está en espiral de la muerte. Pasa el ratón sobre el gráfico para ver los valores de cada GP.</p>
-    <div class="panel">
-      <div class="controls" id="opt-toggles"></div>
-      <div class="chart-wrap" id="traj-wrap"></div>
-    </div>
-  </section>
-
-  <section class="section">
-    <h2>Explorador de jugadores</h2>
-    <p class="desc">Elige cualquiera de los 40 arquetipos y compara su presupuesto GP a GP bajo las cuatro opciones. Los botones rápidos cargan los casos nombrados del informe (M1, M3, S1, S2) y los extremos observados (peor jugador bajo B, mejor bajo E).</p>
-    <div class="panel">
-      <div class="controls">
-        <label for="player-select">Jugador</label>
-        <select id="player-select"></select>
-        <span class="quick" id="quick-picks"></span>
-      </div>
-      <div class="chart-wrap" id="player-wrap"></div>
-      <div class="stats" id="player-stats"></div>
-    </div>
-  </section>
-
-  <section class="section">
-    <h2>Métricas de la puerta T-15</h2>
-    <p class="desc">Comparación directa con las metas. ✓ = cumple la meta, ✗ = no la cumple (los puntos por jugador son solo contexto).</p>
-    <div class="panel" id="metrics-panel"></div>
-  </section>
-
-  <section class="section">
-    <h2>Movimientos de precio (contexto)</h2>
-    <p class="desc">Los precios son <b>exógenos</b>: la fórmula pricing-v1 sobre los resultados reales 2026 genera la misma serie para las cuatro opciones. Explican por qué el «equipo» pierde valor bajo la opción B: si tus activos caen de precio, tu presupuesto cae contigo.</p>
-    <div class="panel table-wrap">
-      <table id="movers-table"></table>
-    </div>
-  </section>
-
-  <footer>
-    <h2>Método</h2>
-    <ul class="method">
-      <li><b>A (fijo):</b> presupuesto = B en cada GP.</li>
-      <li><b>B (oficial, ratchet):</b> presupuesto = valor de mercado del equipo (lineup a precios nuevos) + sin usar. La ventaja se acumula y la desventaja también: si el equipo pierde valor, el presupuesto cae y no vuelve (espiral de la muerte).</li>
-      <li><b>C (dinámico):</b> presupuesto = B ajustado ±20 % por el rendimiento relativo al campo, acotado a [0.8·B, 1.2·B].</li>
-      <li><b>E (híbrido, recomendado):</b> presupuesto = B + min(t × sin_usar_previo, cmax). Recompensa la eficiencia sin ventaja acumulativa: siempre acotado a [B, B + cmax].</li>
-    </ul>
-    <p class="fineprint">Simplificaciones de la simulación: el lineup se reconstruye cada GP (sin transfers ni lockout); 40 arquetipos deterministas; precios exógenos. Datos: temporada 2026 real (PulseLive) + standings 2025 para P0. Informe completo: <a href="./simulacion-2026.md">simulacion-2026.md</a>. Archivo generado automáticamente con <code>npm run simulate:viz</code>; no editarlo a mano.</p>
-  </footer>
-</div>
-<script>
-"use strict";
-const DATA = /*__DATA__*/;
-
-const OPTS = ["A", "B", "C", "E"];
-const COLORS = { A: "#94a3b8", B: "#ef4444", C: "#f59e0b", E: "#22c55e" };
-const NAMES = {
-  A: "A · Fijo",
-  B: "B · Oficial (ratchet)",
-  C: "C · Dinámico",
-  E: "E · Híbrido (recomendado)",
-};
-const B = DATA.params.B;
-const N = DATA.gps.length;
-
-const f1 = (x) => x.toFixed(1);
-const f2 = (x) => x.toFixed(2);
-const f3 = (x) => x.toFixed(3);
-const pct = (x) => (x * 100).toFixed(0) + " %";
-
-function gatePass(m) {
-  return m.giniFinal < 0.05 && m.recoveryWorst > 0.95 && m.diversityAvg > 0.7;
-}
-
-// ---------------------------------------------------------------------------
-// Cabecera
-// ---------------------------------------------------------------------------
-document.getElementById("header-sub").innerHTML =
-  "Opciones <b>A · B · C · E</b> sobre la temporada <b>2026 real</b> (" + N + " GPs, 40 jugadores, precios exógenos) · " +
-  "Parámetros PROVISIONAL: <b>B=" + B + ", t=" + DATA.params.t + ", cmax=" + DATA.params.cmax + "</b> · " +
-  "Generado el <b>" + DATA.generatedAt + "</b> con <code>npm run simulate:viz</code>";
-
-// ---------------------------------------------------------------------------
-// Tarjetas de la puerta T-15
-// ---------------------------------------------------------------------------
-const gateCards = document.getElementById("gate-cards");
-for (const o of OPTS) {
-  const m = DATA.options[o].metrics;
-  const pass = gatePass(m);
-  const div = document.createElement("div");
-  div.className = "card " + (pass ? "pass" : "fail");
-  div.innerHTML =
-    '<div class="card-head">' +
-      '<span class="opt-letter" style="background:' + COLORS[o] + '22;color:' + COLORS[o] + ';border:1px solid ' + COLORS[o] + '55">' + o + "</span>" +
-      '<span class="opt-name">' + NAMES[o] + "</span>" +
-      '<span class="badge ' + (pass ? "pass" : "fail") + '">' + (pass ? "PASA T-15" : "NO PASA") + "</span>" +
-    "</div>" +
-    '<div class="card-metrics">' +
-      '<div><span>Gini final</span><b>' + f3(m.giniFinal) + "</b></div>" +
-      '<div><span>Rec. peor jugador</span><b>' + f2(m.recoveryWorst) + " <i>(" + m.recoveryWorstPlayer + ")</i></b></div>" +
-      '<div><span>Espiral &lt; 0.9·B</span><b>' + m.deathSpiralPlayers.length + "/40</b></div>" +
-      '<div><span>Diversidad</span><b>' + pct(m.diversityAvg) + "</b></div>" +
-      '<div><span>Puntos / jugador</span><b>' + f1(m.avgPoints) + "</b></div>" +
-    "</div>";
-  gateCards.appendChild(div);
-}
-
-// ---------------------------------------------------------------------------
-// Utilidades de gráfico (SVG)
-// ---------------------------------------------------------------------------
-const NS = "http://www.w3.org/2000/svg";
-function svgEl(tag, attrs, parent) {
-  const n = document.createElementNS(NS, tag);
-  for (const k in attrs) n.setAttribute(k, attrs[k]);
-  if (parent) parent.appendChild(n);
-  return n;
-}
-
-function niceTicks(min, max, count) {
-  count = count || 6;
-  const span = max - min;
-  if (span <= 0) return [min];
-  const step0 = span / count;
-  const mag = Math.pow(10, Math.floor(Math.log10(step0)));
-  const norm = step0 / mag;
-  const step = (norm >= 5 ? 5 : norm >= 2 ? 2 : 1) * mag;
-  const ticks = [];
-  for (let v = Math.ceil(min / step) * step; v <= max + 1e-9; v += step) ticks.push(v);
-  return ticks;
-}
-
-/** Dibuja marco (rejilla + ejes) y devuelve las escalas. */
-function drawFrame(svg, W, H, pad, yMin, yMax, xLabels, yFmt) {
-  while (svg.firstChild) svg.removeChild(svg.firstChild);
-  const plotW = W - pad.l - pad.r;
-  const plotH = H - pad.t - pad.b;
-  const X = (i) => pad.l + (i / (N - 1)) * plotW;
-  const Y = (v) => pad.t + (1 - (v - yMin) / (yMax - yMin)) * plotH;
-  for (const t of niceTicks(yMin, yMax)) {
-    svgEl("line", { x1: pad.l, x2: W - pad.r, y1: Y(t), y2: Y(t), stroke: "#1c2740", "stroke-width": 1 }, svg);
-    svgEl("text", { x: pad.l - 8, y: Y(t) + 4, "text-anchor": "end", class: "axis" }, svg).textContent = yFmt(t);
-  }
-  xLabels.forEach((lb, i) => {
-    svgEl("text", { x: X(i), y: H - pad.b + 18, "text-anchor": "middle", class: "axis" }, svg).textContent = lb;
-  });
-  return { X, Y, plotW, plotH };
-}
-
-function makeTip(wrap) {
-  const tip = document.createElement("div");
-  tip.className = "tip";
-  wrap.appendChild(tip);
-  return tip;
-}
-
-/** Capa de hover: línea vertical + tooltip. */
-function addHover(svg, wrap, tip, ctx) {
-  const line = svgEl("line", {
-    y1: ctx.pad.t, y2: ctx.H - ctx.pad.b,
-    stroke: "#3b4a68", "stroke-width": 1, "stroke-dasharray": "3,3", visibility: "hidden",
-  }, svg);
-  const rect = svgEl("rect", {
-    x: ctx.pad.l, y: ctx.pad.t,
-    width: ctx.W - ctx.pad.l - ctx.pad.r, height: ctx.H - ctx.pad.t - ctx.pad.b,
-    fill: "transparent",
-  }, svg);
-  rect.addEventListener("mousemove", (e) => {
-    const r = svg.getBoundingClientRect();
-    const scale = ctx.W / r.width;
-    const xView = (e.clientX - r.left) * scale;
-    let i = Math.round(((xView - ctx.pad.l) / (ctx.W - ctx.pad.l - ctx.pad.r)) * (N - 1));
-    i = Math.max(0, Math.min(N - 1, i));
-    line.setAttribute("x1", ctx.X(i));
-    line.setAttribute("x2", ctx.X(i));
-    line.setAttribute("visibility", "visible");
-    const html = ctx.onMove(i);
-    if (html) {
-      tip.innerHTML = html;
-      tip.style.display = "block";
-      const px = ctx.X(i) / scale;
-      const tw = tip.offsetWidth;
-      let left = px + 14;
-      if (left + tw > wrap.clientWidth - 8) left = px - tw - 14;
-      if (left < 4) left = 4;
-      tip.style.left = left + "px";
-      tip.style.top = "14px";
-    }
-  });
-  rect.addEventListener("mouseleave", () => {
-    line.setAttribute("visibility", "hidden");
-    tip.style.display = "none";
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Gráfico 1 — trayectoria del presupuesto por GP
-// ---------------------------------------------------------------------------
-const visible = { A: true, B: true, C: true, E: true };
-const trajWrap = document.getElementById("traj-wrap");
-const trajSvg = svgEl("svg", { viewBox: "0 0 1040 440", class: "chart" }, trajWrap);
-const trajTip = makeTip(trajWrap);
-
-function renderTrajectory() {
-  const W = 1040, H = 440, pad = { l: 56, r: 20, t: 20, b: 44 };
-  const active = OPTS.filter((o) => visible[o]);
-  let lo = B, hi = B + DATA.params.cmax;
-  for (const o of active) {
-    for (const v of DATA.options[o].minByGp) lo = Math.min(lo, v);
-    for (const v of DATA.options[o].maxByGp) hi = Math.max(hi, v);
-  }
-  lo = Math.min(lo, 0.9 * B);
-  const span = hi - lo || 1;
-  lo -= span * 0.06;
-  hi += span * 0.06;
-  const f = drawFrame(trajSvg, W, H, pad, lo, hi, DATA.gps.map((g) => g.shortName), (t) => t.toFixed(0));
-
-  // Umbral de espiral (0.9·B)
-  if (0.9 * B >= lo && 0.9 * B <= hi) {
-    svgEl("line", {
-      x1: pad.l, x2: W - pad.r, y1: f.Y(0.9 * B), y2: f.Y(0.9 * B),
-      stroke: "#ef4444", "stroke-width": 1.2, "stroke-dasharray": "6,4", opacity: 0.7,
-    }, trajSvg);
-    svgEl("text", { x: W - pad.r - 4, y: f.Y(0.9 * B) - 5, "text-anchor": "end", class: "thr" }, trajSvg)
-      .textContent = "0.9·B (umbral de espiral)";
-  }
-  // Línea base B
-  svgEl("line", {
-    x1: pad.l, x2: W - pad.r, y1: f.Y(B), y2: f.Y(B),
-    stroke: "#475569", "stroke-width": 1, "stroke-dasharray": "2,4",
-  }, trajSvg);
-
-  for (const o of active) {
-    const d = DATA.options[o];
-    const ptsMin = d.minByGp.map((v, i) => f.X(i) + "," + f.Y(v)).join(" ");
-    const ptsMax = d.maxByGp.map((v, i) => f.X(i) + "," + f.Y(v)).reverse().join(" ");
-    svgEl("polygon", { points: ptsMin + " " + ptsMax, fill: COLORS[o], opacity: 0.12 }, trajSvg);
-    const ptsAvg = d.avgByGp.map((v, i) => f.X(i) + "," + f.Y(v)).join(" ");
-    svgEl("polyline", {
-      points: ptsAvg, fill: "none", stroke: COLORS[o],
-      "stroke-width": 2.4, "stroke-linejoin": "round",
-    }, trajSvg);
-    d.avgByGp.forEach((v, i) => svgEl("circle", { cx: f.X(i), cy: f.Y(v), r: 2.6, fill: COLORS[o] }, trajSvg));
-  }
-
-  addHover(trajSvg, trajWrap, trajTip, {
-    X: f.X, W, H, pad,
-    onMove: (i) => {
-      const g = DATA.gps[i];
-      let rows = '<div class="tip-title">GP' + g.order + " · " + g.name + ' <span>' + g.date + "</span></div>";
-      for (const o of active) {
-        const d = DATA.options[o];
-        rows += '<div class="tip-row"><i style="background:' + COLORS[o] + '"></i><span><b>' + o + "</b> — " +
-          '<span class="tip-vals">medio <b>' + f1(d.avgByGp[i]) + "</b> · mín <b>" + f1(d.minByGp[i]) +
-          "</b> · máx <b>" + f1(d.maxByGp[i]) + "</b> · Gini <b>" + f3(d.giniByGp[i]) + "</b></span></span></div>";
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Simulación económica 2026 · Fantasy MotoGP Independiente</title>
+    <style>
+      :root {
+        --bg: #0b0f17;
+        --panel: #111827;
+        --panel2: #0f1522;
+        --border: #1f2a3d;
+        --text: #e5e7eb;
+        --muted: #8fa3bf;
+        --accent: #f97316;
+        --a: #94a3b8;
+        --b: #ef4444;
+        --c: #f59e0b;
+        --e: #22c55e;
       }
-      return rows;
-    },
-  });
-}
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          "Helvetica Neue",
+          Arial,
+          sans-serif;
+        line-height: 1.5;
+      }
+      .wrap {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 28px 20px 64px;
+      }
+      header {
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 18px;
+      }
+      h1 {
+        font-size: 25px;
+        margin: 0 0 8px;
+        letter-spacing: -0.02em;
+      }
+      h1 .flag {
+        color: var(--accent);
+      }
+      .sub {
+        color: var(--muted);
+        font-size: 14px;
+        margin: 0;
+      }
+      .sub b {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .sub code {
+        background: #1a2336;
+        padding: 1px 6px;
+        border-radius: 5px;
+        font-size: 12.5px;
+      }
+      .section {
+        margin-top: 36px;
+      }
+      h2 {
+        font-size: 18px;
+        margin: 0 0 6px;
+        letter-spacing: -0.01em;
+      }
+      .desc {
+        color: var(--muted);
+        font-size: 13.5px;
+        margin: 0 0 14px;
+        max-width: 880px;
+      }
+      .desc b {
+        color: var(--text);
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px;
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 12px;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px;
+      }
+      .card.pass {
+        border-color: #14532d;
+      }
+      .card.fail {
+        border-color: #58201f;
+      }
+      .card-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .opt-letter {
+        font-weight: 800;
+        font-size: 15px;
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: none;
+      }
+      .opt-name {
+        font-size: 13.5px;
+        font-weight: 600;
+        flex: 1;
+      }
+      .badge {
+        font-size: 10.5px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        padding: 3px 8px;
+        border-radius: 999px;
+        white-space: nowrap;
+      }
+      .badge.pass {
+        background: #052e16;
+        color: #4ade80;
+        border: 1px solid #14532d;
+      }
+      .badge.fail {
+        background: #2d0a0a;
+        color: #f87171;
+        border: 1px solid #58201f;
+      }
+      .card-metrics {
+        display: grid;
+        gap: 5px;
+      }
+      .card-metrics div {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 12.5px;
+        color: var(--muted);
+      }
+      .card-metrics b {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .card-metrics i {
+        font-style: normal;
+        color: var(--muted);
+      }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px 14px;
+        margin-bottom: 12px;
+      }
+      .controls > label {
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .controls label.toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        cursor: pointer;
+        user-select: none;
+        color: var(--muted);
+      }
+      .controls label.toggle:hover {
+        color: var(--text);
+      }
+      .controls label.toggle i {
+        width: 12px;
+        height: 12px;
+        border-radius: 3px;
+        display: inline-block;
+        flex: none;
+      }
+      .controls label.toggle input {
+        accent-color: var(--accent);
+        margin: 0;
+      }
+      select {
+        background: #0d1424;
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 13.5px;
+        max-width: 360px;
+      }
+      .quick {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .quick button {
+        background: #0d1424;
+        color: var(--muted);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 4px 11px;
+        font-size: 12.5px;
+        cursor: pointer;
+      }
+      .quick button:hover {
+        color: var(--text);
+        border-color: #33456b;
+      }
+      .chart-wrap {
+        position: relative;
+      }
+      svg.chart {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+      text.axis {
+        fill: #7d8fae;
+        font-size: 11px;
+        font-family: inherit;
+      }
+      text.thr {
+        fill: #f87171;
+        font-size: 10.5px;
+        font-family: inherit;
+      }
+      .tip {
+        position: absolute;
+        display: none;
+        background: rgba(13, 20, 36, 0.95);
+        border: 1px solid #2a3a5c;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 12.5px;
+        pointer-events: none;
+        z-index: 5;
+        min-width: 220px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+      }
+      .tip-title {
+        font-weight: 700;
+        font-size: 13px;
+      }
+      .tip-title span {
+        color: var(--muted);
+        font-weight: 400;
+        font-size: 11.5px;
+      }
+      .tip-row {
+        margin-top: 7px;
+        display: flex;
+        gap: 7px;
+        align-items: flex-start;
+      }
+      .tip-row i {
+        width: 9px;
+        height: 9px;
+        border-radius: 2px;
+        margin-top: 4px;
+        flex: none;
+      }
+      .tip-vals {
+        color: var(--muted);
+      }
+      .tip-vals b {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+        gap: 10px;
+        margin-top: 14px;
+      }
+      .stat {
+        background: var(--panel2);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px 12px;
+      }
+      .stat-opt {
+        font-size: 12px;
+        font-weight: 700;
+        margin-bottom: 6px;
+        color: var(--muted);
+      }
+      .stat-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 12.5px;
+        color: var(--muted);
+      }
+      .stat-row b {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .metric {
+        margin-bottom: 18px;
+      }
+      .metric:last-child {
+        margin-bottom: 0;
+      }
+      .metric-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+      .metric-target {
+        color: var(--muted);
+        font-weight: 400;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      .mrow {
+        display: grid;
+        grid-template-columns: 20px 1fr 110px;
+        align-items: center;
+        gap: 10px;
+        margin-top: 4px;
+      }
+      .mopt {
+        font-weight: 800;
+        font-size: 12.5px;
+      }
+      .mbar {
+        background: #0d1424;
+        border-radius: 5px;
+        height: 14px;
+        overflow: hidden;
+      }
+      .mbar span {
+        display: block;
+        height: 100%;
+        border-radius: 5px;
+        opacity: 0.85;
+      }
+      .mval {
+        font-size: 12.5px;
+        text-align: right;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .mval.ok {
+        color: #4ade80;
+      }
+      .mval.ko {
+        color: #f87171;
+      }
+      .table-wrap {
+        overflow-x: auto;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 13px;
+      }
+      th {
+        text-align: left;
+        color: var(--muted);
+        font-weight: 600;
+        font-size: 12px;
+        padding: 6px 10px;
+        border-bottom: 1px solid var(--border);
+        white-space: nowrap;
+      }
+      td {
+        padding: 6px 10px;
+        border-bottom: 1px solid #16203a;
+        white-space: nowrap;
+      }
+      td.mut {
+        color: var(--muted);
+      }
+      td.up {
+        color: #4ade80;
+      }
+      td.down {
+        color: #f87171;
+      }
+      footer {
+        margin-top: 44px;
+        border-top: 1px solid var(--border);
+        padding-top: 20px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      footer h2 {
+        color: var(--text);
+        margin-bottom: 10px;
+      }
+      .method {
+        margin: 0 0 12px;
+        padding-left: 20px;
+      }
+      .method li {
+        margin-bottom: 6px;
+      }
+      .method b {
+        color: var(--text);
+      }
+      .fineprint {
+        font-size: 12.5px;
+        max-width: 880px;
+      }
+      a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      @media (max-width: 640px) {
+        .wrap {
+          padding: 20px 12px 48px;
+        }
+        h1 {
+          font-size: 20px;
+        }
+        .mrow {
+          grid-template-columns: 16px 1fr 92px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <h1>
+          <span class="flag">▮▮</span> Simulación económica 2026 — comparación interactiva
+        </h1>
+        <p class="sub" id="header-sub"></p>
+      </header>
 
-const toggles = document.getElementById("opt-toggles");
-for (const o of OPTS) {
-  const lab = document.createElement("label");
-  lab.className = "toggle";
-  lab.innerHTML = '<input type="checkbox" checked><i style="background:' + COLORS[o] + '"></i>' + NAMES[o];
-  lab.querySelector("input").addEventListener("change", (e) => {
-    visible[o] = e.target.checked;
-    renderTrajectory();
-  });
-  toggles.appendChild(lab);
-}
-renderTrajectory();
+      <section class="section">
+        <h2>Puerta T-15 — veredicto por opción</h2>
+        <p class="desc">
+          La puerta del MVP exige, re-ejecutando la simulación con los parámetros
+          definitivos: <b>Gini &lt; 0.05</b> (igualdad de presupuestos),
+          <b>recuperación del peor jugador &gt; 0.95</b> (nadie queda hundido) y
+          <b>diversidad de lineups &gt; 70 %</b>. Los parámetros mostrados son
+          <b>PROVISIONAL</b> (B=100, t=0.25, cmax=8): la calibración definitiva
+          (D-01/D-02) y la re-simulación T-15 son obligatorias antes del MVP.
+        </p>
+        <div class="cards" id="gate-cards"></div>
+      </section>
 
-// ---------------------------------------------------------------------------
-// Gráfico 2 — explorador de jugadores
-// ---------------------------------------------------------------------------
-const sel = document.getElementById("player-select");
-for (const p of DATA.players) {
-  const opt = document.createElement("option");
-  opt.value = p.id;
-  opt.textContent = p.id + " — " + p.label;
-  sel.appendChild(opt);
-}
+      <section class="section">
+        <h2>Trayectoria del presupuesto por GP</h2>
+        <p class="desc">
+          Banda = rango (mín–máx) de los 40 jugadores; línea = media del campo. La línea
+          roja discontinua marca <b>0.9·B</b>: si el presupuesto de un jugador cae por
+          debajo y no vuelve, está en espiral de la muerte. Pasa el ratón sobre el gráfico
+          para ver los valores de cada GP.
+        </p>
+        <div class="panel">
+          <div class="controls" id="opt-toggles"></div>
+          <div class="chart-wrap" id="traj-wrap"></div>
+        </div>
+      </section>
 
-function playerRecovery(pid, o) {
-  const b = DATA.players.find((p) => p.id === pid).byOption[o].budgets;
-  const last3 = b.slice(-3);
-  return last3.reduce((s, v) => s + v, 0) / 3 / B;
-}
+      <section class="section">
+        <h2>Explorador de jugadores</h2>
+        <p class="desc">
+          Elige cualquiera de los 40 arquetipos y compara su presupuesto GP a GP bajo las
+          cuatro opciones. Los botones rápidos cargan los casos nombrados del informe (M1,
+          M3, S1, S2) y los extremos observados (peor jugador bajo B, mejor bajo E).
+        </p>
+        <div class="panel">
+          <div class="controls">
+            <label for="player-select">Jugador</label>
+            <select id="player-select"></select>
+            <span class="quick" id="quick-picks"></span>
+          </div>
+          <div class="chart-wrap" id="player-wrap"></div>
+          <div class="stats" id="player-stats"></div>
+        </div>
+      </section>
 
-let worstB = DATA.players[0].id;
-let bestE = DATA.players[0].id;
-for (const p of DATA.players) {
-  if (playerRecovery(p.id, "B") < playerRecovery(worstB, "B")) worstB = p.id;
-  if (playerRecovery(p.id, "E") > playerRecovery(bestE, "E")) bestE = p.id;
-}
-const quickDefs = [
-  { id: "M1", label: "M1 · Bagnaia" },
-  { id: "M3", label: "M3 · Á. Márquez" },
-  { id: worstB, label: "Peor bajo B (" + worstB + ")" },
-  { id: bestE, label: "Mejor bajo E (" + bestE + ")" },
-  { id: "S1", label: "S1 · P5" },
-  { id: "S2", label: "S2 · P6" },
-];
-const quickWrap = document.getElementById("quick-picks");
-for (const q of quickDefs) {
-  const btn = document.createElement("button");
-  btn.textContent = q.label;
-  btn.addEventListener("click", () => {
-    sel.value = q.id;
-    renderPlayer();
-  });
-  quickWrap.appendChild(btn);
-}
+      <section class="section">
+        <h2>Métricas de la puerta T-15</h2>
+        <p class="desc">
+          Comparación directa con las metas. ✓ = cumple la meta, ✗ = no la cumple (los
+          puntos por jugador son solo contexto).
+        </p>
+        <div class="panel" id="metrics-panel"></div>
+      </section>
 
-const playerWrap = document.getElementById("player-wrap");
-const playerSvg = svgEl("svg", { viewBox: "0 0 1040 400", class: "chart" }, playerWrap);
-const playerTip = makeTip(playerWrap);
+      <section class="section">
+        <h2>Movimientos de precio (contexto)</h2>
+        <p class="desc">
+          Los precios son <b>exógenos</b>: la fórmula pricing-v1 sobre los resultados
+          reales 2026 genera la misma serie para las cuatro opciones. Explican por qué el
+          «equipo» pierde valor bajo la opción B: si tus activos caen de precio, tu
+          presupuesto cae contigo.
+        </p>
+        <div class="panel table-wrap">
+          <table id="movers-table"></table>
+        </div>
+      </section>
 
-function renderPlayer() {
-  const pid = sel.value;
-  const p = DATA.players.find((x) => x.id === pid);
-  const W = 1040, H = 400, pad = { l: 56, r: 20, t: 20, b: 44 };
-  let lo = Infinity, hi = -Infinity;
-  for (const o of OPTS) {
-    for (const v of p.byOption[o].budgets) {
-      lo = Math.min(lo, v);
-      hi = Math.max(hi, v);
-    }
-  }
-  lo = Math.min(lo, 0.9 * B);
-  const span = hi - lo || 1;
-  lo -= span * 0.08;
-  hi += span * 0.08;
-  const f = drawFrame(playerSvg, W, H, pad, lo, hi, DATA.gps.map((g) => g.shortName), (t) => t.toFixed(0));
+      <footer>
+        <h2>Método</h2>
+        <ul class="method">
+          <li><b>A (fijo):</b> presupuesto = B en cada GP.</li>
+          <li>
+            <b>B (oficial, ratchet):</b> presupuesto = valor de mercado del equipo (lineup
+            a precios nuevos) + sin usar. La ventaja se acumula y la desventaja también:
+            si el equipo pierde valor, el presupuesto cae y no vuelve (espiral de la
+            muerte).
+          </li>
+          <li>
+            <b>C (dinámico):</b> presupuesto = B ajustado ±20 % por el rendimiento
+            relativo al campo, acotado a [0.8·B, 1.2·B].
+          </li>
+          <li>
+            <b>E (híbrido, recomendado):</b> presupuesto = B + min(t × sin_usar_previo,
+            cmax). Recompensa la eficiencia sin ventaja acumulativa: siempre acotado a [B,
+            B + cmax].
+          </li>
+        </ul>
+        <p class="fineprint">
+          Simplificaciones de la simulación: el lineup se reconstruye cada GP (sin
+          transfers ni lockout); 40 arquetipos deterministas; precios exógenos. Datos:
+          temporada 2026 real (PulseLive) + standings 2025 para P0. Informe completo:
+          <a href="./simulacion-2026.md">simulacion-2026.md</a>. Archivo generado
+          automáticamente con <code>npm run simulate:viz</code>; no editarlo a mano.
+        </p>
+      </footer>
+    </div>
+    <script>
+      "use strict";
+      const DATA = /*__DATA__*/;
 
-  if (0.9 * B >= lo && 0.9 * B <= hi) {
-    svgEl("line", {
-      x1: pad.l, x2: W - pad.r, y1: f.Y(0.9 * B), y2: f.Y(0.9 * B),
-      stroke: "#ef4444", "stroke-width": 1.2, "stroke-dasharray": "6,4", opacity: 0.7,
-    }, playerSvg);
-    svgEl("text", { x: W - pad.r - 4, y: f.Y(0.9 * B) - 5, "text-anchor": "end", class: "thr" }, playerSvg)
-      .textContent = "0.9·B (umbral de espiral)";
-  }
+      const OPTS = ["A", "B", "C", "E"];
+      const COLORS = { A: "#94a3b8", B: "#ef4444", C: "#f59e0b", E: "#22c55e" };
+      const NAMES = {
+        A: "A · Fijo",
+        B: "B · Oficial (ratchet)",
+        C: "C · Dinámico",
+        E: "E · Híbrido (recomendado)",
+      };
+      const B = DATA.params.B;
+      const N = DATA.gps.length;
 
-  for (const o of OPTS) {
-    const d = p.byOption[o];
-    const pts = d.budgets.map((v, i) => f.X(i) + "," + f.Y(v)).join(" ");
-    svgEl("polyline", {
-      points: pts, fill: "none", stroke: COLORS[o],
-      "stroke-width": 2.4, "stroke-linejoin": "round",
-    }, playerSvg);
-    d.budgets.forEach((v, i) => svgEl("circle", { cx: f.X(i), cy: f.Y(v), r: 2.6, fill: COLORS[o] }, playerSvg));
-  }
+      const f1 = (x) => x.toFixed(1);
+      const f2 = (x) => x.toFixed(2);
+      const f3 = (x) => x.toFixed(3);
+      const pct = (x) => (x * 100).toFixed(0) + " %";
 
-  addHover(playerSvg, playerWrap, playerTip, {
-    X: f.X, W, H, pad,
-    onMove: (i) => {
-      const g = DATA.gps[i];
-      let rows = '<div class="tip-title">' + p.id + " · " + p.label + "</div>" +
-        '<div class="tip-title" style="margin-top:2px">GP' + g.order + " · " + g.name + "</div>";
+      function gatePass(m) {
+        return m.giniFinal < 0.05 && m.recoveryWorst > 0.95 && m.diversityAvg > 0.7;
+      }
+
+      // ---------------------------------------------------------------------------
+      // Cabecera
+      // ---------------------------------------------------------------------------
+      document.getElementById("header-sub").innerHTML =
+        "Opciones <b>A · B · C · E</b> sobre la temporada <b>2026 real</b> (" + N + " GPs, 40 jugadores, precios exógenos) · " +
+        "Parámetros PROVISIONAL: <b>B=" + B + ", t=" + DATA.params.t + ", cmax=" + DATA.params.cmax + "</b> · " +
+        "Generado el <b>" + DATA.generatedAt + "</b> con <code>npm run simulate:viz</code>";
+
+      // ---------------------------------------------------------------------------
+      // Tarjetas de la puerta T-15
+      // ---------------------------------------------------------------------------
+      const gateCards = document.getElementById("gate-cards");
       for (const o of OPTS) {
-        const d = p.byOption[o];
-        rows += '<div class="tip-row"><i style="background:' + COLORS[o] + '"></i><span><b>' + o + "</b> — " +
-          '<span class="tip-vals">presupuesto <b>' + f1(d.budgets[i]) + "</b> · puntos <b>" + f1(d.points[i]) + "</b></span></span></div>";
+        const m = DATA.options[o].metrics;
+        const pass = gatePass(m);
+        const div = document.createElement("div");
+        div.className = "card " + (pass ? "pass" : "fail");
+        div.innerHTML =
+          '<div class="card-head">' +
+            '<span class="opt-letter" style="background:' + COLORS[o] + '22;color:' + COLORS[o] + ';border:1px solid ' + COLORS[o] + '55">' + o + "</span>" +
+            '<span class="opt-name">' + NAMES[o] + "</span>" +
+            '<span class="badge ' + (pass ? "pass" : "fail") + '">' + (pass ? "PASA T-15" : "NO PASA") + "</span>" +
+          "</div>" +
+          '<div class="card-metrics">' +
+            '<div><span>Gini final</span><b>' + f3(m.giniFinal) + "</b></div>" +
+            '<div><span>Rec. peor jugador</span><b>' + f2(m.recoveryWorst) + " <i>(" + m.recoveryWorstPlayer + ")</i></b></div>" +
+            '<div><span>Espiral &lt; 0.9·B</span><b>' + m.deathSpiralPlayers.length + "/40</b></div>" +
+            '<div><span>Diversidad</span><b>' + pct(m.diversityAvg) + "</b></div>" +
+            '<div><span>Puntos / jugador</span><b>' + f1(m.avgPoints) + "</b></div>" +
+          "</div>";
+        gateCards.appendChild(div);
       }
-      return rows;
-    },
-  });
 
-  const stats = document.getElementById("player-stats");
-  stats.innerHTML = OPTS.map((o) => {
-    const d = p.byOption[o];
-    const rec = playerRecovery(pid, o);
-    return '<div class="stat" style="border-top:3px solid ' + COLORS[o] + '">' +
-      '<div class="stat-opt">' + NAMES[o] + "</div>" +
-      '<div class="stat-row"><span>Final</span><b>' + f1(d.finalBudget) + "</b></div>" +
-      '<div class="stat-row"><span>Mín</span><b>' + f1(d.minBudget) + "</b></div>" +
-      '<div class="stat-row"><span>Puntos totales</span><b>' + f1(d.totalPoints) + "</b></div>" +
-      '<div class="stat-row"><span>Recuperación</span><b>' + f2(rec) + "</b></div>" +
-    "</div>";
-  }).join("");
-}
-sel.addEventListener("change", renderPlayer);
-renderPlayer();
+      // ---------------------------------------------------------------------------
+      // Utilidades de gráfico (SVG)
+      // ---------------------------------------------------------------------------
+      const NS = "http://www.w3.org/2000/svg";
+      function svgEl(tag, attrs, parent) {
+        const n = document.createElementNS(NS, tag);
+        for (const k in attrs) n.setAttribute(k, attrs[k]);
+        if (parent) parent.appendChild(n);
+        return n;
+      }
 
-// ---------------------------------------------------------------------------
-// Métricas de la puerta T-15
-// ---------------------------------------------------------------------------
-function okFor(key, v) {
-  if (key === "giniFinal") return v < 0.05;
-  if (key === "recoveryWorst") return v > 0.95;
-  if (key === "diversityAvg") return v > 0.7;
-  if (key === "spiral") return v === 0;
-  return null;
-}
-const metricsDefs = [
-  { key: "giniFinal", label: "Gini final de los presupuestos", target: "< 0.05", fmt: f3 },
-  { key: "recoveryWorst", label: "Recuperación del peor jugador (media 3 últimos GPs / B)", target: "> 0.95", fmt: f2 },
-  { key: "diversityAvg", label: "Diversidad de lineups (% únicos por GP)", target: "> 70 %", fmt: pct },
-  { key: "spiral", label: "Jugadores en espiral (mínimo < 0.9·B)", target: "0", fmt: (x) => String(x) + " / 40" },
-  { key: "avgPoints", label: "Puntos por jugador (contexto)", target: "—", fmt: f1 },
-];
-const mp = document.getElementById("metrics-panel");
-mp.innerHTML = metricsDefs.map((md) => {
-  const vals = {};
-  for (const o of OPTS) {
-    const m = DATA.options[o].metrics;
-    vals[o] = md.key === "spiral" ? m.deathSpiralPlayers.length : m[md.key];
-  }
-  const vmax = Math.max.apply(null, Object.values(vals).concat([1e-9]));
-  const rows = OPTS.map((o) => {
-    const v = vals[o];
-    const ok = okFor(md.key, v);
-    return '<div class="mrow">' +
-      '<span class="mopt" style="color:' + COLORS[o] + '">' + o + "</span>" +
-      '<span class="mbar"><span style="width:' + (v / vmax) * 100 + "%;background:" + COLORS[o] + '"></span></span>' +
-      '<span class="mval ' + (ok === null ? "" : ok ? "ok" : "ko") + '">' + md.fmt(v) + (ok === null ? "" : ok ? " ✓" : " ✗") + "</span>" +
-    "</div>";
-  }).join("");
-  return '<div class="metric">' +
-    '<div class="metric-head"><span>' + md.label + '</span><span class="metric-target">meta T-15: ' + md.target + "</span></div>" +
-    rows +
-  "</div>";
-}).join("");
+      function niceTicks(min, max, count) {
+        count = count || 6;
+        const span = max - min;
+        if (span <= 0) return [min];
+        const step0 = span / count;
+        const mag = Math.pow(10, Math.floor(Math.log10(step0)));
+        const norm = step0 / mag;
+        const step = (norm >= 5 ? 5 : norm >= 2 ? 2 : 1) * mag;
+        const ticks = [];
+        for (let v = Math.ceil(min / step) * step; v <= max + 1e-9; v += step) ticks.push(v);
+        return ticks;
+      }
 
-// ---------------------------------------------------------------------------
-// Movimientos de precio
-// ---------------------------------------------------------------------------
-const tbl = document.getElementById("movers-table");
-let th = "<thead><tr><th>Piloto</th><th>Constructor</th><th>P0</th><th>Inicio</th><th>Final</th><th>Δ</th><th>Δ %</th><th>V</th><th>P</th><th>DNF</th><th>Aus.</th></tr></thead><tbody>";
-for (const r of DATA.priceMovers) {
-  const dPct = r.start ? (r.delta / r.start) * 100 : 0;
-  const cls = r.delta > 0 ? "up" : r.delta < 0 ? "down" : "";
-  const sign = r.delta > 0 ? "+" : "";
-  const signPct = dPct > 0 ? "+" : "";
-  th += "<tr><td>" + r.name + '</td><td class="mut">' + r.constructor + "</td><td>" + f1(r.p0) + "</td><td>" + f1(r.start) +
-    "</td><td>" + f1(r.end) + '</td><td class="' + cls + '">' + sign + f1(r.delta) + '</td><td class="' + cls + '">' + signPct +
-    f1(dPct) + " %</td><td>" + r.wins + "</td><td>" + r.podiums + "</td><td>" + r.dnf + "</td><td>" + r.absent + "</td></tr>";
-}
-tbl.innerHTML = th + "</tbody>";
-</script>
-</body>
+      /** Dibuja marco (rejilla + ejes) y devuelve las escalas. */
+      function drawFrame(svg, W, H, pad, yMin, yMax, xLabels, yFmt) {
+        while (svg.firstChild) svg.removeChild(svg.firstChild);
+        const plotW = W - pad.l - pad.r;
+        const plotH = H - pad.t - pad.b;
+        const X = (i) => pad.l + (i / (N - 1)) * plotW;
+        const Y = (v) => pad.t + (1 - (v - yMin) / (yMax - yMin)) * plotH;
+        for (const t of niceTicks(yMin, yMax)) {
+          svgEl("line", { x1: pad.l, x2: W - pad.r, y1: Y(t), y2: Y(t), stroke: "#1c2740", "stroke-width": 1 }, svg);
+          svgEl("text", { x: pad.l - 8, y: Y(t) + 4, "text-anchor": "end", class: "axis" }, svg).textContent = yFmt(t);
+        }
+        xLabels.forEach((lb, i) => {
+          svgEl("text", { x: X(i), y: H - pad.b + 18, "text-anchor": "middle", class: "axis" }, svg).textContent = lb;
+        });
+        return { X, Y, plotW, plotH };
+      }
+
+      function makeTip(wrap) {
+        const tip = document.createElement("div");
+        tip.className = "tip";
+        wrap.appendChild(tip);
+        return tip;
+      }
+
+      /** Capa de hover: línea vertical + tooltip. */
+      function addHover(svg, wrap, tip, ctx) {
+        const line = svgEl("line", {
+          y1: ctx.pad.t, y2: ctx.H - ctx.pad.b,
+          stroke: "#3b4a68", "stroke-width": 1, "stroke-dasharray": "3,3", visibility: "hidden",
+        }, svg);
+        const rect = svgEl("rect", {
+          x: ctx.pad.l, y: ctx.pad.t,
+          width: ctx.W - ctx.pad.l - ctx.pad.r, height: ctx.H - ctx.pad.t - ctx.pad.b,
+          fill: "transparent",
+        }, svg);
+        rect.addEventListener("mousemove", (e) => {
+          const r = svg.getBoundingClientRect();
+          const scale = ctx.W / r.width;
+          const xView = (e.clientX - r.left) * scale;
+          let i = Math.round(((xView - ctx.pad.l) / (ctx.W - ctx.pad.l - ctx.pad.r)) * (N - 1));
+          i = Math.max(0, Math.min(N - 1, i));
+          line.setAttribute("x1", ctx.X(i));
+          line.setAttribute("x2", ctx.X(i));
+          line.setAttribute("visibility", "visible");
+          const html = ctx.onMove(i);
+          if (html) {
+            tip.innerHTML = html;
+            tip.style.display = "block";
+            const px = ctx.X(i) / scale;
+            const tw = tip.offsetWidth;
+            let left = px + 14;
+            if (left + tw > wrap.clientWidth - 8) left = px - tw - 14;
+            if (left < 4) left = 4;
+            tip.style.left = left + "px";
+            tip.style.top = "14px";
+          }
+        });
+        rect.addEventListener("mouseleave", () => {
+          line.setAttribute("visibility", "hidden");
+          tip.style.display = "none";
+        });
+      }
+
+      // ---------------------------------------------------------------------------
+      // Gráfico 1 — trayectoria del presupuesto por GP
+      // ---------------------------------------------------------------------------
+      const visible = { A: true, B: true, C: true, E: true };
+      const trajWrap = document.getElementById("traj-wrap");
+      const trajSvg = svgEl("svg", { viewBox: "0 0 1040 440", class: "chart" }, trajWrap);
+      const trajTip = makeTip(trajWrap);
+
+      function renderTrajectory() {
+        const W = 1040, H = 440, pad = { l: 56, r: 20, t: 20, b: 44 };
+        const active = OPTS.filter((o) => visible[o]);
+        let lo = B, hi = B + DATA.params.cmax;
+        for (const o of active) {
+          for (const v of DATA.options[o].minByGp) lo = Math.min(lo, v);
+          for (const v of DATA.options[o].maxByGp) hi = Math.max(hi, v);
+        }
+        lo = Math.min(lo, 0.9 * B);
+        const span = hi - lo || 1;
+        lo -= span * 0.06;
+        hi += span * 0.06;
+        const f = drawFrame(trajSvg, W, H, pad, lo, hi, DATA.gps.map((g) => g.shortName), (t) => t.toFixed(0));
+
+        // Umbral de espiral (0.9·B)
+        if (0.9 * B >= lo && 0.9 * B <= hi) {
+          svgEl("line", {
+            x1: pad.l, x2: W - pad.r, y1: f.Y(0.9 * B), y2: f.Y(0.9 * B),
+            stroke: "#ef4444", "stroke-width": 1.2, "stroke-dasharray": "6,4", opacity: 0.7,
+          }, trajSvg);
+          svgEl("text", { x: W - pad.r - 4, y: f.Y(0.9 * B) - 5, "text-anchor": "end", class: "thr" }, trajSvg)
+            .textContent = "0.9·B (umbral de espiral)";
+        }
+        // Línea base B
+        svgEl("line", {
+          x1: pad.l, x2: W - pad.r, y1: f.Y(B), y2: f.Y(B),
+          stroke: "#475569", "stroke-width": 1, "stroke-dasharray": "2,4",
+        }, trajSvg);
+
+        for (const o of active) {
+          const d = DATA.options[o];
+          const ptsMin = d.minByGp.map((v, i) => f.X(i) + "," + f.Y(v)).join(" ");
+          const ptsMax = d.maxByGp.map((v, i) => f.X(i) + "," + f.Y(v)).reverse().join(" ");
+          svgEl("polygon", { points: ptsMin + " " + ptsMax, fill: COLORS[o], opacity: 0.12 }, trajSvg);
+          const ptsAvg = d.avgByGp.map((v, i) => f.X(i) + "," + f.Y(v)).join(" ");
+          svgEl("polyline", {
+            points: ptsAvg, fill: "none", stroke: COLORS[o],
+            "stroke-width": 2.4, "stroke-linejoin": "round",
+          }, trajSvg);
+          d.avgByGp.forEach((v, i) => svgEl("circle", { cx: f.X(i), cy: f.Y(v), r: 2.6, fill: COLORS[o] }, trajSvg));
+        }
+
+        addHover(trajSvg, trajWrap, trajTip, {
+          X: f.X, W, H, pad,
+          onMove: (i) => {
+            const g = DATA.gps[i];
+            let rows = '<div class="tip-title">GP' + g.order + " · " + g.name + ' <span>' + g.date + "</span></div>";
+            for (const o of active) {
+              const d = DATA.options[o];
+              rows += '<div class="tip-row"><i style="background:' + COLORS[o] + '"></i><span><b>' + o + "</b> — " +
+                '<span class="tip-vals">medio <b>' + f1(d.avgByGp[i]) + "</b> · mín <b>" + f1(d.minByGp[i]) +
+                "</b> · máx <b>" + f1(d.maxByGp[i]) + "</b> · Gini <b>" + f3(d.giniByGp[i]) + "</b></span></span></div>";
+            }
+            return rows;
+          },
+        });
+      }
+
+      const toggles = document.getElementById("opt-toggles");
+      for (const o of OPTS) {
+        const lab = document.createElement("label");
+        lab.className = "toggle";
+        lab.innerHTML = '<input type="checkbox" checked><i style="background:' + COLORS[o] + '"></i>' + NAMES[o];
+        lab.querySelector("input").addEventListener("change", (e) => {
+          visible[o] = e.target.checked;
+          renderTrajectory();
+        });
+        toggles.appendChild(lab);
+      }
+      renderTrajectory();
+
+      // ---------------------------------------------------------------------------
+      // Gráfico 2 — explorador de jugadores
+      // ---------------------------------------------------------------------------
+      const sel = document.getElementById("player-select");
+      for (const p of DATA.players) {
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = p.id + " — " + p.label;
+        sel.appendChild(opt);
+      }
+
+      function playerRecovery(pid, o) {
+        const b = DATA.players.find((p) => p.id === pid).byOption[o].budgets;
+        const last3 = b.slice(-3);
+        return last3.reduce((s, v) => s + v, 0) / 3 / B;
+      }
+
+      let worstB = DATA.players[0].id;
+      let bestE = DATA.players[0].id;
+      for (const p of DATA.players) {
+        if (playerRecovery(p.id, "B") < playerRecovery(worstB, "B")) worstB = p.id;
+        if (playerRecovery(p.id, "E") > playerRecovery(bestE, "E")) bestE = p.id;
+      }
+      const quickDefs = [
+        { id: "M1", label: "M1 · Bagnaia" },
+        { id: "M3", label: "M3 · Á. Márquez" },
+        { id: worstB, label: "Peor bajo B (" + worstB + ")" },
+        { id: bestE, label: "Mejor bajo E (" + bestE + ")" },
+        { id: "S1", label: "S1 · P5" },
+        { id: "S2", label: "S2 · P6" },
+      ];
+      const quickWrap = document.getElementById("quick-picks");
+      for (const q of quickDefs) {
+        const btn = document.createElement("button");
+        btn.textContent = q.label;
+        btn.addEventListener("click", () => {
+          sel.value = q.id;
+          renderPlayer();
+        });
+        quickWrap.appendChild(btn);
+      }
+
+      const playerWrap = document.getElementById("player-wrap");
+      const playerSvg = svgEl("svg", { viewBox: "0 0 1040 400", class: "chart" }, playerWrap);
+      const playerTip = makeTip(playerWrap);
+
+      function renderPlayer() {
+        const pid = sel.value;
+        const p = DATA.players.find((x) => x.id === pid);
+        const W = 1040, H = 400, pad = { l: 56, r: 20, t: 20, b: 44 };
+        let lo = Infinity, hi = -Infinity;
+        for (const o of OPTS) {
+          for (const v of p.byOption[o].budgets) {
+            lo = Math.min(lo, v);
+            hi = Math.max(hi, v);
+          }
+        }
+        lo = Math.min(lo, 0.9 * B);
+        const span = hi - lo || 1;
+        lo -= span * 0.08;
+        hi += span * 0.08;
+        const f = drawFrame(playerSvg, W, H, pad, lo, hi, DATA.gps.map((g) => g.shortName), (t) => t.toFixed(0));
+
+        if (0.9 * B >= lo && 0.9 * B <= hi) {
+          svgEl("line", {
+            x1: pad.l, x2: W - pad.r, y1: f.Y(0.9 * B), y2: f.Y(0.9 * B),
+            stroke: "#ef4444", "stroke-width": 1.2, "stroke-dasharray": "6,4", opacity: 0.7,
+          }, playerSvg);
+          svgEl("text", { x: W - pad.r - 4, y: f.Y(0.9 * B) - 5, "text-anchor": "end", class: "thr" }, playerSvg)
+            .textContent = "0.9·B (umbral de espiral)";
+        }
+
+        for (const o of OPTS) {
+          const d = p.byOption[o];
+          const pts = d.budgets.map((v, i) => f.X(i) + "," + f.Y(v)).join(" ");
+          svgEl("polyline", {
+            points: pts, fill: "none", stroke: COLORS[o],
+            "stroke-width": 2.4, "stroke-linejoin": "round",
+          }, playerSvg);
+          d.budgets.forEach((v, i) => svgEl("circle", { cx: f.X(i), cy: f.Y(v), r: 2.6, fill: COLORS[o] }, playerSvg));
+        }
+
+        addHover(playerSvg, playerWrap, playerTip, {
+          X: f.X, W, H, pad,
+          onMove: (i) => {
+            const g = DATA.gps[i];
+            let rows = '<div class="tip-title">' + p.id + " · " + p.label + "</div>" +
+              '<div class="tip-title" style="margin-top:2px">GP' + g.order + " · " + g.name + "</div>";
+            for (const o of OPTS) {
+              const d = p.byOption[o];
+              rows += '<div class="tip-row"><i style="background:' + COLORS[o] + '"></i><span><b>' + o + "</b> — " +
+                '<span class="tip-vals">presupuesto <b>' + f1(d.budgets[i]) + "</b> · puntos <b>" + f1(d.points[i]) + "</b></span></span></div>";
+            }
+            return rows;
+          },
+        });
+
+        const stats = document.getElementById("player-stats");
+        stats.innerHTML = OPTS.map((o) => {
+          const d = p.byOption[o];
+          const rec = playerRecovery(pid, o);
+          return '<div class="stat" style="border-top:3px solid ' + COLORS[o] + '">' +
+            '<div class="stat-opt">' + NAMES[o] + "</div>" +
+            '<div class="stat-row"><span>Final</span><b>' + f1(d.finalBudget) + "</b></div>" +
+            '<div class="stat-row"><span>Mín</span><b>' + f1(d.minBudget) + "</b></div>" +
+            '<div class="stat-row"><span>Puntos totales</span><b>' + f1(d.totalPoints) + "</b></div>" +
+            '<div class="stat-row"><span>Recuperación</span><b>' + f2(rec) + "</b></div>" +
+          "</div>";
+        }).join("");
+      }
+      sel.addEventListener("change", renderPlayer);
+      renderPlayer();
+
+      // ---------------------------------------------------------------------------
+      // Métricas de la puerta T-15
+      // ---------------------------------------------------------------------------
+      function okFor(key, v) {
+        if (key === "giniFinal") return v < 0.05;
+        if (key === "recoveryWorst") return v > 0.95;
+        if (key === "diversityAvg") return v > 0.7;
+        if (key === "spiral") return v === 0;
+        return null;
+      }
+      const metricsDefs = [
+        { key: "giniFinal", label: "Gini final de los presupuestos", target: "< 0.05", fmt: f3 },
+        { key: "recoveryWorst", label: "Recuperación del peor jugador (media 3 últimos GPs / B)", target: "> 0.95", fmt: f2 },
+        { key: "diversityAvg", label: "Diversidad de lineups (% únicos por GP)", target: "> 70 %", fmt: pct },
+        { key: "spiral", label: "Jugadores en espiral (mínimo < 0.9·B)", target: "0", fmt: (x) => String(x) + " / 40" },
+        { key: "avgPoints", label: "Puntos por jugador (contexto)", target: "—", fmt: f1 },
+      ];
+      const mp = document.getElementById("metrics-panel");
+      mp.innerHTML = metricsDefs.map((md) => {
+        const vals = {};
+        for (const o of OPTS) {
+          const m = DATA.options[o].metrics;
+          vals[o] = md.key === "spiral" ? m.deathSpiralPlayers.length : m[md.key];
+        }
+        const vmax = Math.max.apply(null, Object.values(vals).concat([1e-9]));
+        const rows = OPTS.map((o) => {
+          const v = vals[o];
+          const ok = okFor(md.key, v);
+          return '<div class="mrow">' +
+            '<span class="mopt" style="color:' + COLORS[o] + '">' + o + "</span>" +
+            '<span class="mbar"><span style="width:' + (v / vmax) * 100 + "%;background:" + COLORS[o] + '"></span></span>' +
+            '<span class="mval ' + (ok === null ? "" : ok ? "ok" : "ko") + '">' + md.fmt(v) + (ok === null ? "" : ok ? " ✓" : " ✗") + "</span>" +
+          "</div>";
+        }).join("");
+        return '<div class="metric">' +
+          '<div class="metric-head"><span>' + md.label + '</span><span class="metric-target">meta T-15: ' + md.target + "</span></div>" +
+          rows +
+        "</div>";
+      }).join("");
+
+      // ---------------------------------------------------------------------------
+      // Movimientos de precio
+      // ---------------------------------------------------------------------------
+      const tbl = document.getElementById("movers-table");
+      let th = "<thead><tr><th>Piloto</th><th>Constructor</th><th>P0</th><th>Inicio</th><th>Final</th><th>Δ</th><th>Δ %</th><th>V</th><th>P</th><th>DNF</th><th>Aus.</th></tr></thead><tbody>";
+      for (const r of DATA.priceMovers) {
+        const dPct = r.start ? (r.delta / r.start) * 100 : 0;
+        const cls = r.delta > 0 ? "up" : r.delta < 0 ? "down" : "";
+        const sign = r.delta > 0 ? "+" : "";
+        const signPct = dPct > 0 ? "+" : "";
+        th += "<tr><td>" + r.name + '</td><td class="mut">' + r.constructor + "</td><td>" + f1(r.p0) + "</td><td>" + f1(r.start) +
+          "</td><td>" + f1(r.end) + '</td><td class="' + cls + '">' + sign + f1(r.delta) + '</td><td class="' + cls + '">' + signPct +
+          f1(dPct) + " %</td><td>" + r.wins + "</td><td>" + r.podiums + "</td><td>" + r.dnf + "</td><td>" + r.absent + "</td></tr>";
+      }
+      tbl.innerHTML = th + "</tbody>";
+    </script>
+  </body>
 </html>

@@ -1,0 +1,71 @@
+{
+  "source": "docs/product/economy.md §7.2 — lineups fijos por jugador (oro = los 2 pilotos más caros a precios GP1)",
+  "players": [
+    {
+      "id": "player-p1",
+      "name": "P1 Favoritista",
+      "scenario": "Jugador de favoritos caros (A+B+C+D)",
+      "lineup": {
+        "gold": ["rider-a", "rider-b"],
+        "silver": ["rider-c", "rider-d"],
+        "constructor": "ctor-x",
+        "team": "team-x"
+      }
+    },
+    {
+      "id": "player-p2",
+      "name": "P2 Equilibrado",
+      "scenario": "Mezcla de favoritos y medias (A+C+E+H)",
+      "lineup": {
+        "gold": ["rider-a", "rider-c"],
+        "silver": ["rider-e", "rider-h"],
+        "constructor": "ctor-y",
+        "team": "team-y"
+      }
+    },
+    {
+      "id": "player-p3",
+      "name": "P3 Value",
+      "scenario": "Detector de infravaloradas (compra J a 5)",
+      "lineup": {
+        "gold": ["rider-e", "rider-f"],
+        "silver": ["rider-j", "rider-h"],
+        "constructor": "ctor-z",
+        "team": "team-z"
+      }
+    },
+    {
+      "id": "player-p4",
+      "name": "P4 Mal arranque",
+      "scenario": "Mal arranque: su estrella B se lesiona (GP3–GP4)",
+      "lineup": {
+        "gold": ["rider-b", "rider-d"],
+        "silver": ["rider-g", "rider-i"],
+        "constructor": "ctor-w",
+        "team": "team-w"
+      }
+    },
+    {
+      "id": "player-p5",
+      "name": "P5 Doble estrella",
+      "scenario": "Mismo presupuesto que P6; apuesta por dos estrellas + baratas",
+      "lineup": {
+        "gold": ["rider-a", "rider-b"],
+        "silver": ["rider-i", "rider-k"],
+        "constructor": "ctor-x",
+        "team": "team-x"
+      }
+    },
+    {
+      "id": "player-p6",
+      "name": "P6 Estrella + medias",
+      "scenario": "Mismo presupuesto que P5; una estrella + medias",
+      "lineup": {
+        "gold": ["rider-a", "rider-e"],
+        "silver": ["rider-f", "rider-g"],
+        "constructor": "ctor-y",
+        "team": "team-y"
+      }
+    }
+  ]
+}

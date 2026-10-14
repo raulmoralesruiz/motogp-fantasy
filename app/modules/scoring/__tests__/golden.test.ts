@@ -1,0 +1,72 @@
+/**
+ * Golden file del módulo scoring (scoring-v1).
+ *
+ * Carga `golden/scoring-v1.json` y verifica que el módulo reproduce las
+ * salidas esperadas. Si una regla cambia, el golden se actualiza de forma
+ * explícita y revisada — AGENTS.md §7.
+ */
+import { describe, expect, it } from "vitest";
+
+import type { GpStatus, Lineup } from "../../../shared/types/index.js";
+import {
+  lineupPoints,
+  mainRacePositionPoints,
+  riderMainPoints,
+  topTwoAverage,
+} from "../index.js";
+import goldenRaw from "./golden/scoring-v1.json";
+
+interface GoldenCase {
+  id: string;
+  fn: string;
+  args: Record<string, unknown>;
+  expected: number | number[];
+}
+
+const golden = goldenRaw as {
+  rulesVersion: string;
+  description: string;
+  cases: GoldenCase[];
+};
+
+function toMap(obj: Record<string, number>): Map<string, number> {
+  return new Map(Object.entries(obj));
+}
+
+function runCase(c: GoldenCase): number | number[] {
+  const a = c.args;
+  switch (c.fn) {
+    case "lineupPoints":
+      return lineupPoints(
+        a.lineup as Lineup,
+        toMap(a.riderPoints as Record<string, number>),
+        toMap(a.ctorPoints as Record<string, number>),
+        toMap(a.teamPoints as Record<string, number>),
+      );
+    case "mainRacePositionPoints":
+      return (a.positions as number[]).map((p) => mainRacePositionPoints(p));
+    case "riderMainPoints":
+      return riderMainPoints(a.status as GpStatus, a.position as number | null);
+    case "topTwoAverage":
+      return topTwoAverage(a.values as number[]);
+    default:
+      throw new Error(`Golden scoring: función desconocida "${c.fn}"`);
+  }
+}
+
+describe(`Golden scoring (${golden.rulesVersion})`, () => {
+  it("declara la versión scoring-v1", () => {
+    expect(golden.rulesVersion).toBe("scoring-v1");
+  });
+
+  for (const c of golden.cases) {
+    it(c.id, () => {
+      const result = runCase(c);
+      if (Array.isArray(result) || Array.isArray(c.expected)) {
+        expect(result).toEqual(c.expected);
+      } else {
+        expect(result).toBeCloseTo(c.expected as number, 6);
+      }
+    });
+  }
+});

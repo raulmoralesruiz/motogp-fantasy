@@ -3,6 +3,7 @@
 > Estado: BORRADOR v1 (fase 5). El backlog descompone el `roadmap.md` en epics, user stories y tareas técnicas, con **criterios de aceptación verificables**, dependencias y prioridades.
 >
 > **Convenciones:**
+>
 > - **IDs:** `US-xx` (user story), `T-xx` (tarea técnica), `D-xx` (decisión/calibración por cerrar).
 > - **Prioridad:** `P0` = crítico para el MVP (sin esto no hay producto) · `P1` = incluido en el MVP · `P2` = post-MVP.
 > - **Criterios de aceptación (CA):** deben ser verificables (un test, un comportamiento observable o un número). Si un CA no se puede verificar, no está bien escrito.
@@ -11,24 +12,41 @@
 
 ## Mapa de epics ↔ fases del roadmap
 
-| Epic | Contenido | Fase roadmap | Prioridad |
-|---|---|---|---|
-| **E1** | Fundaciones y módulos puros | Fase 0 | P0 |
-| **E2** | Identidad y admin global | Fase 1 | P0 |
-| **E3** | Temporada y mercado | Fase 1 | P0 |
-| **E4** | Lineups y economía en juego | Fase 2 | P0 |
-| **E5** | Resultados y puntuación | Fase 3 | P0 |
-| **E6** | Ligas | Fase 4 | P0 |
-| **E7** | Endurecimiento y lanzamiento MVP | Fase 5 | P0/P1 |
-| **E8** | Post-MVP | Fases 6–9 | P2 |
-| **D** | Decisiones y calibraciones por cerrar | Transversal | P1 (antes de MVP) |
-| **X** | Tareas técnicas transversales | Transversal | P0/P1 |
+| Epic   | Contenido                             | Fase roadmap | Prioridad         |
+| ------ | ------------------------------------- | ------------ | ----------------- |
+| **E1** | Fundaciones y módulos puros           | Fase 0       | P0                |
+| **E2** | Identidad y admin global              | Fase 1       | P0                |
+| **E3** | Temporada y mercado                   | Fase 1       | P0                |
+| **E4** | Lineups y economía en juego           | Fase 2       | P0                |
+| **E5** | Resultados y puntuación               | Fase 3       | P0                |
+| **E6** | Ligas                                 | Fase 4       | P0                |
+| **E7** | Endurecimiento y lanzamiento MVP      | Fase 5       | P0/P1             |
+| **E8** | Post-MVP                              | Fases 6–9    | P2                |
+| **D**  | Decisiones y calibraciones por cerrar | Transversal  | P1 (antes de MVP) |
+| **X**  | Tareas técnicas transversales         | Transversal  | P0/P1             |
 
 ---
 
 ## E1 — Fundaciones y módulos puros (Fase 0)
 
 > **Regla de oro:** `economy` y `scoring` se implementan y testean **antes** de cualquier UI. Son el corazón del producto (ver `roadmap.md`, camino crítico).
+
+### Plan de ejecución de Fase 0 (WP)
+
+> Las **WP (work packages)** son lotes de entrega para ejecutar la Fase 0: tareas agrupadas por
+> contexto, verificadas juntas (lint + typecheck + tests + build en verde) y reportadas como una unidad.
+> El orden de ejecución lo define el grafo de dependencias (campo "Dep:"), **no** la numeración de las
+> tareas (los números siguen el epic donde se redactó cada tarea: E1 = T-01…T-07, X transversal = T-18…T-22).
+>
+> Nota: T-04/T-05 (módulos puros) se implementaron antes de Fase 0 — son el corazón del producto y sus
+> tests validaron el diseño económico (simulación 2026). T-03 aporta el check que garantiza su pureza.
+
+| WP  | Tareas                                                                                                                                      | Estado                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| WP1 | T-01 (bootstrap)                                                                                                                            | ✅ cerrado (2026-10-14): app + API + CI v1 + health-check verificado en vivo                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| WP2 | T-03 (estructura de módulos + check de dependencias) · T-18 (validación Zod compartida) · golden files por versión de reglas (`testing.md`) | ✅ cerrado (2026-10-14): estructura de módulos + `shared/`; check de pureza por AST cableado en build y CI (falla con exit 1, verificado con violación real); `seasonRulesSchema` + `PROVISIONAL_SEASON_RULES` (tests de parseo y rechazo en español); golden files `economy-v1`/`scoring-v1` (94 tests en verde)                                                                                                                                                                                                                                                                                                                    |
+| WP3 | T-06 (schema Prisma completo) · T-07 (spike Testcontainers) · T-22 (fixtures)                                                               | ✅ cerrado (2026-10-14): schema 28 modelos + 22 enums con constraints duros (trigger de composición + 8 uniques + índice P0 + vista `price_history`); integración Testcontainers (1 contenedor/run, `migrate deploy`, 18 tests en verde < 30 s); dataset ficticio canónico `economy.md` §7 en `test/fixtures/fiction/` (mercado/jugadores/resultados anonimizados, loader Prisma, simulación B/E + CLI `simulate:fiction`, golden de trayectorias exactas §7.3/§7.4; 99 unit + 18 integración en verde)                                                                                                                              |
+| WP4 | T-02 (CI/CD completo + deploy) · T-19 (secrets)                                                                                             | ✅ cerrado (2026-10-14): CI con coverage gate (90% economy/scoring, global calibrado a 60% — D-08) + job `docker build` + gitleaks + dependabot; deploy **modelo pull** en TrueNAS Scale (sin IP pública ⇒ CI no deploya): `Dockerfile` multi-stage (standalone), `docker-compose.prod.yml` (web+postgres+redis, healthchecks, bind-mounts en `/mnt/data-nas/motogp/`), `deploy.sh` (pull→build→migraciones→up→health-check), `.env.prod.example` + runbook `docs/operations/deploy.md` (deploy key SSH read-only, NPM `motogp:81`/`motogp.raulmorales.eu` → `192.168.1.3:22020`). Worker fuera de alcance (módulo `jobs` pendiente) |
 
 ### Tareas técnicas
 
@@ -37,7 +55,7 @@
   - CA: `npm run dev` arranca app + API; Prisma genera tipos; un endpoint tRPC de ejemplo responde; CI en verde.
 
 - **T-02 · CI/CD (GitHub Actions)** — `P0` — Dep: T-01.
-  - CA: en cada PR corren lint + typecheck + unit + integración (Testcontainers) + build y **bloquean el merge** si fallan; deploy automático en `main`; `npm audit`/dependabot activos.
+  - CA: en cada PR corren lint + typecheck + unit + **coverage gate** (≥90% economy/scoring; global PROVISIONAL, D-08) + integración (Testcontainers) + build + **build de la imagen Docker** y **bloquean el merge** si fallan; dependabot activo. **Deploy: modelo pull** (el TrueNAS no tiene IP pública): `./deploy.sh` desde el servidor (git pull → build → migraciones → up → health-check), documentado en `docs/operations/deploy.md`.
 
 - **T-03 · Estructura de módulos** — `P0` — Dep: T-01.
   - CA: los 10 módulos + `shared/` existen según `architecture/overview.md` §3; hay un check (lint o test) que falla si `economy` o `scoring` importan I/O (fs, db, http) o módulos no permitidos.
@@ -264,21 +282,21 @@
 
 > Cada una remite a la "decisión pendiente" del documento de origen. Se cierran **antes del lanzamiento del MVP** salvo indicación.
 
-| ID | Decisión | Origen | Prioridad | Criterio de cierre |
-|---|---|---|---|---|
-| **D-01** | Valores definitivos de `B`, `t`, `cmax` (prov. 100 / 0.25 / 8) | `economy.md` §4.1, `vision.md` §8 | P0 | Re-simulación (T-15) con los valores elegidos alcanza las métricas de `economy.md` §6; decisión registrada como ADR o addendum |
-| **D-02** | Tablas de puntuación definitivas + calibración de `Pmax` con datos reales de una temporada | `scoring.md` §8, `economy.md` §4.3 | P0 | Tablas fijadas en `season_rules` v1; `Pmax` recalibrado; golden files actualizados y revisados |
-| **D-03** | Límites de concentración (prov. máx 2 por constructor/equipo) | `economy.md` §4.4, `game-rules.md` §11 | P1 | Valor fijado + test de validación + métrica de concentración < 40% en re-simulación |
-| **D-04** | Política exacta de transfers (nº por GP, exención, wildcard) | `game-rules.md` §5, `vision.md` §8 | P1 | Política fijada por temporada + tests de US-12 |
-| **D-05** | Límite exacto de miembros por tipo de liga (prov. 2–50) | `leagues.md` §12 | P2 | Valores por tipo fijados en config |
-| **D-06** | Política de retención/anonimización al eliminar cuenta (GDPR) | `security.md` §5, `leagues.md` §9 | P1 | Política documentada + test de US-03 + registro legal |
-| **D-07** | 2FA para `global_admin` (recomendado: sí) | `security.md` §5 | P1 | Implementado o decisión registrada |
-| **D-08** | Umbrales de cobertura (prov. 90% economy/scoring, 70% global) | `testing.md` §6 | P2 | Umbrales fijados en CI |
-| **D-09** | Frecuencia de polling (prov. 5 min) y uso de webhooks si la fuente lo ofrece | `integrations.md` §7 | P2 | Frecuencia fijada + test de contrato |
-| **D-10** | Si el "ranking ajustado" se activa por defecto en algún tipo de liga | `leagues.md` §12 | P2 | Decisión registrada + test de US-30 |
-| **D-11** | Retención de backups y logs (prov. 30 días diarios + 12 meses mensuales) | `security.md` §1.10, §5 | P1 | Retención fijada en infraestructura + runbook |
-| **D-12** | Bono "resultado extraordinario" y "posiciones ganadas" (mantener/retirar/ajustar) | `scoring.md` §8 | P1 | Decisión en la tabla v1 definitiva (D-02) |
-| **D-13** | Constructor/equipo: media top-2 vs otro esquema | `scoring.md` §8, `game-rules.md` §11 | P1 | Esquema fijado + módulo scoring + golden files |
+| ID       | Decisión                                                                                   | Origen                                 | Prioridad | Criterio de cierre                                                                                                             |
+| -------- | ------------------------------------------------------------------------------------------ | -------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **D-01** | Valores definitivos de `B`, `t`, `cmax` (prov. 100 / 0.25 / 8)                             | `economy.md` §4.1, `vision.md` §8      | P0        | Re-simulación (T-15) con los valores elegidos alcanza las métricas de `economy.md` §6; decisión registrada como ADR o addendum |
+| **D-02** | Tablas de puntuación definitivas + calibración de `Pmax` con datos reales de una temporada | `scoring.md` §8, `economy.md` §4.3     | P0        | Tablas fijadas en `season_rules` v1; `Pmax` recalibrado; golden files actualizados y revisados                                 |
+| **D-03** | Límites de concentración (prov. máx 2 por constructor/equipo)                              | `economy.md` §4.4, `game-rules.md` §11 | P1        | Valor fijado + test de validación + métrica de concentración < 40% en re-simulación                                            |
+| **D-04** | Política exacta de transfers (nº por GP, exención, wildcard)                               | `game-rules.md` §5, `vision.md` §8     | P1        | Política fijada por temporada + tests de US-12                                                                                 |
+| **D-05** | Límite exacto de miembros por tipo de liga (prov. 2–50)                                    | `leagues.md` §12                       | P2        | Valores por tipo fijados en config                                                                                             |
+| **D-06** | Política de retención/anonimización al eliminar cuenta (GDPR)                              | `security.md` §5, `leagues.md` §9      | P1        | Política documentada + test de US-03 + registro legal                                                                          |
+| **D-07** | 2FA para `global_admin` (recomendado: sí)                                                  | `security.md` §5                       | P1        | Implementado o decisión registrada                                                                                             |
+| **D-08** | Umbrales de cobertura (prov. 90% economy/scoring, 70% global)                              | `testing.md` §6                        | P2        | Umbrales fijados en CI                                                                                                         |
+| **D-09** | Frecuencia de polling (prov. 5 min) y uso de webhooks si la fuente lo ofrece               | `integrations.md` §7                   | P2        | Frecuencia fijada + test de contrato                                                                                           |
+| **D-10** | Si el "ranking ajustado" se activa por defecto en algún tipo de liga                       | `leagues.md` §12                       | P2        | Decisión registrada + test de US-30                                                                                            |
+| **D-11** | Retención de backups y logs (prov. 30 días diarios + 12 meses mensuales)                   | `security.md` §1.10, §5                | P1        | Retención fijada en infraestructura + runbook                                                                                  |
+| **D-12** | Bono "resultado extraordinario" y "posiciones ganadas" (mantener/retirar/ajustar)          | `scoring.md` §8                        | P1        | Decisión en la tabla v1 definitiva (D-02)                                                                                      |
+| **D-13** | Constructor/equipo: media top-2 vs otro esquema                                            | `scoring.md` §8, `game-rules.md` §11   | P1        | Esquema fijado + módulo scoring + golden files                                                                                 |
 
 ---
 
@@ -315,10 +333,10 @@ E8 (post-MVP) ← E5/E6 + tracción
 
 ## Riesgos del backlog y mitigaciones
 
-| Riesgo | Mitigación |
-|---|---|
-| Los módulos puros crecen en complejidad (fórmulas de precios) | Son puros y testados primero; golden files por versión; property-based tests (`testing.md` §6) |
-| PulseLive cambia o bloquea | Adapter + entrada manual siempre disponible (US-16 no se pospone nunca) |
-| Calibración (D-01/D-02) se retrasa | Los valores PROVISIONAL son jugables desde E4; la re-simulación (T-15) es la puerta del MVP, no de E4 |
-| Alcance del MVP crece | `mvp.md` §2/§3 es fijo; lo nuevo va a E8 (P2) o demand-driven |
-| Concurrencia en lockout/recálculo | Tests de carga desde E4/E5 (no solo en E7); locks por GP y `FOR UPDATE` definidos en `data-model.md` §6 |
+| Riesgo                                                        | Mitigación                                                                                              |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Los módulos puros crecen en complejidad (fórmulas de precios) | Son puros y testados primero; golden files por versión; property-based tests (`testing.md` §6)          |
+| PulseLive cambia o bloquea                                    | Adapter + entrada manual siempre disponible (US-16 no se pospone nunca)                                 |
+| Calibración (D-01/D-02) se retrasa                            | Los valores PROVISIONAL son jugables desde E4; la re-simulación (T-15) es la puerta del MVP, no de E4   |
+| Alcance del MVP crece                                         | `mvp.md` §2/§3 es fijo; lo nuevo va a E8 (P2) o demand-driven                                           |
+| Concurrencia en lockout/recálculo                             | Tests de carga desde E4/E5 (no solo en E7); locks por GP y `FOR UPDATE` definidos en `data-model.md` §6 |
