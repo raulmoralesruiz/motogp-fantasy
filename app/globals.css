@@ -73,3 +73,95 @@ h2 {
 .status li:last-child {
   border-bottom: none;
 }
+
+a {
+  color: var(--accent);
+}
+
+/* Formularios (US-01: registro y login) */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.form .field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.form label {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.form input[type="email"],
+.form input[type="text"],
+.form input[type="password"] {
+  padding: 0.55rem 0.7rem;
+  font-size: 1rem;
+  color: var(--fg);
+  background: #10151c;
+  border: 1px solid #21262d;
+  border-radius: 6px;
+}
+
+.form input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.form .check {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.form .check input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--accent);
+}
+
+.form .check label {
+  color: var(--fg);
+}
+
+.form .field-error {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--bad);
+}
+
+.form .form-error {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.9rem;
+  color: var(--bad);
+  background: rgba(248, 81, 73, 0.1);
+  border: 1px solid rgba(248, 81, 73, 0.4);
+  border-radius: 6px;
+}
+
+.form button {
+  margin-top: 0.3rem;
+  padding: 0.65rem 1rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.form button:hover:not(:disabled) {
+  background: #b30500;
+}
+
+.form button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 // Tests de integración (T-07): PostgreSQL real vía Testcontainers.
@@ -5,6 +6,13 @@ import { defineConfig } from "vitest/config";
 // (`prisma migrate deploy`) y publica la URL en un archivo temporal que
 // leen los tests (ver test/integration/helpers.ts).
 export default defineConfig({
+  // Mismo alias que el tsconfig (`@/*` → `./app/*`): los módulos de la
+  // app lo usan en sus imports.
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./app", import.meta.url)),
+    },
+  },
   test: {
     include: ["test/integration/**/*.test.ts"],
     globalSetup: "test/integration/global-setup.ts",

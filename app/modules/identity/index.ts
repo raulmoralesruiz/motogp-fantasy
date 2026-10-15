@@ -1,13 +1,12 @@
 /**
  * Módulo `identity` — usuarios, sesiones, autorización y roles.
  *
- * Placeholder de Fase 0 (T-03): la estructura existe; el contenido se
- * implementa en Fase 1 (E2: US-01…US-03, T-08 RBAC, T-09 auditoría).
- *
- * Responsabilidad:
- * - Registro/login (contraseñas con hash argon2, sesiones en cookie HttpOnly).
- * - RBAC: roles globales `user`/`global_admin` + admin de liga (`league_members.rol`).
- * - Autorización por recurso: cada endpoint revalida que el actor puede actuar.
- * - GDPR: exportación y eliminación/anonimización de cuenta.
+ * US-01 (hecho): registro/login con argon2, sesión opaca en cookie
+ * HttpOnly+Secure+SameSite=Lax, rate limit por IP y bloqueo temporal.
+ * Pendiente: US-02 (logout/recuperación), US-03 (perfil/GDPR),
+ * T-08 (RBAC por recurso), T-09 (auditoría).
  */
-export {};
+export * from "./auth-service";
+export * from "./password";
+export * from "./rate-limit";
+export * from "./sessions";

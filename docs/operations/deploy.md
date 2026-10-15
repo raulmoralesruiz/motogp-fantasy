@@ -102,19 +102,22 @@ Qué hace, en orden:
 
 Comprueba desde tu equipo: `http://192.168.1.3:22020/api/health` → `{"ok":true}`.
 
-### Portainer (opcional, para gestionar por UI)
+### Portainer (opcional, solo para consultar)
 
 El deploy no lo hace Portainer (Portainer no puede construir la imagen: no
 tiene el contexto del repo). Portainer sirve para **ver y gestionar** lo que
-`deploy.sh` arranca: contenedores, logs, reinicios, consola.
+`deploy.sh` arranca: contenedores, logs, reinicios, consola
+(Portainer → Containers → `motogp-web` / `motogp-postgres` / `motogp-redis`).
 
-Si aun así quieres importarlo como Stack:
-
-1. Portainer → **Stacks → Add stack** → nombre `motogp`.
-2. Pega el contenido de `docker-compose.prod.yml`.
-3. En **Variables**, pega el contenido de `.env` (una variable por línea).
-4. **Deploy the stack** — la imagen `motogp-web:latest` debe existir ya
-   (la construyó `deploy.sh`).
+> **No importes `docker-compose.prod.yml` como Stack de Portainer.**
+> El compose fija `container_name` y `deploy.sh` gestiona el proyecto
+> compose `motogp` (el nombre del directorio); un stack importado crearía
+> contenedores con los mismos nombres y dividiría la propiedad, y el
+> siguiente `./deploy.sh` fallaría por conflicto de nombres.
+>
+> Si ya importaste el stack: Portainer → Stacks → `motogp` → **Delete**
+> (borra los contenedores; los datos no se pierden, están en los
+> bind-mounts de `/mnt/data-nas/motogp/`) y vuelve a ejecutar `./deploy.sh`.
 
 ## 3. Nginx Proxy Manager
 

@@ -91,7 +91,7 @@
 
 ### User stories
 
-- **US-01 · Me registro con email + contraseña + nombre de usuario** — `P0` — Dep: E1.
+- **US-01 · Me registro con email + contraseña + nombre de usuario** — `P0` — Dep: E1. — ✅ cerrado (2026-10-15): servidor tRPC (`auth.register`/`auth.login`/`auth.me`) con `AuthService` inyectable; hash argon2id (parámetros OWASP, nunca en claro); sesión opaca en BD + cookie `HttpOnly+Secure+SameSite=Lax` (función pura `buildSessionCookie`); rate limit por IP (Redis en producción, store inyectable) + bloqueo temporal tras N fallos consecutivos + anti-enumeración (hash dummy); UI `/registro` + `/login` + indicador de sesión en home; 16 unit tests + test de integración contra PostgreSQL real (registro, duplicados, entradas inválidas, credenciales, cookie válida/falsa/expirada, lockout, rate limit por IP).
   - CA: el nombre de usuario es único (rechazo explícito si existe); la contraseña se guarda con hash argon2 (nunca en claro, verificado inspeccionando la BD); la sesión usa cookie `HttpOnly+Secure+SameSite=Lax`; login con rate-limiting y bloqueo temporal tras N intentos fallidos (test de seguridad).
 
 - **US-02 · Inicio de sesión, cierre y recuperación de contraseña** — `P0` — Dep: US-01.
@@ -306,7 +306,7 @@
   - CA: un único esquema Zod por entidad/acción usado en cliente y servidor; el servidor revalida todo input (test: payload malformado → 400 con motivo; el cliente no puede saltarse validaciones).
 - **T-19 · Gestión de secrets** — `P0` — Dep: T-01.
   - CA: ningún secret en el repo (check en CI: escaneo de secretos); credenciales de BD, clave de sesión y claves de fuentes en vault/variables de entorno; procedimiento de rotación documentado.
-- **T-20 · Cabeceras de seguridad y transporte** — `P1` — Dep: T-01.
+- **T-20 · Cabeceras de seguridad y transporte** — `P1` — Dep: T-01. — ✅ cerrado (2026-10-15): 6 cabeceras de seguridad en `next.config.ts` (HSTS, nosniff, X-Frame-Options DENY, Referrer-Policy, Permissions-Policy, CSP básica) + CORS por **reflejo de host** en `middleware.ts` (solo `/api/*`; 403 en español para orígenes no permitidos; preflight OPTIONS → 204; `Vary: Origin`); ADR-0008; unit tests de `evaluateCors` + `headers()` + smoke HTTP real en el job `docker` del CI (`docker run` de la imagen + curl).
   - CA: HTTPS/HSTS obligatorio; `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` (o CSP frame-ancestors), CSP básica, `Referrer-Policy`; CORS restringido al origen de la app (tests de integración HTTP).
 - **T-21 · Higiene de dependencias** — `P1` — Dep: T-02.
   - CA: `npm audit` en CI con umbral de vulnerabilidades; dependabot activo; sin dependencias sin justificar.

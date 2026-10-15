@@ -1,9 +1,12 @@
 "use client";
 
+import Link from "next/link";
+
 import { trpc } from "@/trpc/client";
 
 export default function HomePage() {
   const health = trpc.health.check.useQuery();
+  const me = trpc.auth.me.useQuery();
 
   return (
     <main>
@@ -41,6 +44,22 @@ export default function HomePage() {
             </span>
           </li>
         </ul>
+      )}
+      <h2>Sesión</h2>
+      {me.isPending ? (
+        <p className="muted">Consultando…</p>
+      ) : me.isError ? (
+        <p className="muted">
+          No has iniciado sesión. <Link href="/login">Inicia sesión</Link> o{" "}
+          <Link href="/registro">crea una cuenta</Link>.
+        </p>
+      ) : (
+        <p>
+          Sesión activa: <strong>{me.data.username}</strong> ({me.data.email})
+          {me.data.roles.length > 0 && (
+            <span className="muted"> — roles: {me.data.roles.join(", ")}</span>
+          )}
+        </p>
       )}
     </main>
   );

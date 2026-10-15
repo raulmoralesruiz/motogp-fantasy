@@ -1,11 +1,12 @@
 # Producción — TrueNAS Scale (T-02, WP4).
-# Compatible con `docker compose` (CLI) y Portainer (Stack).
+# Lo gestiona `deploy.sh` (docker compose CLI). Portainer es solo para
+# consultar (contenedores, logs, consola): NO importarlo como Stack
+# (conflicto de container_name; ver docs/operations/deploy.md §2).
 #
-# La imagen web NO se construye aquí (Portainer no tiene contexto de build):
-# la construye deploy.sh (o a mano: docker build -t motogp-web:latest .).
+# La imagen web NO se construye aquí: la construye deploy.sh
+# (o a mano: docker build -t motogp-web:latest .).
 #
-# Las variables ${...} se leen del .env (CLI) o de las Variables del stack
-# (Portainer). Ver docs/operations/deploy.md.
+# Las variables ${...} se leen del .env. Ver docs/operations/deploy.md.
 services:
   web:
     image: motogp-web:latest

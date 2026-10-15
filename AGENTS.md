@@ -153,6 +153,6 @@ De `docs/architecture/security.md`:
 | `docs/architecture/security.md`     | Amenazas y controles, GDPR, backups                                                                                          |
 | `docs/architecture/testing.md`      | Capas de testing, casos límite, puertas de CI                                                                                |
 | `docs/operations/deploy.md`         | Runbook de despliegue en TrueNAS (modelo pull, Portainer, NPM, backups, rollback)                                            |
-| `docs/decisions/0001…0007`          | ADRs: stack, economía, puntuación, fuente de datos, ligas, monolito, pipeline                                                |
+| `docs/decisions/0001…0008`          | ADRs: stack, economía, puntuación, fuente de datos, ligas, monolito, pipeline, cabeceras/CORS                                                |
 | `docs/roadmap.md`                   | Fases 0–5 + post-MVP, camino crítico                                                                                         |
 | `docs/backlog.md`                   | Epics, historias, tareas, dependencias, prioridades, criterios de aceptación                                                 |

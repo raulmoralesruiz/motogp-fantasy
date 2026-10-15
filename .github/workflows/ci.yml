@@ -54,7 +54,7 @@ jobs:
         run: npm run build
 
   docker:
-    name: Docker build (T-02)
+    name: Docker build + smoke HTTP (T-02, T-20)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -65,6 +65,92 @@ jobs:
           docker build \
             --build-arg NEXT_PUBLIC_APP_URL=https://motogp.raulmorales.eu \
             -t motogp-web:ci .
+
+      # Smoke HTTP (T-20): arranca la imagen construida y verifica por HTTP
+      # real las cabeceras de seguridad y el comportamiento CORS (reflejo de
+      # host). El servidor arranca sin BD/Redis (conexiones perezosas), así
+      # que los env son ficticios; /api/health es un liveness sin dependencias.
+      - name: Smoke HTTP — cabeceras de seguridad y CORS (T-20)
+        run: |
+          set -euo pipefail
+          docker run -d --name motogp-smoke \
+            -e DATABASE_URL="postgresql://smoke:smoke@localhost:5432/smoke?schema=public" \
+            -e REDIS_URL="redis://localhost:6379" \
+            -p 127.0.0.1:22099:3000 \
+            motogp-web:ci
+          trap 'docker rm -f motogp-smoke >/dev/null 2>&1 || true' EXIT
+
+          # Espera a que el servidor responda (máx. ~60 s).
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:22099/api/health >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:22099/api/health
+          echo
+
+          # 1) Cabeceras de seguridad presentes en páginas y en la API.
+          for path in / /api/health; do
+            headers=$(curl -s -D - -o /dev/null "http://127.0.0.1:22099$path")
+            echo "── Cabeceras de $path ──"
+            echo "$headers"
+            echo "$headers" | grep -qi "^strict-transport-security: max-age=31536000; includesubdomains"
+            echo "$headers" | grep -qi "^x-content-type-options: nosniff"
+            echo "$headers" | grep -qi "^x-frame-options: deny"
+            echo "$headers" | grep -qi "^referrer-policy: strict-origin-when-cross-origin"
+            echo "$headers" | grep -qi "^permissions-policy: camera=(), microphone=(), geolocation=()"
+            echo "$headers" | grep -qi "^content-security-policy: default-src 'self'"
+          done
+
+          # 2) CORS permitido (reflejo de host): la petición llega al handler (200).
+          #    GET (tRPC sirve las queries por GET); se añade Origin a mano para
+          #    probar que un origen que coincide con Host se permite.
+          code=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Host: motogp.raulmorales.eu" \
+            -H "Origin: https://motogp.raulmorales.eu" \
+            http://127.0.0.1:22099/api/trpc/health.check)
+          [ "$code" = "200" ]
+
+          # 3) CORS permitido: la respuesta lleva ACAO + Vary: Origin.
+          curl -s -D - -o /dev/null \
+            -H "Host: motogp.raulmorales.eu" \
+            -H "Origin: https://motogp.raulmorales.eu" \
+            http://127.0.0.1:22099/api/trpc/health.check \
+            | grep -qi "^access-control-allow-origin: https://motogp.raulmorales.eu"
+          curl -s -D - -o /dev/null \
+            -H "Host: motogp.raulmorales.eu" \
+            -H "Origin: https://motogp.raulmorales.eu" \
+            http://127.0.0.1:22099/api/trpc/health.check \
+            | grep -qi "^vary: origin"
+
+          # 4) CORS denegado (origen distinto) → 403.
+          code=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            -H "Host: motogp.raulmorales.eu" \
+            -H "Origin: https://evil.example" \
+            -H "Content-Type: application/json" \
+            -d '{"0":{}}' \
+            http://127.0.0.1:22099/api/trpc/health.check)
+          [ "$code" = "403" ]
+
+          # 5) Preflight permitido → 204 con cabeceras CORS.
+          code=$(curl -s -o /dev/null -w "%{http_code}" -X OPTIONS \
+            -H "Host: motogp.raulmorales.eu" \
+            -H "Origin: https://motogp.raulmorales.eu" \
+            -H "Access-Control-Request-Method: POST" \
+            http://127.0.0.1:22099/api/trpc/health.check)
+          [ "$code" = "204" ]
+          curl -s -D - -o /dev/null -X OPTIONS \
+            -H "Host: motogp.raulmorales.eu" \
+            -H "Origin: https://motogp.raulmorales.eu" \
+            -H "Access-Control-Request-Method: POST" \
+            http://127.0.0.1:22099/api/trpc/health.check \
+            | grep -qi "^access-control-allow-methods: GET, POST, OPTIONS"
+
+          # 6) Preflight denegado (origen distinto) → 403.
+          code=$(curl -s -o /dev/null -w "%{http_code}" -X OPTIONS \
+            -H "Host: motogp.raulmorales.eu" \
+            -H "Origin: https://evil.example" \
+            http://127.0.0.1:22099/api/trpc/health.check)
+          [ "$code" = "403" ]
 
   secrets:
     name: Gitleaks (T-19)
