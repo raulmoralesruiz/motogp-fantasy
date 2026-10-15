@@ -12,7 +12,6 @@ cd "$(dirname "$0")"
 
 COMPOSE="docker compose -f docker-compose.prod.yml"
 IMAGE="motogp-web"
-TAG="$(git rev-parse --short HEAD)"
 
 # ── 0. Precondiciones ───────────────────────────────────────────────────────
 if [ ! -f .env ]; then
@@ -25,6 +24,7 @@ command -v curl >/dev/null 2>&1 || { echo "ERROR: falta curl." >&2; exit 1; }
 # ── 1. Código actualizado ───────────────────────────────────────────────────
 echo "==> git pull"
 git pull --ff-only
+TAG="$(git rev-parse --short HEAD)"
 
 # ── 2. Imagen (etiquetada por commit para poder hacer rollback) ─────────────
 echo "==> docker build ($IMAGE:$TAG)"
