@@ -7,7 +7,7 @@ import { publicProcedure, router } from "../trpc";
 const APP_INFO = {
   name: "fantasy-motogp",
   version: "0.1.0",
-  fase: "Fase 0 (E1)",
+  fase: "Fase 1 (E2)",
 } as const;
 
 const TIMEOUT_MS = 3000;

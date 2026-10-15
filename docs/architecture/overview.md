@@ -1,6 +1,6 @@
 # Arquitectura — Visión General
 
-> Estado: BORRADOR v1 (fase 4). El repositorio es **verde** (sin código previo), así que todas las decisiones se toman desde cero y se documentan como ADR en `docs/decisions/`.
+> Estado: diseño de referencia (redactado en fase 4 de planificación, cuando el repo era verde). **El código ya existe:** para lo que está implementado hoy, ver [`estado-actual.md`](estado-actual.md). Las decisiones se documentan como ADR en `docs/decisions/` (0001…0008).
 
 ## 1. Enfoque
 

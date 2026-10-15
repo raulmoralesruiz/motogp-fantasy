@@ -2,7 +2,7 @@
 
 > Un juego de fantasy de MotoGP **propio** (sin licencias ni APIs oficiales), jugable en cualquier navegador, **multi-liga**, con una economía diseñada para ser **justa y transparente**.
 >
-> **Estado:** Fase 0 en curso (E1: bootstrap + módulos puros). `docs/` sigue siendo la fuente de verdad de las reglas; `app/` contiene el monolito (Next.js) y los módulos puros `economy`/`scoring` con tests.
+> **Estado:** Fase 0 cerrada; **Fase 1 en curso** — US-01 (registro/login) y T-20 (cabeceras de seguridad + CORS) ya están en producción. `docs/` sigue siendo la fuente de verdad de las reglas; `app/` contiene el monolito (Next.js) con los módulos puros `economy`/`scoring`, el módulo `identity` y la UI de registro/login. El código que existe hoy, archivo a archivo: [`docs/architecture/estado-actual.md`](docs/architecture/estado-actual.md).
 
 ## Resumen ejecutivo
 
@@ -34,35 +34,43 @@
 
 ## Mapa de documentos
 
-| Documento                           | Qué contiene                                                                                                                 |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `AGENTS.md`                         | Instrucciones operativas para agentes (módulos, invariantes, versionado, puertas de calidad)                                 |
-| `docs/product/vision.md`            | Propuesta de valor, diferenciación, principios, métricas, riesgos                                                            |
-| `docs/product/game-rules.md`        | Reglas de juego: composición 2+2+1+1, presupuesto, precios, transfers, lockout, invariantes                                  |
-| `docs/product/economy.md`           | **Documento central:** problema del ratchet, opciones A–E, modelo recomendado, fórmula de precios, simulaciones              |
-| `docs/product/economia-guia.md`     | Guía accesible de `economy.md`: glosario, opciones en lenguaje claro, motor de precios paso a paso, GP completo, calibración |
-| `docs/product/simulacion-2026.md`   | Comparación A/B/C/E sobre la temporada 2026 real (PulseLive): puerta T-15, trayectorias por GP, casos nombrados              |
-| `docs/product/por-que-opcion-e.md`  | Explicación no técnica: por qué la opción E supera al modelo oficial (ejemplos con datos reales 2026)                        |
-| `docs/product/scoring.md`           | Tablas de puntuación versionadas, bonos/penalizaciones, ejemplo 170.5, casos límite                                          |
-| `docs/product/leagues.md`           | Tipos de liga, invitaciones, permisos, min/máx, rankings, desempates, privacidad, anti-abuso                                 |
-| `docs/product/user-flows.md`        | Flujos de usuario y pantallas (~18), mobile-first                                                                            |
-| `docs/product/mvp.md`               | Alcance del MVP, diferimientos, criterios de aceptación                                                                      |
-| `docs/architecture/overview.md`     | Stack, módulos, flujo de datos, transacciones/concurrencia                                                                   |
-| `docs/architecture/data-model.md`   | Esquema relacional (PostgreSQL), constraints, fuente de verdad vs derivado                                                   |
-| `docs/architecture/integrations.md` | Contrato `ResultsSource`, fuentes evaluadas (PulseLive/Sportradar/comunitarias/manual), pipeline                             |
-| `docs/architecture/security.md`     | Amenazas y controles, RBAC, auditoría, GDPR, backups                                                                         |
-| `docs/architecture/testing.md`      | Capas de testing (7), casos límite, ejemplos verificables, puertas de CI                                                     |
-| `docs/decisions/0001…0007`          | ADRs: stack, economía, puntuación, fuente de datos, ligas, monolito, pipeline de resultados                                  |
-| `docs/roadmap.md`                   | Fases 0–5 + post-MVP, hitos, camino crítico                                                                                  |
-| `docs/backlog.md`                   | Epics, user stories, tareas técnicas, dependencias, prioridades, criterios de aceptación verificables                        |
+| Documento                            | Qué contiene                                                                                                                 |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `AGENTS.md`                          | Instrucciones operativas para agentes (módulos, invariantes, versionado, puertas de calidad)                                 |
+| `CONTRIBUTING.md`                    | Cómo colaborar: quickstart local, comandos, convenciones, Definition of Done, cómo tomar trabajo del backlog                 |
+| `docs/product/vision.md`             | Propuesta de valor, diferenciación, principios, métricas, riesgos                                                            |
+| `docs/product/game-rules.md`         | Reglas de juego: composición 2+2+1+1, presupuesto, precios, transfers, lockout, invariantes                                  |
+| `docs/product/economy.md`            | **Documento central:** problema del ratchet, opciones A–E, modelo recomendado, fórmula de precios, simulaciones              |
+| `docs/product/economia-guia.md`      | Guía accesible de `economy.md`: glosario, opciones en lenguaje claro, motor de precios paso a paso, GP completo, calibración |
+| `docs/product/simulacion-2026.md`    | Comparación A/B/C/E sobre la temporada 2026 real (PulseLive): puerta T-15, trayectorias por GP, casos nombrados              |
+| `docs/product/por-que-opcion-e.md`   | Explicación no técnica: por qué la opción E supera al modelo oficial (ejemplos con datos reales 2026)                        |
+| `docs/product/scoring.md`            | Tablas de puntuación versionadas, bonos/penalizaciones, ejemplo 170.5, casos límite                                          |
+| `docs/product/leagues.md`            | Tipos de liga, invitaciones, permisos, min/máx, rankings, desempates, privacidad, anti-abuso                                 |
+| `docs/product/user-flows.md`         | Flujos de usuario y pantallas (~18), mobile-first                                                                            |
+| `docs/product/mvp.md`                | Alcance del MVP, diferimientos, criterios de aceptación                                                                      |
+| `docs/architecture/estado-actual.md` | **El código que existe hoy** (estado por fase, mapa del repo, módulos implementados, invariantes, puertas de calidad)        |
+| `docs/architecture/overview.md`      | Stack, módulos, flujo de datos, transacciones/concurrencia                                                                   |
+| `docs/architecture/data-model.md`    | Esquema relacional (PostgreSQL), constraints, fuente de verdad vs derivado                                                   |
+| `docs/architecture/integrations.md`  | Contrato `ResultsSource`, fuentes evaluadas (PulseLive/Sportradar/comunitarias/manual), pipeline                             |
+| `docs/architecture/security.md`      | Amenazas y controles, RBAC, auditoría, GDPR, backups                                                                         |
+| `docs/architecture/testing.md`       | Capas de testing (7), casos límite, ejemplos verificables, puertas de CI                                                     |
+| `docs/decisions/0001…0008`           | ADRs: stack, economía, puntuación, fuente de datos, ligas, monolito, pipeline de resultados, cabeceras de seguridad/CORS     |
+| `docs/roadmap.md`                    | Fases 0–5 + post-MVP, hitos, camino crítico                                                                                  |
+| `docs/backlog.md`                    | Epics, user stories, tareas técnicas, dependencias, prioridades, criterios de aceptación verificables                        |
+
+## ¿Quieres colaborar?
+
+- **Para empezar a construir:** lee [`CONTRIBUTING.md`](CONTRIBUTING.md) — quickstart local en 6 comandos, tabla de comandos, convenciones, Definition of Done y cómo tomar trabajo del backlog.
+- **Para entender el código que ya existe:** [`docs/architecture/estado-actual.md`](docs/architecture/estado-actual.md) (estado por fase, mapa del repo, módulos implementados, dónde vive cada invariante).
+- **El trabajo pendiente** está en [`docs/backlog.md`](docs/backlog.md) (IDs, prioridades, dependencias, criterios de aceptación verificables).
 
 ## Orden de lectura recomendado
 
 1. `AGENTS.md` (si eres un agente) o `docs/product/vision.md` (contexto).
 2. `docs/product/game-rules.md` → `docs/product/economy.md` (el corazón) → `docs/product/scoring.md`.
 3. `docs/product/leagues.md` → `docs/product/user-flows.md` → `docs/product/mvp.md`.
-4. `docs/architecture/*` → `docs/decisions/*`.
-5. `docs/roadmap.md` → `docs/backlog.md` (para empezar a construir).
+4. `docs/architecture/estado-actual.md` (el código de hoy) → `docs/architecture/*` (el diseño) → `docs/decisions/*`.
+5. `docs/roadmap.md` → `docs/backlog.md` (para empezar a construir) → `CONTRIBUTING.md` (quickstart).
 
 ## Método
 
