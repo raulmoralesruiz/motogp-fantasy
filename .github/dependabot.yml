@@ -1,13 +1,20 @@
 # Dependabot (T-02, WP4): actualizaciones semanales de dependencias.
+# Política: solo patch/minor automáticos; los majors se actualizan a conciencia (T-23, docs/backlog.md).
 version: 2
 updates:
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "weekly"
+    update-types:
+      - version-patch
+      - version-minor
     open-pull-requests-limit: 5
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    update-types:
+      - version-patch
+      - version-minor

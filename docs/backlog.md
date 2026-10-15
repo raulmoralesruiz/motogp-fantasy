@@ -36,7 +36,7 @@
 > Las **WP (work packages)** son lotes de entrega para ejecutar la Fase 0: tareas agrupadas por
 > contexto, verificadas juntas (lint + typecheck + tests + build en verde) y reportadas como una unidad.
 > El orden de ejecución lo define el grafo de dependencias (campo "Dep:"), **no** la numeración de las
-> tareas (los números siguen el epic donde se redactó cada tarea: E1 = T-01…T-07, X transversal = T-18…T-22).
+> tareas (los números siguen el epic donde se redactó cada tarea: E1 = T-01…T-07, X transversal = T-18…T-23).
 >
 > Nota: T-04/T-05 (módulos puros) se implementaron antes de Fase 0 — son el corazón del producto y sus
 > tests validaron el diseño económico (simulación 2026). T-03 aporta el check que garantiza su pureza.
@@ -312,6 +312,8 @@
   - CA: `npm audit` en CI con umbral de vulnerabilidades; dependabot activo; sin dependencias sin justificar.
 - **T-22 · Datos de test y fixtures** — `P0` — Dep: T-07.
   - CA: fixtures de resultados anonimizados en el repo (para contrato/integración); el dataset ficticio de `economy.md` §7 disponible como fixture de la simulación; **nunca PII ni datos reales de usuarios en tests** (check en CI o revisión).
+- **T-23 · Actualización deliberada de dependencias a versiones mayores** — `P1` — Dep: T-21.
+  - CA: majors pendientes (next 16, prisma 7, zod 4, vitest 5, @types/node 24.x — coincidente con el runtime `node:24` del Dockerfile) actualizados de forma deliberada (uno a uno o en lote revisado); tras cada bump: CI + unit + integración + golden files en verde; la política de Dependabot (solo patch/minor) queda documentada en `.github/dependabot.yml`.
 
 ---
 
@@ -325,7 +327,7 @@ E1 (T-01…T-07, módulos puros)
  │              └─► E5 (US-16…US-22, T-10)           ← requiere T-05 (scoring)
  │                   └─► E6 (US-23…US-31, ligas)
  │                        └─► E7 (T-11…T-17, US-32)  ← requiere D-01/D-02 (calibración)
- └─► X (T-18…T-22, transversal: arranca con E1)
+ └─► X (T-18…T-23, transversal: arranca con E1)
 E8 (post-MVP) ← E5/E6 + tracción
 ```
 
