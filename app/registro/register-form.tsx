@@ -79,7 +79,9 @@ export default function RegisterForm() {
           placeholder="Mínimo 8 caracteres"
           required
         />
-        {fieldError("password") && <p className="field-error">{fieldError("password")}</p>}
+        {fieldError("password") && (
+          <p className="field-error">{fieldError("password")}</p>
+        )}
       </div>
       <div className="field check">
         <input id="termsAccepted" name="termsAccepted" type="checkbox" required />

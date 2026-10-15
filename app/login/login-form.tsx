@@ -61,7 +61,9 @@ export default function LoginForm() {
           autoComplete="current-password"
           required
         />
-        {fieldError("password") && <p className="field-error">{fieldError("password")}</p>}
+        {fieldError("password") && (
+          <p className="field-error">{fieldError("password")}</p>
+        )}
       </div>
       {generalError && (
         <p className="form-error" role="alert">

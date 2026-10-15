@@ -67,7 +67,10 @@ export class AuthService {
       throw new TRPCError({ code: "CONFLICT", message: "El email ya está registrado." });
     }
     if (existingUsername) {
-      throw new TRPCError({ code: "CONFLICT", message: "El nombre de usuario ya está en uso." });
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: "El nombre de usuario ya está en uso.",
+      });
     }
 
     const passwordHash = await hashPassword(input.password);

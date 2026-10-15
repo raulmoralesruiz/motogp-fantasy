@@ -13,7 +13,10 @@ export const usernameSchema = z
   .trim()
   .min(3, "El nombre de usuario debe tener al menos 3 caracteres")
   .max(20, "El nombre de usuario no puede superar 20 caracteres")
-  .regex(/^[a-zA-Z0-9_]+$/, "El nombre de usuario solo puede usar letras, números y guiones bajos");
+  .regex(
+    /^[a-zA-Z0-9_]+$/,
+    "El nombre de usuario solo puede usar letras, números y guiones bajos",
+  );
 
 /** Email normalizado (trim + minúsculas) para evitar duplicados por mayúsculas. */
 export const emailSchema = z

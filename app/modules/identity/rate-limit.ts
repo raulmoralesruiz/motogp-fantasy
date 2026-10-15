@@ -86,7 +86,10 @@ export interface RateLimitStore {
    * Registra un intento de login de la IP (ventana fija).
    * Devuelve el contador de la ventana actual y los segundos restantes.
    */
-  recordAttempt(ip: string, windowSec: number): Promise<{ count: number; remainingSec: number }>;
+  recordAttempt(
+    ip: string,
+    windowSec: number,
+  ): Promise<{ count: number; remainingSec: number }>;
   /** Registra un fallo de la cuenta y devuelve el contador consecutivo. */
   recordFailure(account: string): Promise<number>;
   /** Borra los fallos de la cuenta (login correcto). */
@@ -112,7 +115,10 @@ export class InMemoryRateLimitStore implements RateLimitStore {
     this.nowMs = ms;
   }
 
-  async recordAttempt(ip: string, windowSec: number): Promise<{ count: number; remainingSec: number }> {
+  async recordAttempt(
+    ip: string,
+    windowSec: number,
+  ): Promise<{ count: number; remainingSec: number }> {
     const now = this.nowMs;
     const current = this.windows.get(ip);
     if (!current || now >= current.resetAtMs) {

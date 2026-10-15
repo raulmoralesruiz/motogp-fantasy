@@ -19,9 +19,15 @@ describe("auth · validación (US-01)", () => {
 
   it("rechaza username corto o con caracteres inválidos", () => {
     const base = { email: "a@b.co", password: "12345678", termsAccepted: true };
-    expect(registerInputSchema.safeParse({ ...base, username: "ab" }).success).toBe(false);
-    expect(registerInputSchema.safeParse({ ...base, username: "ana-1" }).success).toBe(false);
-    expect(registerInputSchema.safeParse({ ...base, username: "ana 1" }).success).toBe(false);
+    expect(registerInputSchema.safeParse({ ...base, username: "ab" }).success).toBe(
+      false,
+    );
+    expect(registerInputSchema.safeParse({ ...base, username: "ana-1" }).success).toBe(
+      false,
+    );
+    expect(registerInputSchema.safeParse({ ...base, username: "ana 1" }).success).toBe(
+      false,
+    );
   });
 
   it("rechaza contraseña corta", () => {
@@ -50,8 +56,14 @@ describe("auth · validación (US-01)", () => {
   });
 
   it("login: exige email + contraseña no vacía (sin longitud mínima)", () => {
-    expect(loginInputSchema.safeParse({ email: "a@b.co", password: "" }).success).toBe(false);
-    expect(loginInputSchema.safeParse({ email: "a@b.co", password: "x" }).success).toBe(true);
-    expect(loginInputSchema.safeParse({ email: "no-email", password: "x" }).success).toBe(false);
+    expect(loginInputSchema.safeParse({ email: "a@b.co", password: "" }).success).toBe(
+      false,
+    );
+    expect(loginInputSchema.safeParse({ email: "a@b.co", password: "x" }).success).toBe(
+      true,
+    );
+    expect(loginInputSchema.safeParse({ email: "no-email", password: "x" }).success).toBe(
+      false,
+    );
   });
 });

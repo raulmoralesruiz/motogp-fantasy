@@ -65,7 +65,11 @@ describe("InMemoryRateLimitStore · TTL y reloj (US-01 CA)", () => {
     const { count, remainingSec } = await store.recordAttempt("1.1.1.1", 60);
     expect(count).toBe(4);
     const decision = evaluateLoginAttempt(
-      { ipWindowCount: count, ipWindowRemainingSec: remainingSec, accountLockRemainingSec: 0 },
+      {
+        ipWindowCount: count,
+        ipWindowRemainingSec: remainingSec,
+        accountLockRemainingSec: 0,
+      },
       CFG,
     );
     expect(decision.allowed).toBe(false);

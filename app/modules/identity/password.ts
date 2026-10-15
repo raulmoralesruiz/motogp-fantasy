@@ -25,7 +25,10 @@ export async function hashPassword(password: string): Promise<string> {
  * Verifica una contraseña contra un hash argon2.
  * Devuelve `false` ante cualquier error (hash malformado, etc.).
  */
-export async function verifyPassword(password: string, encoded: string): Promise<boolean> {
+export async function verifyPassword(
+  password: string,
+  encoded: string,
+): Promise<boolean> {
   try {
     return await verify(encoded, password);
   } catch {

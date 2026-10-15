@@ -110,7 +110,10 @@ describe("US-01 · registro y login (PostgreSQL real)", () => {
         password: PASSWORD,
         termsAccepted: true,
       }),
-    ).rejects.toMatchObject({ code: "CONFLICT", message: "El email ya está registrado." });
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      message: "El email ya está registrado.",
+    });
 
     await expect(
       caller.register({
@@ -157,11 +160,17 @@ describe("US-01 · registro y login (PostgreSQL real)", () => {
     const { caller } = await callerFor("192.0.2.5");
     await expect(
       caller.login({ email: email("ana"), password: WRONG_PASSWORD }),
-    ).rejects.toMatchObject({ code: "UNAUTHORIZED", message: "Credenciales incorrectas." });
+    ).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+      message: "Credenciales incorrectas.",
+    });
 
     await expect(
       caller.login({ email: email("inexistente"), password: PASSWORD }),
-    ).rejects.toMatchObject({ code: "UNAUTHORIZED", message: "Credenciales incorrectas." });
+    ).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+      message: "Credenciales incorrectas.",
+    });
   });
 
   it("me: cookie válida devuelve al usuario; sin cookie, falsa o expirada rechaza", async () => {
@@ -214,7 +223,10 @@ describe("US-01 · registro y login (PostgreSQL real)", () => {
       const { caller } = await callerFor("192.0.2.10");
       await expect(
         caller.login({ email: account, password: WRONG_PASSWORD }),
-      ).rejects.toMatchObject({ code: "UNAUTHORIZED", message: "Credenciales incorrectas." });
+      ).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+        message: "Credenciales incorrectas.",
+      });
     }
 
     // El intento que alcanza el umbral ya responde con el bloqueo.
@@ -259,7 +271,10 @@ describe("US-01 · registro y login (PostgreSQL real)", () => {
 
     // Otra IP no se ve afectada.
     const other = await callerFor("192.0.2.21");
-    const { user } = await other.caller.login({ email: email("ana"), password: PASSWORD });
+    const { user } = await other.caller.login({
+      email: email("ana"),
+      password: PASSWORD,
+    });
     expect(user.email).toBe(email("ana"));
 
     // Al expirar la ventana, la IP rate-limited puede reintentar.

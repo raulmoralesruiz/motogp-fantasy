@@ -94,7 +94,11 @@ describe("evaluateCors (T-20)", () => {
 
     it("preflight OPTIONS de origen distinto → reject", () => {
       expect(
-        evaluateCors({ method: "OPTIONS", origin: "https://evil.example", host: DOMINIO }),
+        evaluateCors({
+          method: "OPTIONS",
+          origin: "https://evil.example",
+          host: DOMINIO,
+        }),
       ).toEqual({ kind: "reject" });
     });
 
@@ -105,9 +109,9 @@ describe("evaluateCors (T-20)", () => {
     });
 
     it("origin opaco (literal 'null') → reject", () => {
-      expect(
-        evaluateCors({ method: "POST", origin: "null", host: DOMINIO }),
-      ).toEqual({ kind: "reject" });
+      expect(evaluateCors({ method: "POST", origin: "null", host: DOMINIO })).toEqual({
+        kind: "reject",
+      });
     });
 
     it("sin cabecera Host → reject", () => {

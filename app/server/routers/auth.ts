@@ -44,7 +44,10 @@ export function createAuthRouter(deps: AuthRouterDeps) {
 
   function issueSessionCookie(ctx: Context, token: string): void {
     ctx.pendingCookies.push(
-      buildSessionCookie(token, { maxAgeSec: deps.sessionTtlSec, secure: deps.secureCookie }),
+      buildSessionCookie(token, {
+        maxAgeSec: deps.sessionTtlSec,
+        secure: deps.secureCookie,
+      }),
     );
   }
 
@@ -59,13 +62,11 @@ export function createAuthRouter(deps: AuthRouterDeps) {
       }),
 
     /** Login con anti fuerza bruta (CA de US-01). */
-    login: publicProcedure
-      .input(loginInputSchema)
-      .mutation(async ({ ctx, input }) => {
-        const { user, sessionToken } = await service.login(input, { ip: ctx.ip });
-        issueSessionCookie(ctx, sessionToken);
-        return { user };
-      }),
+    login: publicProcedure.input(loginInputSchema).mutation(async ({ ctx, input }) => {
+      const { user, sessionToken } = await service.login(input, { ip: ctx.ip });
+      issueSessionCookie(ctx, sessionToken);
+      return { user };
+    }),
 
     /** Usuario activo (sesión). */
     me: protectedProcedure.query(({ ctx }) => toPublicUser(ctx.user)),
