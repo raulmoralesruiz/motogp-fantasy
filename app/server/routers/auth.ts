@@ -89,7 +89,7 @@ export function createAuthRouter(deps: AuthRouterDeps) {
     register: publicProcedure
       .input(registerInputSchema)
       .mutation(async ({ ctx, input }) => {
-        const { user, sessionToken } = await service.register(input);
+        const { user, sessionToken } = await service.register(input, { ip: ctx.ip });
         issueSessionCookie(ctx, sessionToken);
         return { user };
       }),

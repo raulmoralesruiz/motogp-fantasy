@@ -1,14 +1,14 @@
 /**
  * Módulo `admin` — panel de administración y auditoría.
  *
- * Placeholder de Fase 0 (T-03): la estructura existe; el contenido se
- * implementa en Fase 1 (E2: US-04…US-08, T-09 auditoría) y se completa en
- * las fases siguientes (importación de resultados, recálculo, precios).
+ * **Auditoría (T-09):** `audit_log` es append-only — el trigger de BD
+ * `audit_log_append_only` rechaza UPDATE/DELETE (la garantía vive en
+ * Postgres, no en la app). `appendAudit` es la única forma de escribir
+ * una entrada, siempre dentro de la misma transacción que la acción
+ * auditada.
  *
- * Responsabilidad:
- * - Panel de admin global (rol `global_admin`): temporadas, GPs, mercado,
- *   precios, resultados, recálculos, sanciones.
- * - Auditoría `audit_log` append-only para acciones sensibles (precios
- *   manuales, reglas, resultados, recálculos, roles, ligas).
+ * El panel de admin (temporadas, GPs, mercado, precios, resultados,
+ * recálculos, sanciones) se implementa en E2 (US-04…US-08) y se completa
+ * en las fases siguientes.
  */
-export {};
+export { appendAudit, type AuditEntry } from "./audit";

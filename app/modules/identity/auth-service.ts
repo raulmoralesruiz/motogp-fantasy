@@ -12,6 +12,7 @@
 import { TRPCError } from "@trpc/server";
 import type { PrismaClient } from "@prisma/client";
 
+import { appendAudit } from "@/modules/admin";
 import type { EmailSender } from "./email";
 import { getDummyHash, hashPassword, verifyPassword } from "./password";
 import { evaluateResetToken, generateResetToken, hashResetToken } from "./reset-tokens";
@@ -67,12 +68,18 @@ export class AuthService {
   /**
    * Registro (US-01): email + contraseña + nombre de usuario.
    * La liga de bienvenida (US-31) y el onboarding quedan fuera de alcance.
+   *
+   * Si el email coincide con el admin de bootstrap (T-08, ADR-0010), la
+   * concesión de `global_admin` se registra en `audit_log` (T-09).
    */
-  async register(input: {
-    email: string;
-    username: string;
-    password: string;
-  }): Promise<AuthResult> {
+  async register(
+    input: {
+      email: string;
+      username: string;
+      password: string;
+    },
+    meta: { ip: string },
+  ): Promise<AuthResult> {
     const { prisma, cfg } = this.deps;
 
     // Rechazo explícito de duplicados (la constraint única de BD es la
@@ -127,6 +134,16 @@ export class AuthService {
       });
       await tx.userRole.create({
         data: { userId: created.id, roleId: adminRole.id },
+      });
+      // Auditoría (T-09): el bootstrap es una acción sensible (roles) y se
+      // registra en la misma transacción (append-only, trigger de BD).
+      await appendAudit(tx, {
+        actorId: created.id,
+        action: "role.bootstrap_admin",
+        entity: "role",
+        entityId: adminRole.id,
+        afterData: { userId: created.id, roleId: adminRole.id, email: input.email },
+        ip: meta.ip,
       });
       // Relectura para incluir el rol nuevo en la respuesta.
       return tx.user.findUniqueOrThrow({
