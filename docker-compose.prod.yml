@@ -19,6 +19,9 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
       SESSION_SECRET: ${SESSION_SECRET}
+      # Bootstrap de global_admin (T-08, ADR-0010): el primer registro con
+      # este email recibe el rol. Vacía → nadie lo recibe.
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
     ports:
       # Solo la web expone puerto a la LAN (Postgres/Redis quedan en red interna).
