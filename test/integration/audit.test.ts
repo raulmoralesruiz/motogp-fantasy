@@ -110,9 +110,9 @@ describe("T-09 · Auditoría append-only (PostgreSQL real)", () => {
   });
 
   it("DELETE se rechaza por el trigger de BD (append-only)", async () => {
-    await expect(
-      prisma.auditLog.delete({ where: { id: entryId } }),
-    ).rejects.toThrow(/append-only/);
+    await expect(prisma.auditLog.delete({ where: { id: entryId } })).rejects.toThrow(
+      /append-only/,
+    );
     // La entrada sigue existiendo.
     const after = await prisma.auditLog.findUnique({ where: { id: entryId } });
     expect(after).not.toBeNull();
@@ -139,7 +139,9 @@ describe("T-09 · Auditoría append-only (PostgreSQL real)", () => {
       termsAccepted: true,
     });
 
-    const user = await prisma.user.findUniqueOrThrow({ where: { email: BOOTSTRAP_EMAIL } });
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { email: BOOTSTRAP_EMAIL },
+    });
     const role = await prisma.role.findUniqueOrThrow({ where: { name: "global_admin" } });
     const rows = await prisma.auditLog.findMany({
       where: { action: "role.bootstrap_admin", actorId: user.id },

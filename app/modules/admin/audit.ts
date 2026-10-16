@@ -36,7 +36,10 @@ export interface AuditEntry {
  * @param tx Cliente Prisma o transacción: la entrada se commitea de forma
  *   atómica con el resto de la transacción.
  */
-export function appendAudit(tx: PrismaClient | Prisma.TransactionClient, entry: AuditEntry) {
+export function appendAudit(
+  tx: PrismaClient | Prisma.TransactionClient,
+  entry: AuditEntry,
+) {
   return tx.auditLog.create({
     data: {
       actorId: entry.actorId,
