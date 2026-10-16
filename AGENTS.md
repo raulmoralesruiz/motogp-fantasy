@@ -2,7 +2,7 @@
 
 > Este repositorio es **Fantasy MotoGP Independiente**: un juego de fantasy de MotoGP propio (sin licencias ni APIs oficiales), multi-liga, con una economía diseñada para ser justa y transparente.
 >
-> **Estado actual:** **Fase 0 cerrada**; **Fase 1 en curso** — US-01 (registro/login) + T-20 (cabeceras de seguridad/CORS) en producción; US-02 (cierre de sesión + recuperación de contraseña) + T-08 (RBAC + autorización por recurso) implementados, pendientes de deploy; pendiente US-03, T-09, US-04…US-08. `docs/` sigue siendo la fuente de verdad de las reglas. `app/` contiene el monolito (Next.js) con los módulos puros `economy`/`scoring`, el módulo `identity` y la UI de registro/login/recuperación. El estado del código, archivo a archivo, está en `docs/architecture/estado-actual.md`.
+> **Estado actual:** **Fase 0 cerrada**; **Fase 1 en curso** — US-01 (registro/login), T-20 (cabeceras de seguridad/CORS), US-02 (cierre de sesión + recuperación de contraseña), T-08 (RBAC + autorización por recurso), T-09 (auditoría append-only) y US-04 (temporadas + `season_rules` versionado, panel admin) en producción (imagen `2a2d497`, 2026-10-17); pendiente US-03, US-05…US-08. `docs/` sigue siendo la fuente de verdad de las reglas. `app/` contiene el monolito (Next.js) con los módulos puros `economy`/`scoring`, los módulos `identity` y `seasons` y la UI de registro/login/recuperación + panel admin. El estado del código, archivo a archivo, está en `docs/architecture/estado-actual.md`.
 
 ## 1. Fuentes de verdad
 

@@ -2,7 +2,7 @@
 
 > Un juego de fantasy de MotoGP **propio** (sin licencias ni APIs oficiales), jugable en cualquier navegador, **multi-liga**, con una economía diseñada para ser **justa y transparente**.
 >
-> **Estado:** Fase 0 cerrada; **Fase 1 en curso** — US-01 (registro/login) y T-20 (cabeceras de seguridad + CORS) ya están en producción. `docs/` sigue siendo la fuente de verdad de las reglas; `app/` contiene el monolito (Next.js) con los módulos puros `economy`/`scoring`, el módulo `identity` y la UI de registro/login. El código que existe hoy, archivo a archivo: [`docs/architecture/estado-actual.md`](docs/architecture/estado-actual.md).
+> **Estado:** Fase 0 cerrada; **Fase 1 en curso** — US-01 (registro/login), T-20 (cabeceras de seguridad + CORS), US-02 (cierre de sesión + recuperación de contraseña), T-08 (RBAC + autorización por recurso), T-09 (auditoría append-only) y US-04 (temporadas + reglas versionadas, panel admin) ya están en producción (imagen `2a2d497`, 2026-10-17). `docs/` sigue siendo la fuente de verdad de las reglas; `app/` contiene el monolito (Next.js) con los módulos puros `economy`/`scoring`, los módulos `identity` y `seasons` y la UI de registro/login/recuperación + panel admin. El código que existe hoy, archivo a archivo: [`docs/architecture/estado-actual.md`](docs/architecture/estado-actual.md).
 
 ## Resumen ejecutivo
 
