@@ -75,6 +75,11 @@ export default function HomePage() {
               <span className="muted"> — roles: {me.data.roles.join(", ")}</span>
             )}
           </p>
+          {me.data.roles.includes("global_admin") && (
+            <p>
+              <Link href="/admin">Panel de administración</Link>
+            </p>
+          )}
           <Button
             type="button"
             onClick={() => logout.mutate()}

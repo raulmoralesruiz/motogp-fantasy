@@ -109,8 +109,9 @@
 
 ### User stories (admin)
 
-- **US-04 · El admin crea una temporada con sus reglas** — `P0` — Dep: E1.
+- **US-04 · El admin crea una temporada con sus reglas** — `P0` — Dep: E1. ✅ (2026-10-17)
   - CA: la temporada guarda una `season_rules` versionada (JSONB: B, t, cmax, tablas de puntuación, límites, `rules_version`); crear una segunda versión no muta la primera (unique `(season, version)`, test).
+  - Hecho: `SeasonService` (módulo `seasons`, prisma inyectable) + router tRPC `seasons` (`list`/`get` protegidos; `create`/`addRulesVersion` solo `global_admin`); la versión de la fila se deriva de `rules.rulesVersion` (fuente única de verdad); revalidación server-side contra `seasonRulesSchema`; auditoría en la misma transacción (`season.created`, `season.rules_version_added` — T-09); UI admin mínima en `/admin` (flujo 18: crear temporada + añadir versión de reglas, pre-rellenadas con `PROVISIONAL_SEASON_RULES`, validación en vivo con el schema compartido). Tests: unit de schemas (`app/shared/validation/__tests__/seasons.test.ts`) + `parseRulesJson` (`app/admin/__tests__/rules-json.test.ts`) + integración `test/integration/seasons.test.ts` (9 casos: creación + auditoría, segunda versión no muta la primera, duplicado → CONFLICT, reglas inválidas → BAD_REQUEST sin persistir nada, RBAC 403/401, NOT_FOUND, lectura pública).
 
 - **US-05 · El admin añade GPs, circuitos y eventos** — `P0` — Dep: US-04.
   - CA: cada GP tiene orden, circuito y eventos (Q1/Q2/sprint opcional/race); el estado del GP transita `scheduled → locked → finished/cancelled` y solo el admin lo cambia (auditado).

@@ -99,13 +99,35 @@ a {
 
 .form input[type="email"],
 .form input[type="text"],
-.form input[type="password"] {
+.form input[type="password"],
+.form input[type="date"],
+.form input[type="number"],
+.form select {
   padding: 0.55rem 0.7rem;
   font-size: 1rem;
   color: var(--fg);
   background: #10151c;
   border: 1px solid #21262d;
   border-radius: 6px;
+}
+
+/* Editor de reglas JSON (panel admin, US-04). */
+.form textarea {
+  padding: 0.55rem 0.7rem;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--fg);
+  background: #10151c;
+  border: 1px solid #21262d;
+  border-radius: 6px;
+  resize: vertical;
+}
+
+/* Lista anidada de versiones de reglas (panel admin, US-04). */
+.status li ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.25rem;
 }
 
 .form input:focus {

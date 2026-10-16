@@ -5,4 +5,4 @@
  * `game-rules.md`) se calibran en las tareas `D-xx`. En producción viven en
  * `season_rules` (JSONB versionado); aquí viven como defaults tipados.
  */
-export * from "./season-rules.js";
+export * from "./season-rules";

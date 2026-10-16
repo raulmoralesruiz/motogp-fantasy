@@ -10,7 +10,7 @@
  * scripts y la Fase 0. Validados contra `seasonRulesSchema`.
  */
 
-import { seasonRulesSchema, type SeasonRules } from "../validation/season-rules.js";
+import { seasonRulesSchema, type SeasonRules } from "../validation/season-rules";
 
 export const PROVISIONAL_SEASON_RULES: SeasonRules = {
   rulesVersion: "provisional-v1",
