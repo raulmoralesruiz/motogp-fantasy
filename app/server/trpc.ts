@@ -10,6 +10,7 @@ import superjson from "superjson";
 import type { PrismaClient } from "@prisma/client";
 
 import {
+  canAccessGlobalAdmin,
   findActiveSessionUser,
   parseCookieHeader,
   SESSION_COOKIE_NAME,
@@ -42,6 +43,17 @@ export async function createContext(req: Request, db: PrismaClient = prisma) {
     redis,
     ip: clientIp(req),
     user,
+    /**
+     * Roles del usuario activo (T-08, RBAC): vacío si no hay sesión.
+     * Lo consume `adminProcedure` y las guardas por recurso de cada módulo.
+     */
+    userRoles: user ? user.userRoles.map((ur) => ur.role.name) : [],
+    /**
+     * Token opaco de la cookie de sesión (US-02: `auth.logout` lo revoca en
+     * BD). Solo definido cuando hay cookie; si `user` no es null, también
+     * lo está (la sesión se resuelve a partir de él).
+     */
+    sessionToken,
     /** Cabeceras `Set-Cookie` que el handler añadirá a la respuesta (US-01). */
     pendingCookies: [] as string[],
   };
@@ -77,4 +89,20 @@ export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
     throw new TRPCError({ code: "UNAUTHORIZED", message: "No estás autenticado" });
   }
   return next({ ctx: { ...ctx, user: ctx.user } });
+});
+
+/**
+ * Procedimiento del panel de administración global (T-08, security.md §1.5):
+ * exige sesión activa y el rol `global_admin`. Un usuario autenticado sin el
+ * rol recibe 403 FORBIDDEN (está autenticado pero no tiene permiso: no es
+ * UNAUTHORIZED).
+ */
+export const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (!canAccessGlobalAdmin(ctx.userRoles)) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "No tienes permisos para acceder al panel de administración.",
+    });
+  }
+  return next({ ctx });
 });

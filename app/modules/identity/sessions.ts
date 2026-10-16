@@ -59,6 +59,14 @@ export function buildSessionCookie(token: string, opts: SessionCookieOptions): s
   return parts.join("; ");
 }
 
+/**
+ * PURA: cabecera `Set-Cookie` que elimina la cookie de sesión (US-02,
+ * logout): valor vacío + `Max-Age=0`, mismos flags que la cookie original.
+ */
+export function clearSessionCookie(secure: boolean): string {
+  return buildSessionCookie("", { maxAgeSec: 0, secure });
+}
+
 /** PURA: parsea una cabecera `Cookie` a un mapa nombre→valor. */
 export function parseCookieHeader(header: string | null): Record<string, string> {
   const out: Record<string, string> = {};

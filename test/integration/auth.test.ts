@@ -10,7 +10,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { createPrisma, integrationDbUrl } from "./helpers";
+import { CapturingEmailSender, createPrisma, integrationDbUrl } from "./helpers";
 
 // Antes de importar los módulos de la app (sus singletons leen env al cargar).
 process.env.DATABASE_URL = integrationDbUrl();
@@ -37,17 +37,22 @@ const RATE_CFG = {
 describe("US-01 · registro y login (PostgreSQL real)", () => {
   let prisma: ReturnType<typeof createPrisma>;
   let store: InstanceType<typeof InMemoryRateLimitStore>;
+  let emailSender: CapturingEmailSender;
   let authRouter: ReturnType<typeof createAuthRouter>;
 
   beforeAll(() => {
     prisma = createPrisma();
     store = new InMemoryRateLimitStore();
+    emailSender = new CapturingEmailSender();
     authRouter = createAuthRouter({
       prisma,
       rateLimit: store,
       sessionTtlSec: SESSION_TTL_SEC,
       secureCookie: true,
       rateLimitCfg: RATE_CFG,
+      emailSender,
+      appUrl: "http://localhost:3000",
+      resetCfg: { tokenTtlSec: 3600, maxPerWindow: 5, windowSec: 300 },
     });
   });
 

@@ -2,7 +2,7 @@
 
 > Este repositorio es **Fantasy MotoGP Independiente**: un juego de fantasy de MotoGP propio (sin licencias ni APIs oficiales), multi-liga, con una economía diseñada para ser justa y transparente.
 >
-> **Estado actual:** **Fase 0 cerrada**; **Fase 1 en curso** — US-01 (registro/login) + T-20 (cabeceras de seguridad/CORS) en producción; pendiente US-02…US-08. `docs/` sigue siendo la fuente de verdad de las reglas. `app/` contiene el monolito (Next.js) con los módulos puros `economy`/`scoring`, el módulo `identity` y la UI de registro/login. El estado del código, archivo a archivo, está en `docs/architecture/estado-actual.md`.
+> **Estado actual:** **Fase 0 cerrada**; **Fase 1 en curso** — US-01 (registro/login) + T-20 (cabeceras de seguridad/CORS) en producción; US-02 (cierre de sesión + recuperación de contraseña) + T-08 (RBAC + autorización por recurso) implementados, pendientes de deploy; pendiente US-03, T-09, US-04…US-08. `docs/` sigue siendo la fuente de verdad de las reglas. `app/` contiene el monolito (Next.js) con los módulos puros `economy`/`scoring`, el módulo `identity` y la UI de registro/login/recuperación. El estado del código, archivo a archivo, está en `docs/architecture/estado-actual.md`.
 
 ## 1. Fuentes de verdad
 
@@ -35,6 +35,7 @@ app/
     validation/    # esquemas Zod compartidos cliente/servidor
     types/         # tipos TS compartidos
     config/        # parámetros por temporada (B, carry, tablas)
+    components/    # primitivas de UI (Button, Field, Alert, …)
 ```
 
 **Reglas de dependencias (no negociables):**
@@ -42,6 +43,7 @@ app/
 - `economy` y `scoring` son **módulos puros**: sin I/O (ni fs, ni BD, ni http, ni reloj), sin imports de otros módulos salvo `shared/types`. Solo reciben datos y devuelven resultados. Esto es lo que los hace testables como fórmulas y es el corazón del producto.
 - Dirección de dependencias: `UI → tRPC → modules → shared`. `jobs/` orquesta módulos; nunca al revés.
 - El check de dependencias (backlog T-03) debe fallar el build si un módulo puro importa I/O.
+- **UI:** reutilizar las primitivas de `shared/components/` cuando el caso encaja; extraer un componente nuevo en la 3ª aparición del patrón (o antes si encapsula comportamiento real), migrando **todas** las apariciones existentes en la misma unidad de trabajo.
 
 ## 4. Invariantes del sistema (garantizadas, no se rompen)
 
@@ -135,26 +137,26 @@ De `docs/architecture/security.md`:
 
 ## 12. Mapa de documentos
 
-| Documento                            | Qué responde                                                                                                                 |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| `README.md`                          | Índice y resumen ejecutivo                                                                                                   |
-| `CONTRIBUTING.md`                    | Cómo colaborar: quickstart local, comandos, convenciones, Definition of Done, cómo tomar trabajo                             |
-| `docs/product/vision.md`             | Propuesta de valor, diferenciación, métricas, riesgos                                                                        |
-| `docs/product/game-rules.md`         | Reglas de juego (composición, presupuesto, precios, transfers, lockout, invariantes)                                         |
-| `docs/product/economy.md`            | **Documento central:** opciones A–E, modelo recomendado, fórmula de precios, simulaciones                                    |
-| `docs/product/economia-guia.md`      | Guía accesible de `economy.md`: glosario, opciones en lenguaje claro, motor de precios paso a paso, GP completo, calibración |
-| `docs/product/por-que-opcion-e.md`   | Explicación no técnica: por qué la opción E supera al modelo oficial (ejemplos con datos reales 2026)                        |
-| `docs/product/scoring.md`            | Tablas de puntuación versionadas, ejemplos, casos límite, recálculo                                                          |
-| `docs/product/leagues.md`            | Tipos de liga, invitaciones, permisos, rankings, privacidad, anti-abuso                                                      |
-| `docs/product/user-flows.md`         | Flujos de usuario y pantallas (~18)                                                                                          |
-| `docs/product/mvp.md`                | Alcance del MVP, diferimientos, criterios de aceptación                                                                      |
-| `docs/architecture/estado-actual.md` | **El código que existe hoy:** estado por fase, mapa del repo, módulos, invariantes, puertas de calidad                       |
-| `docs/architecture/overview.md`      | Stack, módulos, flujo de datos, transacciones, ADRs                                                                          |
-| `docs/architecture/data-model.md`    | Esquema relacional, constraints, fuente de verdad vs derivado                                                                |
-| `docs/architecture/integrations.md`  | Contrato `ResultsSource`, fuentes evaluadas, pipeline de importación                                                         |
-| `docs/architecture/security.md`      | Amenazas y controles, GDPR, backups                                                                                          |
-| `docs/architecture/testing.md`       | Capas de testing, casos límite, puertas de CI                                                                                |
-| `docs/operations/deploy.md`          | Runbook de despliegue en TrueNAS (modelo pull, Portainer, NPM, backups, rollback)                                            |
-| `docs/decisions/0001…0008`           | ADRs: stack, economía, puntuación, fuente de datos, ligas, monolito, pipeline, cabeceras/CORS                                |
-| `docs/roadmap.md`                    | Fases 0–5 + post-MVP, camino crítico                                                                                         |
-| `docs/backlog.md`                    | Epics, historias, tareas, dependencias, prioridades, criterios de aceptación                                                 |
+| Documento                            | Qué responde                                                                                                                         |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `README.md`                          | Índice y resumen ejecutivo                                                                                                           |
+| `CONTRIBUTING.md`                    | Cómo colaborar: quickstart local, comandos, convenciones, Definition of Done, cómo tomar trabajo                                     |
+| `docs/product/vision.md`             | Propuesta de valor, diferenciación, métricas, riesgos                                                                                |
+| `docs/product/game-rules.md`         | Reglas de juego (composición, presupuesto, precios, transfers, lockout, invariantes)                                                 |
+| `docs/product/economy.md`            | **Documento central:** opciones A–E, modelo recomendado, fórmula de precios, simulaciones                                            |
+| `docs/product/economia-guia.md`      | Guía accesible de `economy.md`: glosario, opciones en lenguaje claro, motor de precios paso a paso, GP completo, calibración         |
+| `docs/product/por-que-opcion-e.md`   | Explicación no técnica: por qué la opción E supera al modelo oficial (ejemplos con datos reales 2026)                                |
+| `docs/product/scoring.md`            | Tablas de puntuación versionadas, ejemplos, casos límite, recálculo                                                                  |
+| `docs/product/leagues.md`            | Tipos de liga, invitaciones, permisos, rankings, privacidad, anti-abuso                                                              |
+| `docs/product/user-flows.md`         | Flujos de usuario y pantallas (~18)                                                                                                  |
+| `docs/product/mvp.md`                | Alcance del MVP, diferimientos, criterios de aceptación                                                                              |
+| `docs/architecture/estado-actual.md` | **El código que existe hoy:** estado por fase, mapa del repo, módulos, invariantes, puertas de calidad                               |
+| `docs/architecture/overview.md`      | Stack, módulos, flujo de datos, transacciones, ADRs                                                                                  |
+| `docs/architecture/data-model.md`    | Esquema relacional, constraints, fuente de verdad vs derivado                                                                        |
+| `docs/architecture/integrations.md`  | Contrato `ResultsSource`, fuentes evaluadas, pipeline de importación                                                                 |
+| `docs/architecture/security.md`      | Amenazas y controles, GDPR, backups                                                                                                  |
+| `docs/architecture/testing.md`       | Capas de testing, casos límite, puertas de CI                                                                                        |
+| `docs/operations/deploy.md`          | Runbook de despliegue en TrueNAS (modelo pull, Portainer, NPM, backups, rollback)                                                    |
+| `docs/decisions/0001…0010`           | ADRs: stack, economía, puntuación, fuente de datos, ligas, monolito, pipeline, cabeceras/CORS, email provisional, bootstrap de admin |
+| `docs/roadmap.md`                    | Fases 0–5 + post-MVP, camino crítico                                                                                                 |
+| `docs/backlog.md`                    | Epics, historias, tareas, dependencias, prioridades, criterios de aceptación                                                         |

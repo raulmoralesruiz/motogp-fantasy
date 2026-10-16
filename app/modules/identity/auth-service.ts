@@ -12,8 +12,10 @@
 import { TRPCError } from "@trpc/server";
 import type { PrismaClient } from "@prisma/client";
 
+import type { EmailSender } from "./email";
 import { getDummyHash, hashPassword, verifyPassword } from "./password";
-import { createSession, toPublicUser, type PublicUser } from "./sessions";
+import { evaluateResetToken, generateResetToken, hashResetToken } from "./reset-tokens";
+import { createSession, revokeSession, toPublicUser, type PublicUser } from "./sessions";
 import {
   evaluateLoginAttempt,
   shouldLockAccount,
@@ -24,11 +26,27 @@ import {
 export interface AuthServiceConfig extends RateLimitConfig {
   /** Vigencia de la sesión en segundos. */
   sessionTtlSec: number;
+  /** Vigencia del token de recuperación en segundos (US-02, default 1 h). */
+  resetTokenTtlSec: number;
+  /** Máx. solicitudes de recuperación por IP por ventana (US-02). */
+  resetMaxPerWindow: number;
+  /** Ventana del rate limit de recuperación en segundos (US-02). */
+  resetWindowSec: number;
+  /** URL pública de la app para montar el link de recuperación (US-02). */
+  appUrl: string;
+  /**
+   * Bootstrap de admin (T-08, ADR-0010): el registro con este email
+   * (minúsculas) recibe `global_admin` en la misma transacción.
+   * Vacío/ausente → nadie lo recibe.
+   */
+  bootstrapAdminEmail?: string;
 }
 
 export interface AuthServiceDeps {
   prisma: PrismaClient;
   rateLimit: RateLimitStore;
+  /** Enviador de emails (US-02; provisional: `logEmailSender`, ADR-0009). */
+  emailSender: EmailSender;
   cfg: AuthServiceConfig;
 }
 
@@ -76,13 +94,15 @@ export class AuthService {
     const passwordHash = await hashPassword(input.password);
 
     const user = await prisma.$transaction(async (tx) => {
-      // El rol `user` es idempotente (la tabla nace vacía; no hay seed).
+      // El rol `user` está sembrado por la migración seed_user_role (antes,
+      // con la tabla vacía, dos registros concurrentes competían por el
+      // primer INSERT del upsert). El upsert queda como guarda idempotente.
       const role = await tx.role.upsert({
         where: { name: "user" },
         update: {},
         create: { name: "user", description: "Usuario registrado" },
       });
-      return tx.user.create({
+      const created = await tx.user.create({
         data: {
           email: input.email,
           username: input.username,
@@ -90,6 +110,27 @@ export class AuthService {
           profile: { create: { displayName: input.username } },
           userRoles: { create: { roleId: role.id } },
         },
+        include: USER_INCLUDE,
+      });
+      // Bootstrap de admin (T-08, ADR-0010): si el email coincide con el
+      // configurado, se otorga también `global_admin` (atómico: misma
+      // transacción). El email ya viene minúsculas por el esquema Zod.
+      const bootstrap = cfg.bootstrapAdminEmail?.trim().toLowerCase();
+      if (!bootstrap || input.email !== bootstrap) return created;
+      const adminRole = await tx.role.upsert({
+        where: { name: "global_admin" },
+        update: {},
+        create: {
+          name: "global_admin",
+          description: "Administrador global (panel de admin)",
+        },
+      });
+      await tx.userRole.create({
+        data: { userId: created.id, roleId: adminRole.id },
+      });
+      // Relectura para incluir el rol nuevo en la respuesta.
+      return tx.user.findUniqueOrThrow({
+        where: { id: created.id },
         include: USER_INCLUDE,
       });
     });
@@ -161,6 +202,120 @@ export class AuthService {
       ip: meta.ip,
     });
     return { user: toPublicUser(user), sessionToken: session.token };
+  }
+
+  /**
+   * Cierre de sesión (US-02): revoca la sesión en BD (idempotente).
+   * La limpieza de la cookie la hace la capa tRPC.
+   */
+  async logout(sessionToken: string): Promise<void> {
+    await revokeSession(this.deps.prisma, sessionToken);
+  }
+
+  /**
+   * Solicita un enlace de recuperación de contraseña (US-02).
+   *
+   * - Rate limit por IP (security.md §1.6: "login y recuperación").
+   * - Anti-enumeración: la respuesta es idéntica exista o no el usuario;
+   *   solo se crea el token y se envía el email si el email está registrado.
+   * - Token aleatorio de uso único con expiración; en BD solo su SHA-256.
+   * - Cada solicitud caduca los tokens previos sin usar (gana el último).
+   */
+  async requestPasswordReset(
+    email: string,
+    meta: { ip: string },
+  ): Promise<{ message: string }> {
+    const { prisma, rateLimit, cfg, emailSender } = this.deps;
+
+    const { count, remainingSec } = await rateLimit.recordResetRequest(
+      meta.ip,
+      cfg.resetWindowSec,
+    );
+    if (count > cfg.resetMaxPerWindow && remainingSec > 0) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: `Estás enviando demasiadas peticiones. Inténtalo de nuevo en ${Math.ceil(remainingSec)} s.`,
+      });
+    }
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (user) {
+      const token = generateResetToken();
+      const now = new Date();
+      await prisma.$transaction(async (tx) => {
+        // Solo el último token pedido sigue siendo válido.
+        await tx.passwordResetToken.updateMany({
+          where: { userId: user.id, usedAt: null },
+          data: { expiresAt: new Date(0) },
+        });
+        await tx.passwordResetToken.create({
+          data: {
+            tokenHash: hashResetToken(token),
+            userId: user.id,
+            expiresAt: new Date(now.getTime() + cfg.resetTokenTtlSec * 1000),
+          },
+        });
+      });
+      const link = `${cfg.appUrl}/reestablecer-contrasena?token=${token}`;
+      await emailSender.sendResetLink({ to: email, link });
+    }
+
+    // Anti-enumeración: mismo mensaje en los dos casos.
+    return {
+      message: "Si el email está registrado, recibirás un enlace de recuperación.",
+    };
+  }
+
+  /**
+   * Restablece la contraseña con un token de recuperación (US-02).
+   *
+   * - El token debe existir, no estar usado y no estar expirado; cualquier
+   *   otro caso devuelve el mismo error genérico (no se revela cuál fue).
+   * - El reclamo del token es ATÓMICO (`updateMany` condicional): dos
+   *   llamadas concurrentes con el mismo token, solo una gana (uso único).
+   * - Tras el cambio se revocan TODAS las sesiones del usuario.
+   */
+  async resetPassword(token: string, newPassword: string): Promise<{ ok: true }> {
+    const { prisma } = this.deps;
+    const now = new Date();
+
+    const record = await prisma.passwordResetToken.findUnique({
+      where: { tokenHash: hashResetToken(token) },
+    });
+    // `!record` es redundante lógicamente (evaluateResetToken(null) →
+    // "not_found"), pero TS no estrecha a partir de la decisión pura.
+    if (!record || evaluateResetToken(record, now) !== "valid") {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "El enlace de recuperación no es válido o ha caducado.",
+      });
+    }
+
+    // El hash es caro (argon2): se calcula fuera de la transacción.
+    const passwordHash = await hashPassword(newPassword);
+    const claimed = await prisma.$transaction(async (tx) => {
+      const result = await tx.passwordResetToken.updateMany({
+        where: { id: record.id, usedAt: null },
+        data: { usedAt: now },
+      });
+      if (result.count === 0) return false;
+      await tx.user.update({
+        where: { id: record.userId },
+        data: { passwordHash },
+      });
+      await tx.session.updateMany({
+        where: { userId: record.userId, revokedAt: null },
+        data: { revokedAt: now },
+      });
+      return true;
+    });
+    if (!claimed) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "El enlace de recuperación no es válido o ha caducado.",
+      });
+    }
+    return { ok: true };
   }
 
   private lockedError(remainingSec: number): TRPCError {

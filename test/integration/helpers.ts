@@ -14,6 +14,8 @@ import type {
   WeekendEvent,
 } from "@prisma/client";
 
+import type { EmailSender } from "../../app/modules/identity";
+
 /**
  * Archivo donde el global setup registra la URL de la BD efímera
  * (Testcontainers). Los workers de test no comparten proceso con el
@@ -35,6 +37,17 @@ export function integrationDbUrl(): string {
 /** PrismaClient apuntando a la BD efímera de Testcontainers. */
 export function createPrisma(): PrismaClient {
   return new PrismaClient({ datasources: { db: { url: integrationDbUrl() } } });
+}
+
+/**
+ * `EmailSender` de captura para tests (US-02): registra los envíos en memoria
+ * sin I/O real, para inspeccionar destinatario y link.
+ */
+export class CapturingEmailSender implements EmailSender {
+  sent: { to: string; link: string }[] = [];
+  async sendResetLink(mail: { to: string; link: string }): Promise<void> {
+    this.sent.push(mail);
+  }
 }
 
 /** Mundo mínimo aislado para un test: temporada → GP → evento → 6 pilotos → constructor → equipo → usuario. */

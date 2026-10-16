@@ -34,29 +34,29 @@
 
 ## Mapa de documentos
 
-| Documento                            | Qué contiene                                                                                                                 |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| `AGENTS.md`                          | Instrucciones operativas para agentes (módulos, invariantes, versionado, puertas de calidad)                                 |
-| `CONTRIBUTING.md`                    | Cómo colaborar: quickstart local, comandos, convenciones, Definition of Done, cómo tomar trabajo del backlog                 |
-| `docs/product/vision.md`             | Propuesta de valor, diferenciación, principios, métricas, riesgos                                                            |
-| `docs/product/game-rules.md`         | Reglas de juego: composición 2+2+1+1, presupuesto, precios, transfers, lockout, invariantes                                  |
-| `docs/product/economy.md`            | **Documento central:** problema del ratchet, opciones A–E, modelo recomendado, fórmula de precios, simulaciones              |
-| `docs/product/economia-guia.md`      | Guía accesible de `economy.md`: glosario, opciones en lenguaje claro, motor de precios paso a paso, GP completo, calibración |
-| `docs/product/simulacion-2026.md`    | Comparación A/B/C/E sobre la temporada 2026 real (PulseLive): puerta T-15, trayectorias por GP, casos nombrados              |
-| `docs/product/por-que-opcion-e.md`   | Explicación no técnica: por qué la opción E supera al modelo oficial (ejemplos con datos reales 2026)                        |
-| `docs/product/scoring.md`            | Tablas de puntuación versionadas, bonos/penalizaciones, ejemplo 170.5, casos límite                                          |
-| `docs/product/leagues.md`            | Tipos de liga, invitaciones, permisos, min/máx, rankings, desempates, privacidad, anti-abuso                                 |
-| `docs/product/user-flows.md`         | Flujos de usuario y pantallas (~18), mobile-first                                                                            |
-| `docs/product/mvp.md`                | Alcance del MVP, diferimientos, criterios de aceptación                                                                      |
-| `docs/architecture/estado-actual.md` | **El código que existe hoy** (estado por fase, mapa del repo, módulos implementados, invariantes, puertas de calidad)        |
-| `docs/architecture/overview.md`      | Stack, módulos, flujo de datos, transacciones/concurrencia                                                                   |
-| `docs/architecture/data-model.md`    | Esquema relacional (PostgreSQL), constraints, fuente de verdad vs derivado                                                   |
-| `docs/architecture/integrations.md`  | Contrato `ResultsSource`, fuentes evaluadas (PulseLive/Sportradar/comunitarias/manual), pipeline                             |
-| `docs/architecture/security.md`      | Amenazas y controles, RBAC, auditoría, GDPR, backups                                                                         |
-| `docs/architecture/testing.md`       | Capas de testing (7), casos límite, ejemplos verificables, puertas de CI                                                     |
-| `docs/decisions/0001…0008`           | ADRs: stack, economía, puntuación, fuente de datos, ligas, monolito, pipeline de resultados, cabeceras de seguridad/CORS     |
-| `docs/roadmap.md`                    | Fases 0–5 + post-MVP, hitos, camino crítico                                                                                  |
-| `docs/backlog.md`                    | Epics, user stories, tareas técnicas, dependencias, prioridades, criterios de aceptación verificables                        |
+| Documento                            | Qué contiene                                                                                                                                                    |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AGENTS.md`                          | Instrucciones operativas para agentes (módulos, invariantes, versionado, puertas de calidad)                                                                    |
+| `CONTRIBUTING.md`                    | Cómo colaborar: quickstart local, comandos, convenciones, Definition of Done, cómo tomar trabajo del backlog                                                    |
+| `docs/product/vision.md`             | Propuesta de valor, diferenciación, principios, métricas, riesgos                                                                                               |
+| `docs/product/game-rules.md`         | Reglas de juego: composición 2+2+1+1, presupuesto, precios, transfers, lockout, invariantes                                                                     |
+| `docs/product/economy.md`            | **Documento central:** problema del ratchet, opciones A–E, modelo recomendado, fórmula de precios, simulaciones                                                 |
+| `docs/product/economia-guia.md`      | Guía accesible de `economy.md`: glosario, opciones en lenguaje claro, motor de precios paso a paso, GP completo, calibración                                    |
+| `docs/product/simulacion-2026.md`    | Comparación A/B/C/E sobre la temporada 2026 real (PulseLive): puerta T-15, trayectorias por GP, casos nombrados                                                 |
+| `docs/product/por-que-opcion-e.md`   | Explicación no técnica: por qué la opción E supera al modelo oficial (ejemplos con datos reales 2026)                                                           |
+| `docs/product/scoring.md`            | Tablas de puntuación versionadas, bonos/penalizaciones, ejemplo 170.5, casos límite                                                                             |
+| `docs/product/leagues.md`            | Tipos de liga, invitaciones, permisos, min/máx, rankings, desempates, privacidad, anti-abuso                                                                    |
+| `docs/product/user-flows.md`         | Flujos de usuario y pantallas (~18), mobile-first                                                                                                               |
+| `docs/product/mvp.md`                | Alcance del MVP, diferimientos, criterios de aceptación                                                                                                         |
+| `docs/architecture/estado-actual.md` | **El código que existe hoy** (estado por fase, mapa del repo, módulos implementados, invariantes, puertas de calidad)                                           |
+| `docs/architecture/overview.md`      | Stack, módulos, flujo de datos, transacciones/concurrencia                                                                                                      |
+| `docs/architecture/data-model.md`    | Esquema relacional (PostgreSQL), constraints, fuente de verdad vs derivado                                                                                      |
+| `docs/architecture/integrations.md`  | Contrato `ResultsSource`, fuentes evaluadas (PulseLive/Sportradar/comunitarias/manual), pipeline                                                                |
+| `docs/architecture/security.md`      | Amenazas y controles, RBAC, auditoría, GDPR, backups                                                                                                            |
+| `docs/architecture/testing.md`       | Capas de testing (7), casos límite, ejemplos verificables, puertas de CI                                                                                        |
+| `docs/decisions/0001…0010`           | ADRs: stack, economía, puntuación, fuente de datos, ligas, monolito, pipeline de resultados, cabeceras de seguridad/CORS, email provisional, bootstrap de admin |
+| `docs/roadmap.md`                    | Fases 0–5 + post-MVP, hitos, camino crítico                                                                                                                     |
+| `docs/backlog.md`                    | Epics, user stories, tareas técnicas, dependencias, prioridades, criterios de aceptación verificables                                                           |
 
 ## ¿Quieres colaborar?
 

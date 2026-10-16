@@ -145,8 +145,9 @@ a {
   border-radius: 6px;
 }
 
-.form button {
-  margin-top: 0.3rem;
+/* Botón primario (componente <Button> de app/shared/components). */
+.button {
+  margin-top: 0.5rem;
   padding: 0.65rem 1rem;
   font-size: 1rem;
   font-weight: 600;
@@ -157,11 +158,16 @@ a {
   cursor: pointer;
 }
 
-.form button:hover:not(:disabled) {
+.button:hover:not(:disabled) {
   background: #b30500;
 }
 
-.form button:disabled {
+.button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* Dentro de un formulario el botón va más pegado (el flex ya da gap). */
+.form .button {
+  margin-top: 0.3rem;
 }

@@ -3,9 +3,15 @@ import type { NextConfig } from "next";
 // CSP básica (T-20, ADR-0008). Next.js App Router usa scripts y estilos
 // inline (datos RSC), por lo que 'unsafe-inline' es necesario en
 // script-src/style-src. Un CSP con nonce es una mejora futura (fuera de T-20).
+//
+// En desarrollo, el runtime de Fast Refresh de Next.js (react-refresh) usa
+// eval para aplicar hot-reloads; sin 'unsafe-eval' el CSP lo bloquea y rompe
+// el JS del cliente (la UI se queda en "cargando"). En producción el build
+// no usa eval, así que el CSP se mantiene estricto (sin 'unsafe-eval').
+const isDev = process.env.NODE_ENV === "development";
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
   "connect-src 'self'",

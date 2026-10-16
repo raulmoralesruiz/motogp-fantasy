@@ -1,6 +1,6 @@
 # Arquitectura — Visión General
 
-> Estado: diseño de referencia (redactado en fase 4 de planificación, cuando el repo era verde). **El código ya existe:** para lo que está implementado hoy, ver [`estado-actual.md`](estado-actual.md). Las decisiones se documentan como ADR en `docs/decisions/` (0001…0008).
+> Estado: diseño de referencia (redactado en fase 4 de planificación, cuando el repo era verde). **El código ya existe:** para lo que está implementado hoy, ver [`estado-actual.md`](estado-actual.md). Las decisiones se documentan como ADR en `docs/decisions/` (0001…0010).
 
 ## 1. Enfoque
 

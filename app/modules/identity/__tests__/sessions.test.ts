@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildSessionCookie,
+  clearSessionCookie,
   generateSessionToken,
   parseCookieHeader,
   SESSION_COOKIE_NAME,
@@ -34,5 +35,16 @@ describe("sessions · cookie (US-01 CA)", () => {
     const t2 = generateSessionToken();
     expect(t1).toMatch(/^[0-9a-f]{64}$/);
     expect(t1).not.toBe(t2);
+  });
+});
+
+describe("sessions · logout (US-02 CA)", () => {
+  it("clearSessionCookie borra la cookie (valor vacío + Max-Age=0, mismos flags)", () => {
+    expect(clearSessionCookie(true)).toBe(
+      `${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure`,
+    );
+    expect(clearSessionCookie(false)).toBe(
+      `${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
+    );
   });
 });

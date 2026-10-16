@@ -100,3 +100,24 @@ describe("InMemoryRateLimitStore · TTL y reloj (US-01 CA)", () => {
     expect(await store.recordFailure("ana@example.com")).toBe(1);
   });
 });
+
+describe("InMemoryRateLimitStore · recuperación (US-02 CA)", () => {
+  it("recordResetRequest mantiene una ventana independiente de la de login", async () => {
+    const store = new InMemoryRateLimitStore();
+    store.setNow(0);
+    // Misma IP: los dos contadores son independientes.
+    expect((await store.recordAttempt("1.1.1.1", 60)).count).toBe(1);
+    expect((await store.recordResetRequest("1.1.1.1", 300)).count).toBe(1);
+    expect((await store.recordAttempt("1.1.1.1", 60)).count).toBe(2);
+    expect((await store.recordResetRequest("1.1.1.1", 300)).count).toBe(2);
+  });
+
+  it("recordResetRequest reinicia la ventana al expirar", async () => {
+    const store = new InMemoryRateLimitStore();
+    store.setNow(0);
+    expect((await store.recordResetRequest("1.1.1.1", 300)).count).toBe(1);
+    expect((await store.recordResetRequest("1.1.1.1", 300)).count).toBe(2);
+    store.setNow(301_000);
+    expect((await store.recordResetRequest("1.1.1.1", 300)).count).toBe(1);
+  });
+});

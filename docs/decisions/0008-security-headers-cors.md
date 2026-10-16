@@ -48,6 +48,8 @@ Hay que (a) aplicar cabeceras de seguridad estándar a todas las rutas y (b) res
 
 La CSP es básica: Next.js App Router usa scripts/estilos inline (datos RSC), por lo que `'unsafe-inline'` es necesario en `script-src`/`style-src`. Un CSP con nonce es una mejora futura (fuera de alcance de T-20, junto con rate-limiting — US-01 — y Sentry — T-14).
 
+**Nota (2026-10-16): `unsafe-eval` solo en desarrollo.** `script-src` es consciente del entorno: en `next dev` añade `'unsafe-eval'` porque el runtime de Fast Refresh de Next.js (`react-refresh`) usa `eval` para aplicar hot-reloads; sin él, el CSP bloquea el `eval` y el `EvalError` resultante rompe el JS del cliente (la UI se queda en "cargando" y no dispara peticiones tRPC). En producción el build no usa `eval`, por lo que el CSP se mantiene estricto (sin `'unsafe-eval'`; la tabla de arriba es el valor de producción). Es un refinement de la decisión —el CSP de producción no cambia—, no una reversión.
+
 ## Impacto técnico
 
 - `next.config.ts`: `headers()` con las 6 cabeceras para `/(.*)`.

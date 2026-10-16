@@ -1,12 +1,26 @@
 "use client";
 
+import { getQueryKey } from "@trpc/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
+import { Button } from "@/shared/components";
 import { trpc } from "@/trpc/client";
 
 export default function HomePage() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const health = trpc.health.check.useQuery();
   const me = trpc.auth.me.useQuery();
+  const logout = trpc.auth.logout.useMutation({
+    onSuccess: () => {
+      // Al cerrar sesión se limpia el caché cliente de `me` (staleTime de
+      // TanStack) para que la UI no siga mostrando la sesión anterior.
+      queryClient.removeQueries({ queryKey: getQueryKey(trpc.auth.me) });
+      router.refresh();
+    },
+  });
 
   return (
     <main>
@@ -54,12 +68,21 @@ export default function HomePage() {
           <Link href="/registro">crea una cuenta</Link>.
         </p>
       ) : (
-        <p>
-          Sesión activa: <strong>{me.data.username}</strong> ({me.data.email})
-          {me.data.roles.length > 0 && (
-            <span className="muted"> — roles: {me.data.roles.join(", ")}</span>
-          )}
-        </p>
+        <div>
+          <p>
+            Sesión activa: <strong>{me.data.username}</strong> ({me.data.email})
+            {me.data.roles.length > 0 && (
+              <span className="muted"> — roles: {me.data.roles.join(", ")}</span>
+            )}
+          </p>
+          <Button
+            type="button"
+            onClick={() => logout.mutate()}
+            disabled={logout.isPending}
+          >
+            {logout.isPending ? "Cerrando sesión…" : "Cerrar sesión"}
+          </Button>
+        </div>
       )}
     </main>
   );

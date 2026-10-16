@@ -7,8 +7,9 @@
  *   login correcto o al bloquear).
  * - Bloqueo de cuenta: clave con TTL.
  *
- * Nombres de clave con prefijo `rl:login:*`; otros endpoints (unión por
- * código de liga, cambios de lineup, …) usarán su propio prefijo.
+ * Nombres de clave con prefijo `rl:login:*` (login) y `rl:reset:*`
+ * (recuperación de contraseña, US-02); otros endpoints (unión por código de
+ * liga, cambios de lineup, …) usarán su propio prefijo.
  */
 import type { RateLimitStore } from "@/modules/identity";
 
@@ -31,6 +32,9 @@ function failuresKey(account: string): string {
 }
 function lockKey(account: string): string {
   return `rl:login:lock:${account}`;
+}
+function resetWindowKey(ip: string): string {
+  return `rl:reset:ip:${ip}`;
 }
 
 export const redisRateLimitStore: RateLimitStore = {
@@ -56,5 +60,15 @@ export const redisRateLimitStore: RateLimitStore = {
   async lockRemainingSec(account) {
     const ttl = await redis.ttl(lockKey(account));
     return Math.max(0, ttl);
+  },
+  async recordResetRequest(ip, windowSec) {
+    const count = (await redis.eval(
+      WINDOW_SCRIPT,
+      1,
+      resetWindowKey(ip),
+      String(windowSec),
+    )) as number;
+    const ttl = await redis.ttl(resetWindowKey(ip));
+    return { count, remainingSec: Math.max(0, ttl) };
   },
 };

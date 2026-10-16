@@ -3,20 +3,9 @@
 import { useRouter } from "next/navigation";
 import { type FormEvent } from "react";
 
+import { Alert, Button, Field } from "@/shared/components";
 import { trpc } from "@/trpc/client";
-
-type ZodIssueLike = { path?: (string | number)[]; message: string };
-
-/** Extrae los issues de Zod del error tRPC (si procede). */
-function zodIssues(error: unknown): ZodIssueLike[] {
-  const data = (
-    error as { data?: { zod?: ZodIssueLike[] | { issues?: ZodIssueLike[] } } } | null
-  )?.data;
-  const zod = data?.zod;
-  if (Array.isArray(zod)) return zod;
-  if (zod && Array.isArray(zod.issues)) return zod.issues;
-  return [];
-}
+import { zodIssues } from "@/trpc/errors";
 
 export default function LoginForm() {
   const router = useRouter();
@@ -40,39 +29,27 @@ export default function LoginForm() {
 
   return (
     <form className="form" onSubmit={onSubmit} noValidate>
-      <div className="field">
-        <label htmlFor="email">Email</label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          placeholder="tu@email.com"
-          required
-        />
-        {fieldError("email") && <p className="field-error">{fieldError("email")}</p>}
-      </div>
-      <div className="field">
-        <label htmlFor="password">Contraseña</label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-        />
-        {fieldError("password") && (
-          <p className="field-error">{fieldError("password")}</p>
-        )}
-      </div>
-      {generalError && (
-        <p className="form-error" role="alert">
-          {generalError}
-        </p>
-      )}
-      <button type="submit" disabled={login.isPending}>
+      <Field
+        label="Email"
+        name="email"
+        type="email"
+        autoComplete="email"
+        placeholder="tu@email.com"
+        required
+        error={fieldError("email")}
+      />
+      <Field
+        label="Contraseña"
+        name="password"
+        type="password"
+        autoComplete="current-password"
+        required
+        error={fieldError("password")}
+      />
+      {generalError && <Alert variant="error">{generalError}</Alert>}
+      <Button type="submit" disabled={login.isPending}>
         {login.isPending ? "Iniciando sesión…" : "Iniciar sesión"}
-      </button>
+      </Button>
     </form>
   );
 }

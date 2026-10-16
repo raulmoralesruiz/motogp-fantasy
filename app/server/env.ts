@@ -15,6 +15,18 @@ const serverEnvSchema = z.object({
   AUTH_LOCKOUT_THRESHOLD: z.coerce.number().int().positive().default(5),
   AUTH_LOCKOUT_SEC: z.coerce.number().int().positive().default(900),
   SESSION_COOKIE_SECURE: z.enum(["true", "false"]).optional(),
+  // US-02 · Recuperación de contraseña (parámetros operativos, no reglas de
+  // juego: no viven en `season_rules`, AGENTS.md §1.3).
+  RESET_TOKEN_TTL_SEC: z.coerce.number().int().positive().default(3600),
+  RESET_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(5),
+  RESET_RATE_LIMIT_WINDOW_SEC: z.coerce.number().int().positive().default(300),
+  // URL pública de la app: monta el link de recuperación (US-02). En
+  // producción la fija el build (build-arg) y el contenedor.
+  NEXT_PUBLIC_APP_URL: z.string().min(1).default("http://localhost:3000"),
+  // T-08 · Bootstrap de admin (ADR-0010): el registro con este email
+  // (minúsculas) recibe `global_admin`. Vacío → nadie lo recibe. Debe
+  // fijarse antes del primer registro con ese email (BD nueva).
+  BOOTSTRAP_ADMIN_EMAIL: z.string().default(""),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

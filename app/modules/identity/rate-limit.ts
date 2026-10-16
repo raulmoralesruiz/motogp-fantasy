@@ -98,6 +98,14 @@ export interface RateLimitStore {
   lockAccount(account: string, lockoutSec: number): Promise<void>;
   /** Segundos restantes del bloqueo de la cuenta (0 si no está bloqueada). */
   lockRemainingSec(account: string): Promise<number>;
+  /**
+   * Registra una solicitud de recuperación de contraseña de la IP
+   * (ventana fija, US-02; clave independiente de la de login).
+   */
+  recordResetRequest(
+    ip: string,
+    windowSec: number,
+  ): Promise<{ count: number; remainingSec: number }>;
 }
 
 /**
@@ -107,6 +115,7 @@ export interface RateLimitStore {
 export class InMemoryRateLimitStore implements RateLimitStore {
   private nowMs = 0;
   private windows = new Map<string, { count: number; resetAtMs: number }>();
+  private resetWindows = new Map<string, { count: number; resetAtMs: number }>();
   private failures = new Map<string, number>();
   private locks = new Map<string, number>();
 
@@ -115,14 +124,16 @@ export class InMemoryRateLimitStore implements RateLimitStore {
     this.nowMs = ms;
   }
 
-  async recordAttempt(
-    ip: string,
+  /** Ventana fija compartida por `recordAttempt` y `recordResetRequest`. */
+  private recordWindow(
+    store: Map<string, { count: number; resetAtMs: number }>,
+    key: string,
     windowSec: number,
-  ): Promise<{ count: number; remainingSec: number }> {
+  ): { count: number; remainingSec: number } {
     const now = this.nowMs;
-    const current = this.windows.get(ip);
+    const current = store.get(key);
     if (!current || now >= current.resetAtMs) {
-      this.windows.set(ip, { count: 1, resetAtMs: now + windowSec * 1000 });
+      store.set(key, { count: 1, resetAtMs: now + windowSec * 1000 });
       return { count: 1, remainingSec: windowSec };
     }
     current.count += 1;
@@ -130,6 +141,20 @@ export class InMemoryRateLimitStore implements RateLimitStore {
       count: current.count,
       remainingSec: Math.ceil((current.resetAtMs - now) / 1000),
     };
+  }
+
+  async recordAttempt(
+    ip: string,
+    windowSec: number,
+  ): Promise<{ count: number; remainingSec: number }> {
+    return this.recordWindow(this.windows, ip, windowSec);
+  }
+
+  async recordResetRequest(
+    ip: string,
+    windowSec: number,
+  ): Promise<{ count: number; remainingSec: number }> {
+    return this.recordWindow(this.resetWindows, ip, windowSec);
   }
 
   async recordFailure(account: string): Promise<number> {

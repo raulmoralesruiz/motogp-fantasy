@@ -36,4 +36,11 @@ describe("T-07 · Integración contra PostgreSQL real (Testcontainers)", () => {
     expect(await prisma.season.count({ where: { name: "Temporada rollback" } })).toBe(0);
     expect(await prisma.season.count({ where: { id: season.id } })).toBe(1);
   });
+
+  it("migraciones: el rol `user` está sembrado (register() lo asume)", async () => {
+    // Migración seed_user_role: sin la siembra, dos registros concurrentes
+    // sobre BD vacía competían por el primer INSERT del upsert (race → 500).
+    const role = await prisma.role.findUnique({ where: { name: "user" } });
+    expect(role).toMatchObject({ name: "user" });
+  });
 });

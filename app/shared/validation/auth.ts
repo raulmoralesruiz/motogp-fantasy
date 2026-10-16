@@ -54,5 +54,26 @@ export const loginInputSchema = z.object({
     .max(128, "La contraseña no puede superar 128 caracteres"),
 });
 
+/** US-02 · Solicitud de recuperación: solo el email. */
+export const requestResetInputSchema = z.object({
+  email: emailSchema,
+});
+
+/**
+ * US-02 · Restablecer contraseña con el token del link.
+ * Sin validación de formato del token: cualquier valor inválido recibe el
+ * mismo error genérico del servidor (no revelar si existe o no).
+ */
+export const resetPasswordInputSchema = z.object({
+  token: z
+    .string()
+    .trim()
+    .min(1, "El enlace de recuperación no es válido")
+    .max(256, "El enlace de recuperación no es válido"),
+  password: passwordSchema,
+});
+
 export type RegisterInput = z.infer<typeof registerInputSchema>;
 export type LoginInput = z.infer<typeof loginInputSchema>;
+export type RequestResetInput = z.infer<typeof requestResetInputSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordInputSchema>;
