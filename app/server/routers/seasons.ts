@@ -160,15 +160,13 @@ export function createSeasonsRouter(deps: SeasonsRouterDeps) {
        * (preview, SIN escribir en BD). El resultado se reenvía a
        * `calendar.import`.
        */
-      fetch: adminProcedure
-        .input(fetchCalendarInputSchema)
-        .query(async ({ input }) => {
-          try {
-            return await calendarSource.fetchSeasonCalendar(input.year);
-          } catch (error) {
-            toCalendarTrpcError(error);
-          }
-        }),
+      fetch: adminProcedure.input(fetchCalendarInputSchema).query(async ({ input }) => {
+        try {
+          return await calendarSource.fetchSeasonCalendar(input.year);
+        } catch (error) {
+          toCalendarTrpcError(error);
+        }
+      }),
 
       /**
        * Importa el calendario normalizado (revalidado server-side) en una

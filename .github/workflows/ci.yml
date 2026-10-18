@@ -41,11 +41,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Tests unit + coverage gate (T-02)
+      # T-24 (ADR-0011): UN run fusionado (unit + integración + UI) con
+      # cobertura global real y gate ≥99.9% (medida 99.94%). Requiere
+      # Docker (Testcontainers, disponible en los runners de GitHub).
+      - name: Tests (unit + integración + UI) + coverage gate fusionado (T-24)
         run: npm run test:coverage
-
-      - name: Tests de integración (Testcontainers)
-        run: npm run test:integration
 
       - name: Check pure modules (T-03)
         run: npm run check:purity

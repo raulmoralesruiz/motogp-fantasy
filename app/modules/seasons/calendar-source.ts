@@ -136,10 +136,7 @@ function sortByDate<T extends { date: string | null }>(sessions: T[]): T[] {
 }
 
 /** Convierte la fecha ISO de la fuente a `Date`; `null` se conserva. */
-function toUtcDate(
-  iso: string | null,
-  context: string,
-): Date | null {
+function toUtcDate(iso: string | null, context: string): Date | null {
   if (iso === null) return null;
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) {
@@ -160,10 +157,7 @@ interface MappedWeekend {
  * Mapea las sesiones de un evento a eventos de fin de semana (reglas del
  * ADR-0012). Lanza `CalendarNormalizationError` si falta Q2 o la carrera.
  */
-function mapWeekendSessions(
-  gpName: string,
-  sessions: PulseLiveSession[],
-): MappedWeekend {
+function mapWeekendSessions(gpName: string, sessions: PulseLiveSession[]): MappedWeekend {
   const sorted = sortByDate(sessions);
   const qs = sorted.filter((s) => s.type === "Q");
   const sprints = sorted.filter((s) => s.type === "SPR");
@@ -226,8 +220,7 @@ export function normalizePulseLiveCalendar(
   const events = raw.events
     .filter((event) => event.test !== true)
     .sort(
-      (a, b) =>
-        a.date_start.localeCompare(b.date_start) || a.name.localeCompare(b.name),
+      (a, b) => a.date_start.localeCompare(b.date_start) || a.name.localeCompare(b.name),
     );
 
   if (events.length === 0) {
@@ -308,17 +301,13 @@ export class PulseLiveCalendarSource implements CalendarSource {
     );
     const season = seasons.find((candidate) => candidate.year === year);
     if (!season) {
-      throw new CalendarSourceError(
-        `La fuente no tiene temporada para el año ${year}.`,
-      );
+      throw new CalendarSourceError(`La fuente no tiene temporada para el año ${year}.`);
     }
 
     const categories = await this.getJson<PulseLiveCategory[]>(
       `${this.baseUrl}/results/categories?seasonUuid=${season.id}`,
     );
-    const category = categories.find(
-      (c) => c.legacy_id === MOTO_GP_LEGACY_CATEGORY_ID,
-    );
+    const category = categories.find((c) => c.legacy_id === MOTO_GP_LEGACY_CATEGORY_ID);
     if (!category) {
       throw new CalendarSourceError(
         "La fuente no tiene la categoría MotoGP para la temporada.",
@@ -336,10 +325,7 @@ export class PulseLiveCalendarSource implements CalendarSource {
       );
     }
 
-    return normalizePulseLiveCalendar(
-      { season, events, sessionsByEvent },
-      this.meta,
-    );
+    return normalizePulseLiveCalendar({ season, events, sessionsByEvent }, this.meta);
   }
 
   private async getJson<T>(url: string): Promise<T> {

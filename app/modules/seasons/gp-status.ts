@@ -20,12 +20,7 @@
  */
 
 /** Estados posibles de un GP (reflejo del enum `GpStatus` de Prisma). */
-export const GP_STATUSES = [
-  "scheduled",
-  "locked",
-  "finished",
-  "cancelled",
-] as const;
+export const GP_STATUSES = ["scheduled", "locked", "finished", "cancelled"] as const;
 
 export type GpStatusValue = (typeof GP_STATUSES)[number];
 

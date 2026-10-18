@@ -7,7 +7,9 @@
 import { describe, expect, it } from "vitest";
 
 import { PROVISIONAL_SEASON_RULES } from "../../config/season-rules.js";
+import * as validationBarrel from "../index.js";
 import { seasonRulesSchema } from "../season-rules.js";
+import { normalizedSeasonCalendarSchema } from "../seasons.js";
 
 /** Devuelve el mensaje de la primera issue si el payload no parsea. */
 function firstMessage(payload: unknown): string | undefined {
@@ -126,5 +128,14 @@ describe("seasonRulesSchema — payloads malformados", () => {
       league: { minMembers: 1, maxMembers: 50 },
     };
     expect(firstMessage(payload)).toContain("al menos 2 miembros");
+  });
+});
+
+describe("barrel (validation/index)", () => {
+  it("re-exporta season-rules y seasons", () => {
+    expect(validationBarrel.seasonRulesSchema).toBe(seasonRulesSchema);
+    expect(validationBarrel.normalizedSeasonCalendarSchema).toBe(
+      normalizedSeasonCalendarSchema,
+    );
   });
 });

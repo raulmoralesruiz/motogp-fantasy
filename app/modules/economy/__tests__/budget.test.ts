@@ -85,3 +85,11 @@ describe("presupuestoC (dinámico con límites)", () => {
     ).toBeCloseTo(110);
   });
 });
+
+describe("presupuesto (dispatch por opción)", () => {
+  it("opción C: desviación +50% → 1.1B", () => {
+    expect(
+      presupuesto("C", params, { ...ctxBase, puntosJugador: 150, mediaPuntos: 100 }),
+    ).toBeCloseTo(110);
+  });
+});

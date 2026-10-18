@@ -62,16 +62,13 @@ export default function CalendarImportForm({
 
   const issues = importCalendar.isError ? zodIssues(importCalendar.error) : [];
   const generalError =
-    importCalendar.isError && issues.length === 0
-      ? importCalendar.error.message
-      : null;
+    importCalendar.isError && issues.length === 0 ? importCalendar.error.message : null;
 
   return (
     <div className="form">
       <p className="muted">
-        Importa el calendario de una temporada desde PulseLive (ADR-0012).
-        El paso 1 solo lee (preview); el paso 2 crea los GPs y salta las
-        rondas ya existentes.
+        Importa el calendario de una temporada desde PulseLive (ADR-0012). El paso 1 solo
+        lee (preview); el paso 2 crea los GPs y salta las rondas ya existentes.
       </p>
 
       <form onSubmit={onFetch} noValidate>

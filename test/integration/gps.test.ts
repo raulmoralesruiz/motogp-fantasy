@@ -409,12 +409,12 @@ describe("US-05 · Circuitos, GPs y calendario (PostgreSQL real)", () => {
 
   it("addWeekendEvent duplicado → CONFLICT; GP inexistente → NOT_FOUND", async () => {
     const { seasons } = await callerFor(ADMIN_IP, adminToken);
-    await expect(seasons.gps.addEvent({ gpId: gp2Id, type: "race" })).rejects.toMatchObject(
-      { code: "CONFLICT" },
-    );
-    await expect(seasons.gps.addEvent({ gpId: randomUUID(), type: "q1" })).rejects.toMatchObject(
-      { code: "NOT_FOUND" },
-    );
+    await expect(
+      seasons.gps.addEvent({ gpId: gp2Id, type: "race" }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(
+      seasons.gps.addEvent({ gpId: randomUUID(), type: "q1" }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 
   // ── Estado del GP (transiciones) ──────────────────────────────────────────
@@ -443,16 +443,16 @@ describe("US-05 · Circuitos, GPs y calendario (PostgreSQL real)", () => {
 
   it("transición que salta estados (scheduled → finished) → BAD_REQUEST", async () => {
     const { seasons } = await callerFor(ADMIN_IP, adminToken);
-    await expect(seasons.gps.updateStatus({ gpId: gp2Id, status: "finished" })).rejects.toMatchObject(
-      { code: "BAD_REQUEST", message: /bloqueado/ },
-    );
+    await expect(
+      seasons.gps.updateStatus({ gpId: gp2Id, status: "finished" }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST", message: /bloqueado/ });
   });
 
   it("estado terminal: finished no admite cambios (BAD_REQUEST)", async () => {
     const { seasons } = await callerFor(ADMIN_IP, adminToken);
-    await expect(seasons.gps.updateStatus({ gpId, status: "scheduled" })).rejects.toMatchObject(
-      { code: "BAD_REQUEST", message: /terminal/ },
-    );
+    await expect(
+      seasons.gps.updateStatus({ gpId, status: "scheduled" }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST", message: /terminal/ });
   });
 
   it("mismo estado: no-op sin auditoría nueva", async () => {
@@ -522,7 +522,10 @@ describe("US-05 · Circuitos, GPs y calendario (PostgreSQL real)", () => {
   it("calendar.import crea los GPs en una transacción (auditorías completas)", async () => {
     const { seasons } = await callerFor(ADMIN_IP, adminToken);
     const calendar = await seasons.calendar.fetch({ year: 2027 });
-    const report = await seasons.calendar.import({ seasonId: calendarSeasonId, calendar });
+    const report = await seasons.calendar.import({
+      seasonId: calendarSeasonId,
+      calendar,
+    });
     expect(report).toMatchObject({
       seasonId: calendarSeasonId,
       year: 2027,
@@ -574,13 +577,19 @@ describe("US-05 · Circuitos, GPs y calendario (PostgreSQL real)", () => {
       where: { action: "gp.created", entityId: { in: gps.map((g) => g.id) } },
     });
     expect(gpAudit).toHaveLength(3);
-    expect(gpAudit[0]?.afterData).toMatchObject({ source: "fake", seasonRef: "fake-season-2027" });
+    expect(gpAudit[0]?.afterData).toMatchObject({
+      source: "fake",
+      seasonRef: "fake-season-2027",
+    });
   });
 
   it("re-importar el mismo calendario salta todas las rondas (informe, no error)", async () => {
     const { seasons } = await callerFor(ADMIN_IP, adminToken);
     const calendar = await seasons.calendar.fetch({ year: 2027 });
-    const report = await seasons.calendar.import({ seasonId: calendarSeasonId, calendar });
+    const report = await seasons.calendar.import({
+      seasonId: calendarSeasonId,
+      calendar,
+    });
     expect(report.created).toBe(0);
     expect(report.skipped.map((s) => s.round)).toEqual([1, 2, 3]);
     expect(report.skipped.every((s) => s.reason.length > 0)).toBe(true);

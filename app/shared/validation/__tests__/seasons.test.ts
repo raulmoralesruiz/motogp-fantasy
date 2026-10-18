@@ -169,9 +169,9 @@ describe("createCircuitInputSchema (US-05)", () => {
     expect(
       createCircuitInputSchema.safeParse({ name: "", country: "España" }).success,
     ).toBe(false);
-    expect(
-      createCircuitInputSchema.safeParse({ name: "C", country: "" }).success,
-    ).toBe(false);
+    expect(createCircuitInputSchema.safeParse({ name: "C", country: "" }).success).toBe(
+      false,
+    );
     expect(
       createCircuitInputSchema.safeParse({
         name: "x".repeat(161),
@@ -193,10 +193,7 @@ describe("createGpInputSchema (US-05)", () => {
   it("acepta Q2 + carrera (mínimo obligatorio)", () => {
     const result = createGpInputSchema.safeParse({
       ...base,
-      events: [
-        { type: "q2", startTime: "2026-04-18T12:00:00.000Z" },
-        { type: "race" },
-      ],
+      events: [{ type: "q2", startTime: "2026-04-18T12:00:00.000Z" }, { type: "race" }],
     });
     expect(result.success).toBe(true);
     if (result.success) {
@@ -231,9 +228,7 @@ describe("createGpInputSchema (US-05)", () => {
     });
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.error.issues.some((i) => i.path.join(".") === "events")).toBe(
-        true,
-      );
+      expect(result.error.issues.some((i) => i.path.join(".") === "events")).toBe(true);
     }
   });
 
@@ -248,11 +243,7 @@ describe("createGpInputSchema (US-05)", () => {
   it("rechaza tipos de evento duplicados", () => {
     const result = createGpInputSchema.safeParse({
       ...base,
-      events: [
-        { type: "q2" },
-        { type: "race" },
-        { type: "race" },
-      ],
+      events: [{ type: "q2" }, { type: "race" }, { type: "race" }],
     });
     expect(result.success).toBe(false);
   });
@@ -315,9 +306,9 @@ describe("addWeekendEventInputSchema (US-05)", () => {
 describe("updateGpStatusInputSchema (US-05)", () => {
   it("acepta los 4 estados y rechaza el resto", () => {
     for (const status of ["scheduled", "locked", "finished", "cancelled"]) {
-      expect(
-        updateGpStatusInputSchema.safeParse({ gpId: GP_ID, status }).success,
-      ).toBe(true);
+      expect(updateGpStatusInputSchema.safeParse({ gpId: GP_ID, status }).success).toBe(
+        true,
+      );
     }
     expect(
       updateGpStatusInputSchema.safeParse({ gpId: GP_ID, status: "pending" }).success,
@@ -399,11 +390,7 @@ describe("calendarGpSchema / normalizedSeasonCalendarSchema (US-05)", () => {
     expect(
       calendarGpSchema.safeParse({
         ...gp,
-        events: [
-          { type: "q2" },
-          { type: "race" },
-          { type: "race" },
-        ],
+        events: [{ type: "q2" }, { type: "race" }, { type: "race" }],
       }).success,
     ).toBe(false);
   });

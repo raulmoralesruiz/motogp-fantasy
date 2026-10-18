@@ -340,10 +340,7 @@ export class GpService {
    * sprint son opcionales y se pueden añadir después). Atómico: evento +
    * auditoría `gp.event_added`.
    */
-  async addWeekendEvent(
-    input: AddWeekendEventInput,
-    meta: AuditMeta,
-  ): Promise<GpView> {
+  async addWeekendEvent(input: AddWeekendEventInput, meta: AuditMeta): Promise<GpView> {
     const gp = await this.deps.prisma.gp.findUnique({
       where: { id: input.gpId },
     });
@@ -395,10 +392,7 @@ export class GpService {
    * con los estados permitidos. Atómico: update + auditoría
    * `gp.status_changed` (before/after).
    */
-  async updateGpStatus(
-    input: UpdateGpStatusInput,
-    meta: AuditMeta,
-  ): Promise<GpView> {
+  async updateGpStatus(input: UpdateGpStatusInput, meta: AuditMeta): Promise<GpView> {
     const gp = await this.deps.prisma.gp.findUnique({
       where: { id: input.gpId },
       include: { circuit: true, weekendEvents: true },
@@ -448,10 +442,7 @@ export class GpService {
    * después, auditado). Atómico: update + auditoría `gp.lockout_changed`
    * (before/after).
    */
-  async updateGpLockout(
-    input: UpdateGpLockoutInput,
-    meta: AuditMeta,
-  ): Promise<GpView> {
+  async updateGpLockout(input: UpdateGpLockoutInput, meta: AuditMeta): Promise<GpView> {
     const gp = await this.deps.prisma.gp.findUnique({
       where: { id: input.gpId },
     });

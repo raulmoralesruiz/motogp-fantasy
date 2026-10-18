@@ -91,11 +91,12 @@
 
 ## 4. Cobertura y puertas de calidad (CI)
 
-- **Cobertura** (ADR-0011, 2026-10-18):
-  - **Gate unit** (`npm run test:coverage`; rápido, sin Docker): alcance = `app/modules/**` + `app/shared/**`, excluyendo los servicios con transacciones Prisma (los cubre la integración) y `shared/components` (UI, responsabilidad de e2e/RTL). Umbral global **84** (medida real 2026-10-18: 84.83%; PROVISIONAL) + `economy`/`scoring` ≥90% (líneas/enunciados/funciones).
-  - **Gate global** (T-24, antes del MVP): cobertura unit + integración **fusionada** (un solo `vitest run --coverage` con Testcontainers), objetivo **≥95%** con lista de exclusiones explícita de glue real (`prisma.ts`, `redis.ts`, `api/trpc/**/[trpc]/route.ts`). Umbral definitivo en D-08.
-- **CI (GitHub Actions):** lint + typecheck + unit + coverage + integración (Testcontainers) + build en cada PR; e2e + carga en el main/nightly.
-- **Bloqueo de merge** si falla lint/typecheck/unit/integración.
+- **Cobertura** (ADR-0011 + addendum 2026-10-19; T-24 y D-08 cerrados):
+  - **Gate fusionado (global, real)** (`npm run test:coverage`; requiere Docker): unit + integración + UI en un solo `vitest run --coverage` (global-setup de Testcontainers). Umbral **99.9%** (medida real 2026-10-19: 99.94% = 3385/3387 líneas, 479 tests). Exclusiones (justificadas en el config): `app/server/prisma.ts`, `app/server/redis.ts`, `app/api/trpc/**` (glue real) + patrones default de test. Única línea no cubierta de la app: `pricing.ts` L87-88 (guard defensivo inalcanzable por construcción).
+  - **Gate unit (rápido, local, sin Docker)** (`vitest run --config vitest.config.ts --coverage`): alcance = `app/modules/**` + `app/shared/**`, excluyendo los servicios con transacciones Prisma (los cubre la integración) y `shared/components` (UI, responsabilidad de e2e/RTL). Umbral **84** (medida real 2026-10-18: 84.83%).
+  - `economy`/`scoring` ≥90% (líneas/enunciados/funciones) en ambos gates.
+- **CI (GitHub Actions):** lint + typecheck + **tests fusionados (unit + integración + UI) con gate de cobertura global** + check de pureza + build en cada PR; e2e + carga en el main/nightly.
+- **Bloqueo de merge** si falla lint/typecheck/tests/coverage.
 - **Golden files** de reglas versionadas como parte del repo (cambios revisados).
 
 ## 5. Datos de test
@@ -106,6 +107,6 @@
 
 ## 6. Decisiones pendientes
 
-- Umbral global definitivo de cobertura: interino resuelto por ADR-0011 (gate unit 84%); el definitivo (≥95% con cobertura fusionada) se fija en T-24/D-08 antes del MVP.
+- ~~Umbral global definitivo de cobertura~~: **resuelto (2026-10-19, T-24/D-08)** — gate fusionado **99.9%** (medida 99.94% = 3385/3387 líneas); ver ADR-0011 (addendum).
 - Frecuencia del suite de carga (nightly vs por release).
 - Si se añaden property-based tests (p. ej. fast-check) para las fórmulas de economía/puntuación.

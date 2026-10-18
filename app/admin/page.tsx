@@ -108,10 +108,7 @@ export default function AdminPage() {
           <CreateCircuitForm onCreated={() => void circuits.refetch()} />
 
           <h2>GPs</h2>
-          <GpsSection
-            seasons={seasons.data ?? []}
-            circuits={circuits.data ?? []}
-          />
+          <GpsSection seasons={seasons.data ?? []} circuits={circuits.data ?? []} />
 
           <h2>Importar calendario</h2>
           <CalendarImportForm

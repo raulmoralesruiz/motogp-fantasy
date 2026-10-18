@@ -121,8 +121,8 @@ export default function GpActions({ gp, onChanged }: GpActionsProps) {
         R{gp.round} · {gp.name}
       </strong>{" "}
       — {gp.circuit.name} ({gp.circuit.country})
-      {gp.circuit.location ? `, ${gp.circuit.location}` : ""} ·{" "}
-      {formatDate(gp.date)} · estado: {GP_STATUS_LABELS[gp.status]}
+      {gp.circuit.location ? `, ${gp.circuit.location}` : ""} · {formatDate(gp.date)} ·
+      estado: {GP_STATUS_LABELS[gp.status]}
       {gp.lockoutAt ? ` · lockout: ${formatDateTime(gp.lockoutAt)}` : ""}
       <ul>
         {gp.events.map((event) => (
@@ -132,11 +132,9 @@ export default function GpActions({ gp, onChanged }: GpActionsProps) {
           </li>
         ))}
       </ul>
-
       {statusError && <Alert variant="error">{statusError}</Alert>}
       {lockoutError && <Alert variant="error">{lockoutError}</Alert>}
       {addEventError && <Alert variant="error">{addEventError}</Alert>}
-
       <div className="field">
         <label htmlFor={`status-${gp.id}`}>Cambiar estado</label>
         {allowed.length === 0 ? (
@@ -161,7 +159,6 @@ export default function GpActions({ gp, onChanged }: GpActionsProps) {
           </form>
         )}
       </div>
-
       <div className="field">
         <label htmlFor={`lockout-${gp.id}`}>Lockout</label>
         <input
@@ -192,7 +189,6 @@ export default function GpActions({ gp, onChanged }: GpActionsProps) {
           </Button>
         )}
       </div>
-
       {missingEvents.length > 0 && (
         <div className="field">
           <label htmlFor={`event-${gp.id}`}>Añadir evento que falta</label>

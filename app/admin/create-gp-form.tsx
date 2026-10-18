@@ -36,7 +36,11 @@ interface EventState {
  * `gps.addEvent`); `lockoutAt` opcional y editable después (auditado).
  * Fallback de la import de calendario (ADR-0012).
  */
-export default function CreateGpForm({ seasonId, circuits, onCreated }: CreateGpFormProps) {
+export default function CreateGpForm({
+  seasonId,
+  circuits,
+  onCreated,
+}: CreateGpFormProps) {
   const create = trpc.seasons.gps.create.useMutation({ onSuccess: onCreated });
   const [circuitId, setCircuitId] = useState("");
   const [lockoutAt, setLockoutAt] = useState("");
@@ -77,7 +81,8 @@ export default function CreateGpForm({ seasonId, circuits, onCreated }: CreateGp
   const issues = create.isError ? zodIssues(create.error) : [];
   const fieldError = (name: string) =>
     issues.find((issue) => issue.path?.[0] === name)?.message;
-  const eventsError = issues.find((issue) => issue.path?.[0] === "events")?.message ?? null;
+  const eventsError =
+    issues.find((issue) => issue.path?.[0] === "events")?.message ?? null;
   const generalError =
     create.isError && issues.length === 0 ? create.error.message : null;
 

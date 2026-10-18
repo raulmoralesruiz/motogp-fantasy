@@ -20,10 +20,7 @@ interface GpsSectionProps {
  */
 export default function GpsSection({ seasons, circuits }: GpsSectionProps) {
   const [seasonId, setSeasonId] = useState("");
-  const gps = trpc.seasons.gps.list.useQuery(
-    { seasonId },
-    { enabled: seasonId !== "" },
-  );
+  const gps = trpc.seasons.gps.list.useQuery({ seasonId }, { enabled: seasonId !== "" });
 
   return (
     <section>
@@ -43,18 +40,14 @@ export default function GpsSection({ seasons, circuits }: GpsSectionProps) {
         </select>
       </div>
 
-      {seasonId === "" && (
-        <p className="muted">Elige una temporada para ver sus GPs.</p>
-      )}
+      {seasonId === "" && <p className="muted">Elige una temporada para ver sus GPs.</p>}
 
       {seasonId !== "" && (
         <>
           {gps.isPending ? (
             <p className="muted">Consultando…</p>
           ) : gps.isError ? (
-            <p className="bad">
-              No se pudieron cargar los GPs: {gps.error.message}
-            </p>
+            <p className="bad">No se pudieron cargar los GPs: {gps.error.message}</p>
           ) : gps.data.length === 0 ? (
             <p className="muted">Esta temporada aún no tiene GPs.</p>
           ) : (

@@ -33,22 +33,23 @@ Opcional: `npm run seed:fiction` carga el dataset ficticio canónico (economy.md
 
 ## Comandos
 
-| Comando                                   | Propósito                                                                 |
-| ----------------------------------------- | ------------------------------------------------------------------------- |
-| `npm run dev`                             | Desarrollo (app + API) en `http://localhost:3000`.                        |
-| `npm run build`                           | Build de producción (ejecuta antes el check de pureza).                   |
-| `npm run start`                           | Sirve el build de producción.                                             |
-| `npm run lint` / `npm run lint:fix`       | ESLint.                                                                   |
-| `npm run typecheck`                       | `tsc --noEmit`.                                                           |
-| `npm run format` / `npm run format:check` | Prettier (formato; la Definition of Done exige `format:check` en verde).  |
-| `npm run test`                            | Unit (Vitest). No requiere Docker.                                        |
-| `npm run test:coverage`                   | Unit con cobertura (aplica las puertas de cobertura).                     |
-| `npm run test:integration`                | Integración (Testcontainers, PostgreSQL real). Requiere Docker.           |
-| `npm run check:purity`                    | Falla si `economy`/`scoring` violan su pureza (también corre en `build`). |
-| `npm run db:up` / `npm run db:down`       | Arranca/para PostgreSQL + Redis locales.                                  |
-| `npm run db:migrate`                      | Aplica migraciones de Prisma (`prisma migrate dev`).                      |
-| `npm run seed:fiction`                    | Carga el dataset ficticio en la BD local.                                 |
-| `npm run simulate` / `simulate:fiction`   | Re-ejecuta la simulación económica (economy.md §7).                       |
+| Comando                                   | Propósito                                                                                                                       |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`                             | Desarrollo (app + API) en `http://localhost:3000`.                                                                              |
+| `npm run build`                           | Build de producción (ejecuta antes el check de pureza).                                                                         |
+| `npm run start`                           | Sirve el build de producción.                                                                                                   |
+| `npm run lint` / `npm run lint:fix`       | ESLint.                                                                                                                         |
+| `npm run typecheck`                       | `tsc --noEmit`.                                                                                                                 |
+| `npm run format` / `npm run format:check` | Prettier (formato; la Definition of Done exige `format:check` en verde).                                                        |
+| `npm run test`                            | Unit (Vitest). No requiere Docker.                                                                                              |
+| `npm run test:ui`                         | UI (React Testing Library, jsdom). No requiere Docker.                                                                          |
+| `npm run test:coverage`                   | **Run fusionado** unit + integración + UI con gate de cobertura global (99.9%, T-24). Requiere Docker; es el gate que corre CI. |
+| `npm run test:integration`                | Integración (Testcontainers, PostgreSQL real). Requiere Docker.                                                                 |
+| `npm run check:purity`                    | Falla si `economy`/`scoring` violan su pureza (también corre en `build`).                                                       |
+| `npm run db:up` / `npm run db:down`       | Arranca/para PostgreSQL + Redis locales.                                                                                        |
+| `npm run db:migrate`                      | Aplica migraciones de Prisma (`prisma migrate dev`).                                                                            |
+| `npm run seed:fiction`                    | Carga el dataset ficticio en la BD local.                                                                                       |
+| `npm run simulate` / `simulate:fiction`   | Re-ejecuta la simulación económica (economy.md §7).                                                                             |
 
 ## Tests
 

@@ -2,7 +2,7 @@
 
 > Este repositorio es **Fantasy MotoGP Independiente**: un juego de fantasy de MotoGP propio (sin licencias ni APIs oficiales), multi-liga, con una economía diseñada para ser justa y transparente.
 >
-> **Estado actual:** **Fase 0 cerrada**; **Fase 1 en curso** — US-01 (registro/login), T-20 (cabeceras de seguridad/CORS), US-02 (cierre de sesión + recuperación de contraseña), T-08 (RBAC + autorización por recurso), T-09 (auditoría append-only) y US-04 (temporadas + `season_rules` versionado, panel admin) en producción (imagen `2a2d497`, 2026-10-17); **US-05** (GPs, circuitos, eventos + import de calendario PulseLive en 2 pasos, ADR-0012) implementado en el árbol de trabajo (2026-10-18, pendiente de commit y deploy); pendiente US-03, US-06…US-08. `docs/` sigue siendo la fuente de verdad de las reglas. `app/` contiene el monolito (Next.js) con los módulos puros `economy`/`scoring`, los módulos `identity` y `seasons` y la UI de registro/login/recuperación + panel admin. El estado del código, archivo a archivo, está en `docs/architecture/estado-actual.md`.
+> **Estado actual:** **Fase 0 cerrada**; **Fase 1 en curso** — US-01 (registro/login), T-20 (cabeceras de seguridad/CORS), US-02 (cierre de sesión + recuperación de contraseña), T-08 (RBAC + autorización por recurso), T-09 (auditoría append-only) y US-04 (temporadas + `season_rules` versionado, panel admin) en producción (imagen `2a2d497`, 2026-10-17); **US-05** (GPs, circuitos, eventos + import de calendario PulseLive en 2 pasos, ADR-0012) implementado en el árbol de trabajo (2026-10-18, pendiente de commit y deploy); **T-24** (cobertura global fusionada 99.9%, ADR-0011 addendum) implementado en el árbol de trabajo (2026-10-19); pendiente US-03, US-06…US-08. `docs/` sigue siendo la fuente de verdad de las reglas. `app/` contiene el monolito (Next.js) con los módulos puros `economy`/`scoring`, los módulos `identity` y `seasons` y la UI de registro/login/recuperación + panel admin. El estado del código, archivo a archivo, está en `docs/architecture/estado-actual.md`.
 
 ## 1. Fuentes de verdad
 
@@ -79,7 +79,7 @@ De `docs/architecture/testing.md`:
 
 - **CI (cada PR, bloquea el merge):** lint + typecheck + unit + integración (Testcontainers, PostgreSQL real) + build.
 - **Nightly/main:** e2e (Playwright) + carga.
-- **Cobertura mínima:** 90% en `economy` y `scoring`; global PROVISIONAL (D-08, ADR-0011): gate unit delimitado a `app/modules/**` + `app/shared/**` (84%) ahora; objetivo final ≥95% con cobertura unit+integración fusionada (T-24, antes del MVP).
+- **Cobertura mínima:** 90% en `economy` y `scoring`; global: **gate fusionado (unit + integración + UI) 99.9%** (`npm run test:coverage`, requiere Docker; medida 99.94% = 3385/3387 líneas, T-24 cerrado 2026-10-19, ADR-0011 addendum); gate unit 84% (rápido local, sin Docker).
 - **Golden files** por versión de reglas: entradas/salidas conocidas en el repo; cambiar una regla exige actualizar el golden de forma **explícita y revisada**.
 - Los ejemplos verificables de referencia (deben pasar siempre):
   - `presupuesto(B=100, t=0.25, cmax=8, sin_usar=8) = 102`; `sin_usar=40 → 108` (tope).
@@ -112,17 +112,19 @@ De `docs/architecture/security.md`:
 
 ## 10. Comandos (convención prevista — se definen en Fase 0, T-01)
 
-| Comando                              | Propósito                                                                            |
-| ------------------------------------ | ------------------------------------------------------------------------------------ |
-| `npm run dev`                        | Desarrollo (app + API)                                                               |
-| `npm run lint` / `npm run typecheck` | Calidad estática                                                                     |
-| `npm run test`                       | Unit (Vitest)                                                                        |
-| `npm run test:integration`           | Integración (Testcontainers, PG real)                                                |
-| `npm run test:e2e`                   | E2E (Playwright)                                                                     |
-| `npm run test:load`                  | Carga                                                                                |
-| `npm run build`                      | Build de producción                                                                  |
-| `npx prisma migrate dev` / `deploy`  | Migraciones                                                                          |
-| `npm run simulate`                   | Re-ejecuta la simulación económica de `economy.md` §7 (fixture del dataset ficticio) |
+| Comando                              | Propósito                                                                                            |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `npm run dev`                        | Desarrollo (app + API)                                                                               |
+| `npm run lint` / `npm run typecheck` | Calidad estática                                                                                     |
+| `npm run test`                       | Unit (Vitest, sin Docker)                                                                            |
+| `npm run test:ui`                    | UI (React Testing Library, jsdom, sin Docker)                                                        |
+| `npm run test:coverage`              | **Run fusionado** unit + integración + UI con gate de cobertura global 99.9% (T-24; requiere Docker) |
+| `npm run test:integration`           | Integración (Testcontainers, PG real)                                                                |
+| `npm run test:e2e`                   | E2E (Playwright)                                                                                     |
+| `npm run test:load`                  | Carga                                                                                                |
+| `npm run build`                      | Build de producción                                                                                  |
+| `npx prisma migrate dev` / `deploy`  | Migraciones                                                                                          |
+| `npm run simulate`                   | Re-ejecuta la simulación económica de `economy.md` §7 (fixture del dataset ficticio)                 |
 
 ## 11. Prohibiciones
 
@@ -137,26 +139,26 @@ De `docs/architecture/security.md`:
 
 ## 12. Mapa de documentos
 
-| Documento                            | Qué responde                                                                                                                         |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `README.md`                          | Índice y resumen ejecutivo                                                                                                           |
-| `CONTRIBUTING.md`                    | Cómo colaborar: quickstart local, comandos, convenciones, Definition of Done, cómo tomar trabajo                                     |
-| `docs/product/vision.md`             | Propuesta de valor, diferenciación, métricas, riesgos                                                                                |
-| `docs/product/game-rules.md`         | Reglas de juego (composición, presupuesto, precios, transfers, lockout, invariantes)                                                 |
-| `docs/product/economy.md`            | **Documento central:** opciones A–E, modelo recomendado, fórmula de precios, simulaciones                                            |
-| `docs/product/economia-guia.md`      | Guía accesible de `economy.md`: glosario, opciones en lenguaje claro, motor de precios paso a paso, GP completo, calibración         |
-| `docs/product/por-que-opcion-e.md`   | Explicación no técnica: por qué la opción E supera al modelo oficial (ejemplos con datos reales 2026)                                |
-| `docs/product/scoring.md`            | Tablas de puntuación versionadas, ejemplos, casos límite, recálculo                                                                  |
-| `docs/product/leagues.md`            | Tipos de liga, invitaciones, permisos, rankings, privacidad, anti-abuso                                                              |
-| `docs/product/user-flows.md`         | Flujos de usuario y pantallas (~18)                                                                                                  |
-| `docs/product/mvp.md`                | Alcance del MVP, diferimientos, criterios de aceptación                                                                              |
-| `docs/architecture/estado-actual.md` | **El código que existe hoy:** estado por fase, mapa del repo, módulos, invariantes, puertas de calidad                               |
-| `docs/architecture/overview.md`      | Stack, módulos, flujo de datos, transacciones, ADRs                                                                                  |
-| `docs/architecture/data-model.md`    | Esquema relacional, constraints, fuente de verdad vs derivado                                                                        |
-| `docs/architecture/integrations.md`  | Contrato `ResultsSource`, fuentes evaluadas, pipeline de importación                                                                 |
-| `docs/architecture/security.md`      | Amenazas y controles, GDPR, backups                                                                                                  |
-| `docs/architecture/testing.md`       | Capas de testing, casos límite, puertas de CI                                                                                        |
-| `docs/operations/deploy.md`          | Runbook de despliegue en TrueNAS (modelo pull, Portainer, NPM, backups, rollback)                                                    |
+| Documento                            | Qué responde                                                                                                                                                                      |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `README.md`                          | Índice y resumen ejecutivo                                                                                                                                                        |
+| `CONTRIBUTING.md`                    | Cómo colaborar: quickstart local, comandos, convenciones, Definition of Done, cómo tomar trabajo                                                                                  |
+| `docs/product/vision.md`             | Propuesta de valor, diferenciación, métricas, riesgos                                                                                                                             |
+| `docs/product/game-rules.md`         | Reglas de juego (composición, presupuesto, precios, transfers, lockout, invariantes)                                                                                              |
+| `docs/product/economy.md`            | **Documento central:** opciones A–E, modelo recomendado, fórmula de precios, simulaciones                                                                                         |
+| `docs/product/economia-guia.md`      | Guía accesible de `economy.md`: glosario, opciones en lenguaje claro, motor de precios paso a paso, GP completo, calibración                                                      |
+| `docs/product/por-que-opcion-e.md`   | Explicación no técnica: por qué la opción E supera al modelo oficial (ejemplos con datos reales 2026)                                                                             |
+| `docs/product/scoring.md`            | Tablas de puntuación versionadas, ejemplos, casos límite, recálculo                                                                                                               |
+| `docs/product/leagues.md`            | Tipos de liga, invitaciones, permisos, rankings, privacidad, anti-abuso                                                                                                           |
+| `docs/product/user-flows.md`         | Flujos de usuario y pantallas (~18)                                                                                                                                               |
+| `docs/product/mvp.md`                | Alcance del MVP, diferimientos, criterios de aceptación                                                                                                                           |
+| `docs/architecture/estado-actual.md` | **El código que existe hoy:** estado por fase, mapa del repo, módulos, invariantes, puertas de calidad                                                                            |
+| `docs/architecture/overview.md`      | Stack, módulos, flujo de datos, transacciones, ADRs                                                                                                                               |
+| `docs/architecture/data-model.md`    | Esquema relacional, constraints, fuente de verdad vs derivado                                                                                                                     |
+| `docs/architecture/integrations.md`  | Contrato `ResultsSource`, fuentes evaluadas, pipeline de importación                                                                                                              |
+| `docs/architecture/security.md`      | Amenazas y controles, GDPR, backups                                                                                                                                               |
+| `docs/architecture/testing.md`       | Capas de testing, casos límite, puertas de CI                                                                                                                                     |
+| `docs/operations/deploy.md`          | Runbook de despliegue en TrueNAS (modelo pull, Portainer, NPM, backups, rollback)                                                                                                 |
 | `docs/decisions/0001…0012`           | ADRs: stack, economía, puntuación, fuente de datos, ligas, monolito, pipeline, cabeceras/CORS, email provisional, bootstrap de admin, política de cobertura, fuente de calendario |
-| `docs/roadmap.md`                    | Fases 0–5 + post-MVP, camino crítico                                                                                                 |
-| `docs/backlog.md`                    | Epics, historias, tareas, dependencias, prioridades, criterios de aceptación                                                         |
+| `docs/roadmap.md`                    | Fases 0–5 + post-MVP, camino crítico                                                                                                                                              |
+| `docs/backlog.md`                    | Epics, historias, tareas, dependencias, prioridades, criterios de aceptación                                                                                                      |

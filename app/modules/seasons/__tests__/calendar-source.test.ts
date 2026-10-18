@@ -194,9 +194,9 @@ describe("normalizePulseLiveCalendar (US-05)", () => {
       }),
       SOURCE,
     );
-    expect(
-      calendar.gps[0]?.events.find((e) => e.type === "sprint")?.startTime,
-    ).toEqual(new Date("2026-06-06T15:30:00.000Z"));
+    expect(calendar.gps[0]?.events.find((e) => e.type === "sprint")?.startTime).toEqual(
+      new Date("2026-06-06T15:30:00.000Z"),
+    );
   });
 
   it("excluye los eventos de test (test: true)", () => {
@@ -293,9 +293,9 @@ describe("normalizePulseLiveCalendar (US-05)", () => {
   });
 
   it("sin eventos → CalendarNormalizationError", () => {
-    expect(() =>
-      normalizePulseLiveCalendar(makeRaw([], {}), SOURCE),
-    ).toThrowError(/no tiene eventos/);
+    expect(() => normalizePulseLiveCalendar(makeRaw([], {}), SOURCE)).toThrowError(
+      /no tiene eventos/,
+    );
   });
 
   it("solo eventos de test → CalendarNormalizationError", () => {
@@ -364,6 +364,28 @@ describe("normalizePulseLiveCalendar (US-05)", () => {
           [event.id]: [
             makeSession("Q", "no-es-una-fecha"),
             makeSession("RAC", "2026-09-13T13:00:00+00:00"),
+          ],
+        }),
+        SOURCE,
+      ),
+    ).toThrowError(/fecha inválida/);
+  });
+
+  it("date_end inválido → CalendarNormalizationError (aunque la carrera tenga fecha)", () => {
+    // El fallback a `date_end` se calcula para cada evento: si es inválido
+    // lanza aunque la carrera tenga fecha válida.
+    const event = makeEvent({
+      id: "ev-badend",
+      name: "GP FIN MALO",
+      date_start: "2026-09-18",
+      date_end: "no-es-una-fecha",
+    });
+    expect(() =>
+      normalizePulseLiveCalendar(
+        makeRaw([event], {
+          [event.id]: [
+            makeSession("Q", "2026-09-19T12:00:00+00:00"),
+            makeSession("RAC", "2026-09-20T13:00:00+00:00"),
           ],
         }),
         SOURCE,
@@ -454,20 +476,30 @@ describe("PulseLiveCalendarSource (US-05)", () => {
     );
   });
 
+  it("sin categoría MotoGP (legacy_id 3) → CalendarSourceError", async () => {
+    const { fetchImpl } = fakeFetch([
+      { match: "/results/seasons", body: SEASONS_BODY },
+      {
+        match: "/results/categories",
+        body: CATEGORIES_BODY.filter((c) => c.legacy_id !== 3),
+      },
+    ]);
+    const source = new PulseLiveCalendarSource({ fetchImpl });
+    await expect(source.fetchSeasonCalendar(2026)).rejects.toThrowError(
+      /categoría MotoGP/,
+    );
+  });
+
   it("respuesta HTTP error → CalendarSourceError con el código", async () => {
     const { fetchImpl } = fakeFetch([
       { match: "/results/seasons", status: 503, body: { details: "down" } },
     ]);
     const source = new PulseLiveCalendarSource({ fetchImpl });
-    await expect(source.fetchSeasonCalendar(2026)).rejects.toThrowError(
-      /HTTP 503/,
-    );
+    await expect(source.fetchSeasonCalendar(2026)).rejects.toThrowError(/HTTP 503/);
   });
 
   it("fallo de red → CalendarSourceError", async () => {
-    const { fetchImpl } = fakeFetch([
-      { match: "/results/seasons", networkError: true },
-    ]);
+    const { fetchImpl } = fakeFetch([{ match: "/results/seasons", networkError: true }]);
     const source = new PulseLiveCalendarSource({ fetchImpl });
     await expect(source.fetchSeasonCalendar(2026)).rejects.toThrowError(
       /No se pudo contactar/,
@@ -475,13 +507,9 @@ describe("PulseLiveCalendarSource (US-05)", () => {
   });
 
   it("respuesta no JSON → CalendarSourceError", async () => {
-    const { fetchImpl } = fakeFetch([
-      { match: "/results/seasons", notJson: true },
-    ]);
+    const { fetchImpl } = fakeFetch([{ match: "/results/seasons", notJson: true }]);
     const source = new PulseLiveCalendarSource({ fetchImpl });
-    await expect(source.fetchSeasonCalendar(2026)).rejects.toThrowError(
-      /no JSON/,
-    );
+    await expect(source.fetchSeasonCalendar(2026)).rejects.toThrowError(/no JSON/);
   });
 
   it("datos crudos inválidos (GP sin carrera) → CalendarNormalizationError", async () => {
@@ -495,7 +523,10 @@ describe("PulseLiveCalendarSource (US-05)", () => {
       { match: "/results/seasons", body: SEASONS_BODY },
       { match: "/results/categories", body: CATEGORIES_BODY },
       { match: "/results/events", body: [event] },
-      { match: "/results/sessions", body: [makeSession("Q", "2026-09-05T12:00:00+00:00")] },
+      {
+        match: "/results/sessions",
+        body: [makeSession("Q", "2026-09-05T12:00:00+00:00")],
+      },
     ]);
     const source = new PulseLiveCalendarSource({ fetchImpl });
     await expect(source.fetchSeasonCalendar(2026)).rejects.toThrowError(

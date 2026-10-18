@@ -8,6 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 
+import * as configBarrel from "../index.js";
 import {
   PROVISIONAL_SEASON_RULES,
   assertProvisionalRulesValid,
@@ -112,5 +113,12 @@ describe("PROVISIONAL_SEASON_RULES", () => {
 
   it("liga: 2–50 miembros (PROVISIONAL)", () => {
     expect(PROVISIONAL_SEASON_RULES.league).toEqual({ minMembers: 2, maxMembers: 50 });
+  });
+});
+
+describe("barrel (config/index)", () => {
+  it("re-exporta season-rules", () => {
+    expect(configBarrel.PROVISIONAL_SEASON_RULES).toBe(PROVISIONAL_SEASON_RULES);
+    expect(configBarrel.assertProvisionalRulesValid).toBe(assertProvisionalRulesValid);
   });
 });
