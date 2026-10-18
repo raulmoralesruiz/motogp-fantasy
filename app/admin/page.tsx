@@ -5,7 +5,10 @@ import Link from "next/link";
 import { trpc } from "@/trpc/client";
 
 import AddRulesVersionForm from "./add-rules-version-form";
+import CalendarImportForm from "./calendar-import-form";
+import CreateCircuitForm from "./create-circuit-form";
 import CreateSeasonForm from "./create-season-form";
+import GpsSection from "./gps-section";
 
 const STATUS_LABELS: Record<string, string> = {
   planned: "planificada",
@@ -15,14 +18,19 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 /**
- * Panel de administración global (US-04, flujo 18): temporadas y sus
- * versiones de reglas. Solo `global_admin` ve el contenido; el resto es
- * rechazado server-side (403) — la UI es una vista (AGENTS.md §8).
+ * Panel de administración global (US-04, US-05, flujo 18): temporadas y
+ * versiones de reglas; circuitos, GPs (estado, lockout, eventos) e import
+ * de calendario en 2 pasos (ADR-0012). Solo `global_admin` ve el
+ * contenido; el resto es rechazado server-side (403) — la UI es una vista
+ * (AGENTS.md §8).
  */
 export default function AdminPage() {
   const me = trpc.auth.me.useQuery();
   const isAdmin = me.data?.roles.includes("global_admin") ?? false;
   const seasons = trpc.seasons.list.useQuery(undefined, { enabled: isAdmin });
+  const circuits = trpc.seasons.circuits.list.useQuery(undefined, {
+    enabled: isAdmin,
+  });
 
   return (
     <main>
@@ -30,7 +38,8 @@ export default function AdminPage() {
         Admin <span>panel</span>
       </h1>
       <p className="muted">
-        Temporadas y reglas (US-04). <Link href="/">Volver al inicio</Link>
+        Temporadas, reglas, circuitos, GPs y calendario (US-04, US-05).{" "}
+        <Link href="/">Volver al inicio</Link>
       </p>
 
       {me.isPending ? (
@@ -75,6 +84,42 @@ export default function AdminPage() {
           <AddRulesVersionForm
             seasons={seasons.data ?? []}
             onCreated={() => void seasons.refetch()}
+          />
+
+          <h2>Circuitos</h2>
+          {circuits.isPending ? (
+            <p className="muted">Consultando…</p>
+          ) : circuits.isError ? (
+            <p className="bad">
+              No se pudieron cargar los circuitos: {circuits.error.message}
+            </p>
+          ) : circuits.data.length === 0 ? (
+            <p className="muted">Aún no hay circuitos. Crea el primero abajo.</p>
+          ) : (
+            <ul className="status">
+              {circuits.data.map((circuit) => (
+                <li key={circuit.id}>
+                  <strong>{circuit.name}</strong> ({circuit.country})
+                  {circuit.location ? ` — ${circuit.location}` : ""}
+                </li>
+              ))}
+            </ul>
+          )}
+          <CreateCircuitForm onCreated={() => void circuits.refetch()} />
+
+          <h2>GPs</h2>
+          <GpsSection
+            seasons={seasons.data ?? []}
+            circuits={circuits.data ?? []}
+          />
+
+          <h2>Importar calendario</h2>
+          <CalendarImportForm
+            seasons={seasons.data ?? []}
+            onImported={() => {
+              void seasons.refetch();
+              void circuits.refetch();
+            }}
           />
         </>
       )}

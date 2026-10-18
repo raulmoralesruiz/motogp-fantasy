@@ -4,6 +4,8 @@
 
 ## 1. Contrato de fuente (adapter)
 
+### 1.1 Resultados (`ResultsSource`)
+
 ```typescript
 interface ResultsSource {
   // Devuelve los resultados crudos de un GP (por evento) en un formato normalizado.
@@ -34,6 +36,38 @@ interface NormalizedEventResults {
 - **Idempotencia:** la importación usa la clave natural `(gp, event, rider)`; re-importar no duplica.
 - **Proveniencia:** cada resultado guarda `source` (nombre+versión de la fuente) y `raw` (payload original) para auditoría.
 
+### 1.2 Calendario (`CalendarSource` — US-05, ADR-0012)
+
+```typescript
+interface CalendarSource {
+  // Calendario normalizado de una temporada (GPs + circuitos + eventos).
+  fetchSeasonCalendar(year: number): Promise<NormalizedSeasonCalendar>;
+  // Metadatos de la fuente (para auditoría).
+  readonly meta: { name: string; version: string };
+}
+
+interface NormalizedSeasonCalendar {
+  year: number;
+  seasonRef: string; // referencia estable de la temporada en la fuente
+  source: { name: string; version: string };
+  gps: Array<{
+    round: number; // 1..N, por orden de fecha
+    name: string;
+    circuit: { name: string; country: string; location: string | null };
+    date: Date; // fecha de la carrera principal (UTC)
+    events: Array<{ type: "q1" | "q2" | "sprint" | "race"; startTime: Date | null }>;
+  }>;
+}
+```
+
+- **Implementación del MVP:** `PulseLiveCalendarSource` (`app/modules/seasons/calendar-source.ts`), con inyección de dependencias (`baseUrl?`, `fetchImpl?`) — testeable sin red. La normalización es una **función pura** (`normalizePulseLiveCalendar(raw, source)`) testeada con fixtures de temporada real.
+- **Mapeo (ADR-0012):** `Q` por orden temporal → `q1`, `q2` (una sola Q → solo `q2`); `SPR`/`RAC` → la última por fecha (carrera/sprint reiniciada); `FP`/`PR`/`WUP` se ignoran; `round = index + 1` ordenando por `date_start` (la API no tiene campo de ronda); eventos `test: true` excluidos; un GP sin `q2` o sin `race` → `CalendarNormalizationError` con el nombre del GP (el admin lo corrige manualmente).
+- **Fechas como `Date`** (superjson-safe): el preview viaja por tRPC con superjson y el input de `calendar.import` se revalida con `z.coerce.date()` (no-op sobre `Date`). Un solo tipo de fecha en todo el camino.
+- **Import en 2 pasos** (UI admin `/admin`):
+  1. `calendar.fetch({year})` — descarga + normaliza, **sin escribir en BD y sin auditoría** (preview para que el admin revise).
+  2. `calendar.import({seasonId, calendar})` — revalidación server-side (el cliente nunca se confía), `calendar.year === season.year` (BAD_REQUEST), **transacción atómica all-or-nothing**: circuitos por upsert idempotente `(name, country)`, las rondas existentes se **saltan** (informe `{created, skipped}`, no es un error), auditoría `calendar.imported` + `gp.created` por GP + `circuit.created` por circuito nuevo.
+- **Respaldo manual:** la creación manual de circuitos/GPs/eventos (y de estado/lockout) siempre está disponible: es el fallback permanente y la vía de corrección.
+
 ## 2. Fuentes evaluadas
 
 ### 2.1 PulseLive (pública, sin auth) — `VERIFICADA EN VIVO`
@@ -45,6 +79,7 @@ interface NormalizedEventResults {
   - `/results/session/{id}/classification?seasonYear=`
   - `/results/standings?seasonUuid=&categoryUuid=`
   - `/riders`, `/teams?categoryUuid=&seasonYear=` (rosters históricos vía teams)
+- **Verificado también para calendario (US-05, 2026-10-18):** `/results/seasons` → temporada por año; `/results/categories?seasonUuid=` → categoría MotoGP (`legacy_id: 3`); `/results/events?seasonUuid=`; `/results/sessions?eventUuid=&categoryUuid=` (N+1: ~24 peticiones por temporada — aceptable para una acción puntual de admin). Temporada 2026: 22 eventos no-test → 21 GPs con el patrón típico `FP,PR,FP,Q,Q,SPR,WUP,RAC`; el GP de Cataluña tiene **2 `RAC`** (carrera reiniciada), caso que cubre la regla «la última por fecha».
 - **Ventajas:** gratis, sin auth, datos oficiales de carrera.
 - **Riesgos:**
   - **No es un contrato estable ni autorizado explícitamente** para uso comercial; puede cambiar o bloquearse.
@@ -78,7 +113,7 @@ interface NormalizedEventResults {
 | Producción | Sportradar (licenciado) | PulseLive + manual | SLA y autorización contractual                     |
 | Histórico  | Bases comunitarias      | Manual             | Backfill de temporadas pasadas                     |
 
-> **Ninguna integración se da por disponible sin verificación.** PulseLive se verificó en vivo en la fase 2. Sportradar y las comunitarias **no** se han verificado contractualmente; se tratan como "por validar" antes de depender de ellas.
+> **Ninguna integración se da por disponible sin verificación.** PulseLive se verificó en vivo en la fase 2 (resultados) y el 2026-10-18 (calendario, US-05). Sportradar y las comunitarias **no** se han verificado contractualmente; se tratan como "por validar" antes de depender de ellas.
 
 ## 4. Pipeline de importación
 

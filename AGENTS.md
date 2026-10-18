@@ -2,7 +2,7 @@
 
 > Este repositorio es **Fantasy MotoGP Independiente**: un juego de fantasy de MotoGP propio (sin licencias ni APIs oficiales), multi-liga, con una economía diseñada para ser justa y transparente.
 >
-> **Estado actual:** **Fase 0 cerrada**; **Fase 1 en curso** — US-01 (registro/login), T-20 (cabeceras de seguridad/CORS), US-02 (cierre de sesión + recuperación de contraseña), T-08 (RBAC + autorización por recurso), T-09 (auditoría append-only) y US-04 (temporadas + `season_rules` versionado, panel admin) en producción (imagen `2a2d497`, 2026-10-17); pendiente US-03, US-05…US-08. `docs/` sigue siendo la fuente de verdad de las reglas. `app/` contiene el monolito (Next.js) con los módulos puros `economy`/`scoring`, los módulos `identity` y `seasons` y la UI de registro/login/recuperación + panel admin. El estado del código, archivo a archivo, está en `docs/architecture/estado-actual.md`.
+> **Estado actual:** **Fase 0 cerrada**; **Fase 1 en curso** — US-01 (registro/login), T-20 (cabeceras de seguridad/CORS), US-02 (cierre de sesión + recuperación de contraseña), T-08 (RBAC + autorización por recurso), T-09 (auditoría append-only) y US-04 (temporadas + `season_rules` versionado, panel admin) en producción (imagen `2a2d497`, 2026-10-17); **US-05** (GPs, circuitos, eventos + import de calendario PulseLive en 2 pasos, ADR-0012) implementado en el árbol de trabajo (2026-10-18, pendiente de commit y deploy); pendiente US-03, US-06…US-08. `docs/` sigue siendo la fuente de verdad de las reglas. `app/` contiene el monolito (Next.js) con los módulos puros `economy`/`scoring`, los módulos `identity` y `seasons` y la UI de registro/login/recuperación + panel admin. El estado del código, archivo a archivo, está en `docs/architecture/estado-actual.md`.
 
 ## 1. Fuentes de verdad
 
@@ -79,7 +79,7 @@ De `docs/architecture/testing.md`:
 
 - **CI (cada PR, bloquea el merge):** lint + typecheck + unit + integración (Testcontainers, PostgreSQL real) + build.
 - **Nightly/main:** e2e (Playwright) + carga.
-- **Cobertura mínima:** 90% en `economy` y `scoring`; 70% global (PROVISIONAL, D-08).
+- **Cobertura mínima:** 90% en `economy` y `scoring`; global PROVISIONAL (D-08, ADR-0011): gate unit delimitado a `app/modules/**` + `app/shared/**` (84%) ahora; objetivo final ≥95% con cobertura unit+integración fusionada (T-24, antes del MVP).
 - **Golden files** por versión de reglas: entradas/salidas conocidas en el repo; cambiar una regla exige actualizar el golden de forma **explícita y revisada**.
 - Los ejemplos verificables de referencia (deben pasar siempre):
   - `presupuesto(B=100, t=0.25, cmax=8, sin_usar=8) = 102`; `sin_usar=40 → 108` (tope).
@@ -157,6 +157,6 @@ De `docs/architecture/security.md`:
 | `docs/architecture/security.md`      | Amenazas y controles, GDPR, backups                                                                                                  |
 | `docs/architecture/testing.md`       | Capas de testing, casos límite, puertas de CI                                                                                        |
 | `docs/operations/deploy.md`          | Runbook de despliegue en TrueNAS (modelo pull, Portainer, NPM, backups, rollback)                                                    |
-| `docs/decisions/0001…0010`           | ADRs: stack, economía, puntuación, fuente de datos, ligas, monolito, pipeline, cabeceras/CORS, email provisional, bootstrap de admin |
+| `docs/decisions/0001…0012`           | ADRs: stack, economía, puntuación, fuente de datos, ligas, monolito, pipeline, cabeceras/CORS, email provisional, bootstrap de admin, política de cobertura, fuente de calendario |
 | `docs/roadmap.md`                    | Fases 0–5 + post-MVP, camino crítico                                                                                                 |
 | `docs/backlog.md`                    | Epics, historias, tareas, dependencias, prioridades, criterios de aceptación                                                         |
