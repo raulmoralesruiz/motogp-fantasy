@@ -91,8 +91,10 @@
 
 ## 4. Cobertura y puertas de calidad (CI)
 
-- **Cobertura mínima** (PROVISIONAL): 90% en `economy` y `scoring` (fórmulas puras); 70% global.
-- **CI (GitHub Actions):** lint + typecheck + unit + integración (Testcontainers) + build en cada PR; e2e + carga en el main/nightly.
+- **Cobertura** (ADR-0011, 2026-10-18):
+  - **Gate unit** (`npm run test:coverage`; rápido, sin Docker): alcance = `app/modules/**` + `app/shared/**`, excluyendo los servicios con transacciones Prisma (los cubre la integración) y `shared/components` (UI, responsabilidad de e2e/RTL). Umbral global **84** (medida real 2026-10-18: 84.83%; PROVISIONAL) + `economy`/`scoring` ≥90% (líneas/enunciados/funciones).
+  - **Gate global** (T-24, antes del MVP): cobertura unit + integración **fusionada** (un solo `vitest run --coverage` con Testcontainers), objetivo **≥95%** con lista de exclusiones explícita de glue real (`prisma.ts`, `redis.ts`, `api/trpc/**/[trpc]/route.ts`). Umbral definitivo en D-08.
+- **CI (GitHub Actions):** lint + typecheck + unit + coverage + integración (Testcontainers) + build en cada PR; e2e + carga en el main/nightly.
 - **Bloqueo de merge** si falla lint/typecheck/unit/integración.
 - **Golden files** de reglas versionadas como parte del repo (cambios revisados).
 
@@ -104,6 +106,6 @@
 
 ## 6. Decisiones pendientes
 
-- Umbrales exactos de cobertura.
+- Umbral global definitivo de cobertura: interino resuelto por ADR-0011 (gate unit 84%); el definitivo (≥95% con cobertura fusionada) se fija en T-24/D-08 antes del MVP.
 - Frecuencia del suite de carga (nightly vs por release).
 - Si se añaden property-based tests (p. ej. fast-check) para las fórmulas de economía/puntuación.
