@@ -193,6 +193,12 @@ describe("AdminPage", () => {
       refetch: vi.fn(),
     });
     mockList(trpc.seasons.circuits.list.useQuery, []);
+    // El mercado (US-06/US-07) también carga: se deja resuelto para que solo
+    // la query de temporadas esté pendiente.
+    mockList(trpc.market.riders.list.useQuery, []);
+    mockList(trpc.market.constructors.list.useQuery, []);
+    mockList(trpc.market.teams.list.useQuery, []);
+    mockList(trpc.market.prices.list.useQuery, []);
     render(<AdminPage />);
 
     expect(screen.getAllByText("Consultando…")).toHaveLength(1);
@@ -208,6 +214,12 @@ describe("AdminPage", () => {
       isSuccess: false,
       refetch: vi.fn(),
     });
+    // El mercado (US-06/US-07) también carga: se deja resuelto para que solo
+    // la query de circuitos esté pendiente.
+    mockList(trpc.market.riders.list.useQuery, []);
+    mockList(trpc.market.constructors.list.useQuery, []);
+    mockList(trpc.market.teams.list.useQuery, []);
+    mockList(trpc.market.prices.list.useQuery, []);
     render(<AdminPage />);
 
     expect(screen.getAllByText("Consultando…")).toHaveLength(1);

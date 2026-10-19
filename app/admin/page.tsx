@@ -9,6 +9,7 @@ import CalendarImportForm from "./calendar-import-form";
 import CreateCircuitForm from "./create-circuit-form";
 import CreateSeasonForm from "./create-season-form";
 import GpsSection from "./gps-section";
+import MarketSection from "./market-section";
 
 const STATUS_LABELS: Record<string, string> = {
   planned: "planificada",
@@ -18,9 +19,10 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 /**
- * Panel de administración global (US-04, US-05, flujo 18): temporadas y
- * versiones de reglas; circuitos, GPs (estado, lockout, eventos) e import
- * de calendario en 2 pasos (ADR-0012). Solo `global_admin` ve el
+ * Panel de administración global (US-04, US-05, US-06, flujo 18):
+ * temporadas y versiones de reglas; circuitos, GPs (estado, lockout,
+ * eventos) e import de calendario en 2 pasos (ADR-0012); mercado (pilotos,
+ * constructores, equipos y afiliaciones por GP). Solo `global_admin` ve el
  * contenido; el resto es rechazado server-side (403) — la UI es una vista
  * (AGENTS.md §8).
  */
@@ -38,8 +40,8 @@ export default function AdminPage() {
         Admin <span>panel</span>
       </h1>
       <p className="muted">
-        Temporadas, reglas, circuitos, GPs y calendario (US-04, US-05).{" "}
-        <Link href="/">Volver al inicio</Link>
+        Temporadas, reglas, circuitos, GPs, calendario y mercado (US-04,
+        US-05, US-06). <Link href="/">Volver al inicio</Link>
       </p>
 
       {me.isPending ? (
@@ -118,6 +120,9 @@ export default function AdminPage() {
               void circuits.refetch();
             }}
           />
+
+          <h2>Mercado</h2>
+          <MarketSection seasons={seasons.data ?? []} />
         </>
       )}
     </main>
