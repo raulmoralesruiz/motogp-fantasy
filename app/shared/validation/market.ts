@@ -108,6 +108,34 @@ export const listAssetPricesInputSchema = z.object({
   assetType: assetTypeEnum,
 });
 
+/**
+ * Ajuste manual de precio por GP (US-08): el admin fija o cambia el precio
+ * de un activo para un GP concreto. `reason = manual`, `createdBy = actor`,
+ * auditado. El GP no puede estar en lockout (gate US-08: los precios no
+ * cambian durante el lockout).
+ */
+export const setManualPriceInputSchema = z.object({
+  assetType: assetTypeEnum,
+  assetId: z.string().uuid("El identificador del activo no es válido"),
+  gpId: z.string().uuid("El identificador de GP no es válido"),
+  price: z
+    .number()
+    .positive("El precio debe ser positivo")
+    .max(9999.99, "El precio no puede superar 9999.99")
+    .refine((p) => Number(p.toFixed(2)) === p, {
+      message: "El precio no puede tener más de 2 decimales",
+    }),
+});
+
+/**
+ * Aplicar la fórmula de precios (pricing-v1) para un GP (US-08): el admin
+ * (o el job) dispara el cálculo del precio del siguiente GP para todos los
+ * activos con P0. `gpId` es el GP que acaba de quedarse definitivo.
+ */
+export const applyFormulaInputSchema = z.object({
+  gpId: z.string().uuid("El identificador de GP no es válido"),
+});
+
 export type CreateRiderInput = z.infer<typeof createRiderInputSchema>;
 export type CreateConstructorInput = z.infer<typeof createConstructorInputSchema>;
 export type CreateTeamInput = z.infer<typeof createTeamInputSchema>;
@@ -118,3 +146,5 @@ export type AssetType = z.infer<typeof assetTypeEnum>;
 export type SetOpeningPriceInput = z.infer<typeof setOpeningPriceInputSchema>;
 export type PriceHistoryInput = z.infer<typeof priceHistoryInputSchema>;
 export type ListAssetPricesInput = z.infer<typeof listAssetPricesInputSchema>;
+export type SetManualPriceInput = z.infer<typeof setManualPriceInputSchema>;
+export type ApplyFormulaInput = z.infer<typeof applyFormulaInputSchema>;

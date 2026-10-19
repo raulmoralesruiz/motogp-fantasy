@@ -15,12 +15,14 @@ import type { PrismaClient } from "@prisma/client";
 
 import { MarketService, PriceService } from "@/modules/market";
 import {
+  applyFormulaInputSchema,
   createConstructorInputSchema,
   createRiderInputSchema,
   createTeamInputSchema,
   listAssetPricesInputSchema,
   priceHistoryInputSchema,
   riderIdInputSchema,
+  setManualPriceInputSchema,
   setOpeningPriceInputSchema,
   setRiderAffiliationFromInputSchema,
   setRiderAffiliationInputSchema,
@@ -147,6 +149,29 @@ export function createMarketRouter(deps: MarketRouterDeps) {
         .mutation(({ ctx, input }) =>
           priceService.setOpeningPrice(input, { actorId: ctx.user.id, ip: ctx.ip }),
         ),
+
+      /**
+       * Ajuste manual de precio de un activo para un GP concreto (US-08):
+       * `reason = manual`, `createdBy = actor`, auditado before/after. El GP
+       * no puede estar en lockout (gate US-08) (admin).
+       */
+      setManual: adminProcedure
+        .input(setManualPriceInputSchema)
+        .mutation(({ ctx, input }) =>
+          priceService.setManualPrice(input, { actorId: ctx.user.id, ip: ctx.ip }),
+        ),
+
+      /**
+       * Aplica la fórmula de precios v1 (`pricing-v1`) para un GP que acaba
+       * de quedarse definitivo (US-08): calcula el precio del siguiente GP
+       * para todos los activos con P0 y registra cada movimiento (motivo
+       * `formula`). El GP objetivo no puede estar en lockout (gate US-08).
+       * El disparo automático (job con lock por GP) llega con la fase de
+       * resultados; aquí es el disparo manual del admin (admin).
+       */
+      applyFormula: adminProcedure
+        .input(applyFormulaInputSchema)
+        .mutation(({ input }) => priceService.applyFormulaForGp(input)),
     }),
   });
 }

@@ -47,6 +47,40 @@ function mockAssets(data: unknown, refetch: ReturnType<typeof vi.fn> = vi.fn()) 
   });
 }
 
+// US-08: temporadas y GPs para la sección de precios por GP.
+const season = { id: "s1", name: "MotoGP 2099", year: 2099 };
+const gps = [
+  { id: "gp1", round: 1, name: "GP de Qatar", status: "finished" },
+  { id: "gp2", round: 2, name: "GP de Argentina", status: "scheduled" },
+];
+
+function mockSeasons(data: unknown) {
+  mockResult(trpc.seasons.list.useQuery, {
+    data,
+    isPending: false,
+    isError: false,
+    isSuccess: true,
+    refetch: vi.fn(),
+  });
+}
+
+function mockGps(data: unknown) {
+  mockResult(trpc.seasons.gps.list.useQuery, {
+    data,
+    isPending: false,
+    isError: false,
+    isSuccess: true,
+    refetch: vi.fn(),
+  });
+}
+
+/** Selecciona la temporada y el GP de los dos selectores. */
+async function pickSeasonAndGps(user: ReturnType<typeof userEvent.setup>) {
+  await user.selectOptions(screen.getByLabelText("Temporada"), "s1");
+  await user.selectOptions(screen.getByLabelText("GP (objetivo del precio manual)"), "gp2");
+  await user.selectOptions(screen.getByLabelText("GP definitivo (fuente de la fórmula)"), "gp1");
+}
+
 function mockHistory(data: unknown, refetch: ReturnType<typeof vi.fn> = vi.fn()) {
   mockResult(trpc.market.prices.history.useQuery, {
     data,
@@ -305,5 +339,349 @@ describe("PricesPanel", () => {
 
     expect(assetsRefetch).toHaveBeenCalledTimes(1);
     expect(historyRefetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("PricesPanel · Precios por GP (US-08)", () => {
+  beforeEach(() => resetTrpcMocks());
+
+  it("muestra la sección con el selector de temporada (sin GPs hasta elegirla)", () => {
+    render(<PricesPanel />);
+
+    expect(
+      screen.getByText("Precios por GP (fórmula v1 y ajuste manual)"),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Temporada")).toHaveValue("");
+    // Sin temporada: los selectores de GP solo tienen la opción vacía.
+    const manualGp = screen.getByLabelText("GP (objetivo del precio manual)");
+    expect(manualGp).toHaveValue("");
+    expect(within(manualGp).queryAllByRole("option")).toHaveLength(1);
+    expect(
+      within(screen.getByLabelText("GP definitivo (fuente de la fórmula)")).queryAllByRole(
+        "option",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("consulta los GPs de la temporada elegida y los lista con su estado", async () => {
+    mockSeasons([season]);
+    mockGps(gps);
+    render(<PricesPanel />);
+
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText("Temporada"), "s1");
+
+    const manualGp = screen.getByLabelText("GP (objetivo del precio manual)");
+    expect(manualGp).toHaveValue("");
+    expect(
+      within(manualGp).getByText("Ronda 1 — GP de Qatar (finalizado)"),
+    ).toBeInTheDocument();
+    expect(
+      within(manualGp).getByText("Ronda 2 — GP de Argentina (programado)"),
+    ).toBeInTheDocument();
+    // El selector de fórmula muestra las mismas opciones.
+    expect(
+      within(screen.getByLabelText("GP definitivo (fuente de la fórmula)")).getByText(
+        "Ronda 2 — GP de Argentina (programado)",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("al cambiar de temporada se resetean los selectores de GP", async () => {
+    mockSeasons([season, { id: "s2", name: "MotoGP 2100", year: 2100 }]);
+    mockGps(gps);
+    render(<PricesPanel />);
+
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText("Temporada"), "s1");
+    await user.selectOptions(screen.getByLabelText("GP (objetivo del precio manual)"), "gp2");
+    await user.selectOptions(screen.getByLabelText("Temporada"), "");
+
+    expect(screen.getByLabelText("GP (objetivo del precio manual)")).toHaveValue("");
+    expect(
+      screen.getByLabelText("GP definitivo (fuente de la fórmula)"),
+    ).toHaveValue("");
+  });
+
+  it("muestra el estado vacío y el error de la lista de GPs", async () => {
+    mockSeasons([season]);
+    mockGps([]);
+    const { unmount } = render(<PricesPanel />);
+
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText("Temporada"), "s1");
+    expect(screen.getByText("Esta temporada aún no tiene GPs.")).toBeInTheDocument();
+    unmount();
+
+    mockResult(trpc.seasons.gps.list.useQuery, {
+      data: undefined,
+      isPending: false,
+      isError: true,
+      isSuccess: false,
+      error: new Error("sin conexión"),
+      refetch: vi.fn(),
+    });
+    render(<PricesPanel />);
+    await user.selectOptions(screen.getByLabelText("Temporada"), "s1");
+    expect(
+      screen.getByText("No se pudieron cargar los GPs: sin conexión"),
+    ).toBeInTheDocument();
+  });
+
+  it("muestra el estado de carga de la lista de GPs", async () => {
+    mockAssets([riderAsset]);
+    mockSeasons([season]);
+    mockResult(trpc.seasons.gps.list.useQuery, {
+      data: undefined,
+      isPending: true,
+      isError: false,
+      isSuccess: false,
+      refetch: vi.fn(),
+    });
+    render(<PricesPanel />);
+
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText("Temporada"), "s1");
+
+    expect(screen.getByText("Consultando…")).toBeInTheDocument();
+  });
+
+  it("fija un precio manual del activo elegido para un GP (setManual)", async () => {
+    mockAssets([riderAsset]);
+    mockSeasons([season]);
+    mockGps(gps);
+    const mutate = vi.fn();
+    mockResult(trpc.market.prices.setManual.useMutation, {
+      mutate,
+      isPending: false,
+      isError: false,
+    });
+    render(<PricesPanel />);
+
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText("Activo"), "r1");
+    await pickSeasonAndGps(user);
+    await user.type(screen.getByLabelText("Precio manual"), "5");
+    await user.click(screen.getByRole("button", { name: "Fijar precio manual" }));
+
+    expect(mutate).toHaveBeenCalledWith({
+      assetType: "rider",
+      assetId: "r1",
+      gpId: "gp2",
+      price: 5,
+    });
+  });
+
+  it("desactiva el botón de precio manual hasta que hay activo, GP y precio", async () => {
+    mockAssets([riderAsset]);
+    mockSeasons([season]);
+    mockGps(gps);
+    render(<PricesPanel />);
+
+    const user = userEvent.setup();
+    const button = screen.getByRole("button", { name: "Fijar precio manual" });
+    expect(button).toBeDisabled();
+
+    // Activo + GP, pero sin precio: sigue desactivado.
+    await user.selectOptions(screen.getByLabelText("Activo"), "r1");
+    await user.selectOptions(screen.getByLabelText("Temporada"), "s1");
+    await user.selectOptions(screen.getByLabelText("GP (objetivo del precio manual)"), "gp2");
+    expect(button).toBeDisabled();
+
+    // Con precio: habilitado.
+    await user.type(screen.getByLabelText("Precio manual"), "5");
+    expect(button).toBeEnabled();
+  });
+
+  it("muestra el error al no poder fijar el precio manual", () => {
+    mockResult(trpc.market.prices.setManual.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error: new Error("No se pueden cambiar los precios de un GP en lockout."),
+    });
+    render(<PricesPanel />);
+
+    expect(
+      screen.getByText(
+        "No se pudo fijar el precio manual: No se pueden cambiar los precios de un GP en lockout.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("confirma el precio manual creado, actualizado o sin cambios", () => {
+    const cases: Array<[string, string]> = [
+      ["created", "Precio manual creado."],
+      ["updated", "Precio manual actualizado."],
+      ["unchanged", "El precio ya era ese valor (sin cambios)."],
+    ];
+    for (const [status, message] of cases) {
+      mockResult(trpc.market.prices.setManual.useMutation, {
+        mutate: vi.fn(),
+        isPending: false,
+        isError: false,
+        isSuccess: true,
+        data: { price: 5, status },
+      });
+      const { unmount } = render(<PricesPanel />);
+      expect(screen.getByText(message)).toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it("aplica la fórmula al siguiente GP (applyFormula)", async () => {
+    mockSeasons([season]);
+    mockGps(gps);
+    const mutate = vi.fn();
+    mockResult(trpc.market.prices.applyFormula.useMutation, {
+      mutate,
+      isPending: false,
+      isError: false,
+    });
+    render(<PricesPanel />);
+
+    const user = userEvent.setup();
+    const button = screen.getByRole("button", {
+      name: "Aplicar fórmula al siguiente GP",
+    });
+    expect(button).toBeDisabled();
+
+    await user.selectOptions(screen.getByLabelText("Temporada"), "s1");
+    await user.selectOptions(screen.getByLabelText("GP definitivo (fuente de la fórmula)"), "gp1");
+    expect(button).toBeEnabled();
+    await user.click(button);
+
+    expect(mutate).toHaveBeenCalledWith({ gpId: "gp1" });
+  });
+
+  it("muestra el resumen de la fórmula aplicada", () => {
+    mockResult(trpc.market.prices.applyFormula.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      data: {
+        targetGpId: "gp2",
+        targetGpRound: 2,
+        created: 3,
+        updated: 1,
+        unchanged: 0,
+        skippedNoOpening: 5,
+        skippedLocked: false,
+      },
+    });
+    render(<PricesPanel />);
+
+    expect(
+      screen.getByText(
+        "Precios de la ronda 2 aplicados: 3 creados, 1 actualizados, 0 sin cambios, 5 sin P0.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("indica que no hay siguiente GP (último de la temporada)", () => {
+    mockResult(trpc.market.prices.applyFormula.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      data: {
+        targetGpId: null,
+        targetGpRound: null,
+        created: 0,
+        updated: 0,
+        unchanged: 0,
+        skippedNoOpening: 0,
+        skippedLocked: false,
+      },
+    });
+    render(<PricesPanel />);
+
+    expect(
+      screen.getByText(
+        "El GP elegido es el último de la temporada: no hay siguiente GP.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("indica que el GP objetivo está en lockout (precios sin cambios)", () => {
+    mockResult(trpc.market.prices.applyFormula.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      data: {
+        targetGpId: "gp2",
+        targetGpRound: 2,
+        created: 0,
+        updated: 0,
+        unchanged: 0,
+        skippedNoOpening: 0,
+        skippedLocked: true,
+      },
+    });
+    render(<PricesPanel />);
+
+    expect(
+      screen.getByText(
+        "El GP objetivo (ronda 2) está en lockout: precios sin cambios.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("muestra el error al no poder aplicar la fórmula", () => {
+    mockResult(trpc.market.prices.applyFormula.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error: new Error("El GP no tiene resultados definitivos."),
+    });
+    render(<PricesPanel />);
+
+    expect(
+      screen.getByText(
+        "No se pudo aplicar la fórmula: El GP no tiene resultados definitivos.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("refresca el histórico tras fijar precio manual o aplicar la fórmula", async () => {
+    mockAssets([riderAsset]);
+    mockSeasons([season]);
+    mockGps(gps);
+    const historyRefetch = vi.fn();
+    mockHistory(historyRows, historyRefetch);
+    const mutateManual = vi.fn();
+    mockResult(trpc.market.prices.setManual.useMutation, {
+      mutate: mutateManual,
+      isPending: false,
+      isError: false,
+    });
+    const mutateFormula = vi.fn();
+    mockResult(trpc.market.prices.applyFormula.useMutation, {
+      mutate: mutateFormula,
+      isPending: false,
+      isError: false,
+    });
+    render(<PricesPanel />);
+
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText("Activo"), "r1");
+    await pickSeasonAndGps(user);
+    await user.type(screen.getByLabelText("Precio manual"), "5");
+    await user.click(screen.getByRole("button", { name: "Fijar precio manual" }));
+    await user.click(
+      screen.getByRole("button", { name: "Aplicar fórmula al siguiente GP" }),
+    );
+
+    // `onSuccess` se captura de cada `useMutation` y se invoca manualmente.
+    const manualOptions = asMockFn(trpc.market.prices.setManual.useMutation).mock
+      .calls[0]?.[0] as { onSuccess?: () => void };
+    manualOptions.onSuccess?.();
+    const formulaOptions = asMockFn(trpc.market.prices.applyFormula.useMutation).mock
+      .calls[0]?.[0] as { onSuccess?: () => void };
+    formulaOptions.onSuccess?.();
+
+    expect(historyRefetch).toHaveBeenCalledTimes(2);
   });
 });

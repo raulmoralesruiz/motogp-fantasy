@@ -27,12 +27,20 @@ function makePrisma() {
     update: vi.fn(),
   };
   const auditLog = { create: vi.fn() };
+  const gp = { findUnique: vi.fn(), findMany: vi.fn() };
+  const weekendEvent = { findFirst: vi.fn() };
+  const result = { count: vi.fn(), findMany: vi.fn() };
+  const riderAffiliation = { findMany: vi.fn() };
   const prisma = {
     rider,
     constructor,
     team,
     price,
     auditLog,
+    gp,
+    weekendEvent,
+    result,
+    riderAffiliation,
     $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(prisma)),
   };
   return {
@@ -42,6 +50,10 @@ function makePrisma() {
     team,
     price,
     auditLog,
+    gp,
+    weekendEvent,
+    result,
+    riderAffiliation,
   };
 }
 
@@ -91,6 +103,85 @@ const gp3Row = {
   createdAt: new Date("2026-07-01T09:00:00Z"),
   gp: { round: 3, name: "GP de España" },
 };
+
+// ── Fixtures US-08 (fórmula + manual) ──
+const gpRow1 = {
+  id: "g1",
+  seasonId: "s1",
+  round: 1,
+  name: "GP de Qatar",
+  status: "finished",
+};
+const gpRow2 = {
+  id: "g2",
+  seasonId: "s1",
+  round: 2,
+  name: "GP de Argentina",
+  status: "scheduled",
+};
+const raceEvent1 = { id: "e1", gpId: "g1", type: "race", orderNum: 2 };
+/** Resultados definitivos de la carrera de g1: r1 gana (30 pts), r2 2º (20). */
+const definitiveResults = [
+  { riderId: "r1", position: 1 },
+  { riderId: "r2", position: 2 },
+];
+const affiliationsG1 = [
+  { riderId: "r1", constructorId: "c1", teamId: "t1", gpId: "g1" },
+  { riderId: "r2", constructorId: "c1", teamId: "t1", gpId: "g1" },
+];
+/** Grid del GP objetivo g2: mismos activos (r3 entra para probar el skip sin P0). */
+const affiliationsG2 = [
+  { riderId: "r1", constructorId: "c1", teamId: "t1", gpId: "g2" },
+  { riderId: "r2", constructorId: "c1", teamId: "t1", gpId: "g2" },
+  { riderId: "r3", constructorId: "c1", teamId: "t1", gpId: "g2" },
+];
+/** P0 de los activos del escenario (r3 queda sin P0 para probar el skip). */
+const p0Rows = [
+  { assetType: "rider", assetId: "r1", price: 20 },
+  { assetType: "rider", assetId: "r2", price: 15 },
+  { assetType: "constructor", assetId: "c1", price: 10 },
+  { assetType: "team", assetId: "t1", price: 8 },
+];
+/**
+ * Monta el escenario base de `applyFormulaForGp`: g1 (ronda 1) con carrera
+ * definitiva, g2 (ronda 2) como objetivo, P0 para 4 activos y r3 sin P0.
+ * `nextGp` permite simular el GP objetivo (null = no existe; locked = gate).
+ */
+function mountFormulaScenario(
+  fake: ReturnType<typeof makePrisma>,
+  nextGp: typeof gpRow2 | null,
+) {
+  fake.gp.findUnique.mockImplementation(
+    ({ where }: { where: Record<string, unknown> }) => {
+      if (where.id === "g1") return Promise.resolve(gpRow1);
+      if (where.seasonId_round) return Promise.resolve(nextGp);
+      return Promise.resolve(null);
+    },
+  );
+  fake.gp.findMany.mockResolvedValue([gpRow1]);
+  fake.weekendEvent.findFirst.mockImplementation(
+    ({ where }: { where: { gpId: string } }) =>
+      Promise.resolve(where.gpId === "g1" ? raceEvent1 : null),
+  );
+  fake.result.count.mockResolvedValue(definitiveResults.length);
+  fake.result.findMany.mockResolvedValue(definitiveResults);
+  // Dos llamadas: afiliaciones de los GPs fuente (gpId: { in: [...] }) y
+  // grid del GP objetivo (gpId: "g2").
+  fake.riderAffiliation.findMany.mockImplementation(
+    ({ where }: { where: { gpId: unknown } }) =>
+      Promise.resolve(where.gpId === "g2" ? affiliationsG2 : affiliationsG1),
+  );
+  fake.price.findMany.mockImplementation(
+    ({ where }: { where: { gpId: string | null } }) => {
+      if (where.gpId === null) {
+        return Promise.resolve(
+          p0Rows.map((p, i) => ({ id: `p0-${i}`, ...p, gpId: null })),
+        );
+      }
+      return Promise.resolve([]);
+    },
+  );
+}
 
 describe("PriceService.setOpeningPrice (US-07)", () => {
   it("crea el P0 si no existe (auditoría price.opening_set con before=null)", async () => {
@@ -377,5 +468,433 @@ describe("PriceService.getPriceHistory (US-07)", () => {
     await expect(
       service.getPriceHistory({ assetType: "rider", assetId: "nope" }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+});
+
+describe("PriceService.applyFormulaForGp (US-08)", () => {
+  it("crea las filas del GP siguiente con la fórmula pricing-v1", async () => {
+    const fake = makePrisma();
+    mountFormulaScenario(fake, gpRow2);
+    fake.price.create.mockImplementation(({ data }: { data: unknown }) =>
+      Promise.resolve({ id: "new", ...(data as object) }),
+    );
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.applyFormulaForGp({ gpId: "g1" });
+
+    // r1: P0=20, perf(30,60)=50 → 18.75 · r2: P0=15, perf(20,60)=33,33 → 13.75
+    // c1/t1: media top-2 (30,20)=25 → perf(25,30)=83,33 → 9.79 / 7.83 · r3: sin P0
+    expect(result).toEqual({
+      targetGpId: "g2",
+      targetGpRound: 2,
+      created: 4,
+      updated: 0,
+      unchanged: 0,
+      skippedNoOpening: 1,
+      skippedLocked: false,
+    });
+    const created = fake.price.create.mock.calls.map(
+      (c) => (c[0] as { data: Record<string, unknown> }).data,
+    );
+    expect(created).toContainEqual({
+      assetType: "rider",
+      assetId: "r1",
+      gpId: "g2",
+      price: 18.75,
+      reason: "formula",
+      rulesVersion: "pricing-v1",
+      createdBy: null,
+    });
+    expect(created).toContainEqual({
+      assetType: "rider",
+      assetId: "r2",
+      gpId: "g2",
+      price: 13.75,
+      reason: "formula",
+      rulesVersion: "pricing-v1",
+      createdBy: null,
+    });
+    expect(created).toContainEqual({
+      assetType: "constructor",
+      assetId: "c1",
+      gpId: "g2",
+      price: 9.79,
+      reason: "formula",
+      rulesVersion: "pricing-v1",
+      createdBy: null,
+    });
+    expect(created).toContainEqual({
+      assetType: "team",
+      assetId: "t1",
+      gpId: "g2",
+      price: 7.83,
+      reason: "formula",
+      rulesVersion: "pricing-v1",
+      createdBy: null,
+    });
+    // La fórmula no audita: la fila con rulesVersion es el registro.
+    expect(fake.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it("P2002 (creación concurrente) → re-ejecuta la transacción", async () => {
+    const fake = makePrisma();
+    mountFormulaScenario(fake, gpRow2);
+    fake.price.create.mockImplementation(({ data }: { data: unknown }) =>
+      Promise.resolve({ id: "new", ...(data as object) }),
+    );
+    fake.price.create.mockRejectedValueOnce(P2002);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.applyFormulaForGp({ gpId: "g1" });
+
+    expect(result).toEqual({
+      targetGpId: "g2",
+      targetGpRound: 2,
+      created: 4,
+      updated: 0,
+      unchanged: 0,
+      skippedNoOpening: 1,
+      skippedLocked: false,
+    });
+    expect(fake.prisma.$transaction).toHaveBeenCalledTimes(2);
+    expect(fake.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it("idempotente: filas existentes con el mismo valor → no-op", async () => {
+    const fake = makePrisma();
+    mountFormulaScenario(fake, gpRow2);
+    fake.price.findMany.mockImplementation(
+      ({ where }: { where: { gpId: string | null } }) => {
+        if (where.gpId === null) {
+          return Promise.resolve(
+            p0Rows.map((p, i) => ({ id: `p0-${i}`, ...p, gpId: null })),
+          );
+        }
+        if (where.gpId === "g2") {
+          // Mismos valores que produce la fórmula → todo no-op.
+          return Promise.resolve([
+            { id: "x1", assetType: "rider", assetId: "r1", gpId: "g2", price: 18.75 },
+            { id: "x2", assetType: "rider", assetId: "r2", gpId: "g2", price: 13.75 },
+            { id: "x3", assetType: "constructor", assetId: "c1", gpId: "g2", price: 9.79 },
+            { id: "x4", assetType: "team", assetId: "t1", gpId: "g2", price: 7.83 },
+          ]);
+        }
+        return Promise.resolve([]);
+      },
+    );
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.applyFormulaForGp({ gpId: "g1" });
+
+    expect(result).toEqual({
+      targetGpId: "g2",
+      targetGpRound: 2,
+      created: 0,
+      updated: 0,
+      unchanged: 4,
+      skippedNoOpening: 1,
+      skippedLocked: false,
+    });
+    expect(fake.price.create).not.toHaveBeenCalled();
+    expect(fake.price.update).not.toHaveBeenCalled();
+    expect(fake.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it("corrección: fila existente con otro valor → update + auditoría (sistema)", async () => {
+    const fake = makePrisma();
+    mountFormulaScenario(fake, gpRow2);
+    fake.price.findMany.mockImplementation(
+      ({ where }: { where: { gpId: string | null } }) => {
+        if (where.gpId === null) {
+          return Promise.resolve(
+            p0Rows.map((p, i) => ({ id: `p0-${i}`, ...p, gpId: null })),
+          );
+        }
+        if (where.gpId === "g2") {
+          // Solo r1 existe, con un valor antiguo (resultados corregidos).
+          return Promise.resolve([
+            { id: "x1", assetType: "rider", assetId: "r1", gpId: "g2", price: 21 },
+          ]);
+        }
+        if (where.gpId === "g1") {
+          // Precio previo en el GP fuente (ajuste manual): prev = 20 = P0 de r1.
+          return Promise.resolve([
+            { id: "g1-r1", assetType: "rider", assetId: "r1", gpId: "g1", price: 20 },
+          ]);
+        }
+        return Promise.resolve([]);
+      },
+    );
+    fake.price.update.mockResolvedValue({ id: "x1" });
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.applyFormulaForGp({ gpId: "g1" });
+
+    expect(result).toEqual({
+      targetGpId: "g2",
+      targetGpRound: 2,
+      created: 3,
+      updated: 1,
+      unchanged: 0,
+      skippedNoOpening: 1,
+      skippedLocked: false,
+    });
+    expect(fake.price.update).toHaveBeenCalledWith({
+      where: { id: "x1" },
+      data: {
+        price: 18.75,
+        reason: "formula",
+        rulesVersion: "pricing-v1",
+        createdBy: null,
+      },
+    });
+    expect(fake.auditLog.create).toHaveBeenCalledWith({
+      data: {
+        actorId: null,
+        action: "price.formula_recompute",
+        entity: "price",
+        entityId: "x1",
+        beforeData: { price: 21 },
+        afterData: {
+          assetType: "rider",
+          assetId: "r1",
+          gpId: "g2",
+          price: 18.75,
+        },
+        ip: undefined,
+      },
+    });
+  });
+
+  it("gate de lockout: GP objetivo locked → no se toca nada", async () => {
+    const fake = makePrisma();
+    mountFormulaScenario(fake, { ...gpRow2, status: "locked" });
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.applyFormulaForGp({ gpId: "g1" });
+
+    expect(result).toEqual({
+      targetGpId: "g2",
+      targetGpRound: 2,
+      created: 0,
+      updated: 0,
+      unchanged: 0,
+      skippedNoOpening: 0,
+      skippedLocked: true,
+    });
+    expect(fake.price.create).not.toHaveBeenCalled();
+    expect(fake.price.update).not.toHaveBeenCalled();
+    expect(fake.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it("sin siguiente GP (último de la temporada) → no-op con targetGpId null", async () => {
+    const fake = makePrisma();
+    mountFormulaScenario(fake, null);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.applyFormulaForGp({ gpId: "g1" });
+
+    expect(result).toEqual({
+      targetGpId: null,
+      targetGpRound: null,
+      created: 0,
+      updated: 0,
+      unchanged: 0,
+      skippedNoOpening: 0,
+      skippedLocked: false,
+    });
+    expect(fake.price.create).not.toHaveBeenCalled();
+  });
+
+  it("GP objetivo sin grid (sin afiliaciones) → no-op", async () => {
+    const fake = makePrisma();
+    mountFormulaScenario(fake, gpRow2);
+    fake.riderAffiliation.findMany.mockImplementation(
+      ({ where }: { where: { gpId: unknown } }) =>
+        Promise.resolve(where.gpId === "g2" ? [] : affiliationsG1),
+    );
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.applyFormulaForGp({ gpId: "g1" });
+
+    expect(result).toEqual({
+      targetGpId: "g2",
+      targetGpRound: 2,
+      created: 0,
+      updated: 0,
+      unchanged: 0,
+      skippedNoOpening: 0,
+      skippedLocked: false,
+    });
+    expect(fake.price.create).not.toHaveBeenCalled();
+    expect(fake.price.update).not.toHaveBeenCalled();
+    expect(fake.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it("GP sin resultados definitivos → PRECONDITION_FAILED", async () => {
+    const fake = makePrisma();
+    mountFormulaScenario(fake, gpRow2);
+    fake.result.count.mockResolvedValue(0);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    await expect(
+      service.applyFormulaForGp({ gpId: "g1" }),
+    ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    expect(fake.price.create).not.toHaveBeenCalled();
+  });
+
+  it("GP inexistente → NOT_FOUND", async () => {
+    const fake = makePrisma();
+    fake.gp.findUnique.mockResolvedValue(null);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    await expect(
+      service.applyFormulaForGp({ gpId: "nope" }),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+      message: "El GP no existe.",
+    });
+  });
+});
+
+describe("PriceService.setManualPrice (US-08)", () => {
+  const input = { assetType: "rider" as const, assetId: "r1", gpId: "g1", price: 21 };
+
+  it("crea la fila manual (auditoría price.manual_set, before=null)", async () => {
+    const fake = makePrisma();
+    fake.rider.findUnique.mockResolvedValue(riderRow);
+    fake.gp.findUnique.mockResolvedValue(gpRow1);
+    fake.price.findFirst.mockResolvedValue(null);
+    fake.price.create.mockResolvedValue({ id: "m1" });
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.setManualPrice(input, meta);
+
+    expect(result).toEqual({ price: 21, status: "created" });
+    expect(fake.price.create).toHaveBeenCalledWith({
+      data: {
+        assetType: "rider",
+        assetId: "r1",
+        gpId: "g1",
+        price: 21,
+        reason: "manual",
+        rulesVersion: null,
+        createdBy: "admin-1",
+      },
+    });
+    expect(fake.auditLog.create).toHaveBeenCalledWith({
+      data: {
+        actorId: "admin-1",
+        action: "price.manual_set",
+        entity: "price",
+        entityId: "m1",
+        beforeData: undefined,
+        afterData: { assetType: "rider", assetId: "r1", gpId: "g1", price: 21 },
+        ip: "127.0.0.1",
+      },
+    });
+  });
+
+  it("no-op sin auditar si existe con el mismo valor", async () => {
+    const fake = makePrisma();
+    fake.rider.findUnique.mockResolvedValue(riderRow);
+    fake.gp.findUnique.mockResolvedValue(gpRow1);
+    fake.price.findFirst.mockResolvedValue({ id: "m1", price: 21 });
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.setManualPrice(input, meta);
+
+    expect(result).toEqual({ price: 21, status: "unchanged" });
+    expect(fake.price.update).not.toHaveBeenCalled();
+    expect(fake.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it("sustituye con auditoría before/after si existe con otro valor", async () => {
+    const fake = makePrisma();
+    fake.rider.findUnique.mockResolvedValue(riderRow);
+    fake.gp.findUnique.mockResolvedValue(gpRow1);
+    fake.price.findFirst.mockResolvedValue({ id: "m1", price: 19 });
+    fake.price.update.mockResolvedValue({ id: "m1" });
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.setManualPrice(input, meta);
+
+    expect(result).toEqual({ price: 21, status: "updated" });
+    expect(fake.price.update).toHaveBeenCalledWith({
+      where: { id: "m1" },
+      data: {
+        price: 21,
+        reason: "manual",
+        rulesVersion: null,
+        createdBy: "admin-1",
+      },
+    });
+    expect(fake.auditLog.create).toHaveBeenCalledWith({
+      data: {
+        actorId: "admin-1",
+        action: "price.manual_set",
+        entity: "price",
+        entityId: "m1",
+        beforeData: { price: 19 },
+        afterData: { assetType: "rider", assetId: "r1", gpId: "g1", price: 21 },
+        ip: "127.0.0.1",
+      },
+    });
+  });
+
+  it("P2002 (creación concurrente) → re-ejecuta la transacción", async () => {
+    const fake = makePrisma();
+    fake.rider.findUnique.mockResolvedValue(riderRow);
+    fake.gp.findUnique.mockResolvedValue(gpRow1);
+    fake.price.findFirst
+      .mockResolvedValueOnce(null) // 1ª tx: aún no existe → intenta crear
+      .mockResolvedValueOnce({ id: "m1", price: 21 }); // 2ª tx: ya existe (mismo valor)
+    fake.price.create.mockRejectedValueOnce(P2002);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.setManualPrice(input, meta);
+
+    expect(result).toEqual({ price: 21, status: "unchanged" });
+    expect(fake.prisma.$transaction).toHaveBeenCalledTimes(2);
+    expect(fake.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it("gate de lockout: GP locked → PRECONDITION_FAILED sin tocar la BD", async () => {
+    const fake = makePrisma();
+    fake.rider.findUnique.mockResolvedValue(riderRow);
+    fake.gp.findUnique.mockResolvedValue({ ...gpRow1, status: "locked" });
+    const service = new PriceService({ prisma: fake.prisma });
+
+    await expect(service.setManualPrice(input, meta)).rejects.toMatchObject({
+      code: "PRECONDITION_FAILED",
+      message: "No se pueden cambiar los precios de un GP en lockout.",
+    });
+    expect(fake.price.findFirst).not.toHaveBeenCalled();
+    expect(fake.price.create).not.toHaveBeenCalled();
+    expect(fake.price.update).not.toHaveBeenCalled();
+    expect(fake.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it("GP inexistente → NOT_FOUND", async () => {
+    const fake = makePrisma();
+    fake.rider.findUnique.mockResolvedValue(riderRow);
+    fake.gp.findUnique.mockResolvedValue(null);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    await expect(service.setManualPrice(input, meta)).rejects.toMatchObject({
+      code: "NOT_FOUND",
+      message: "El GP no existe.",
+    });
+  });
+
+  it("activo inexistente → NOT_FOUND", async () => {
+    const fake = makePrisma();
+    fake.rider.findUnique.mockResolvedValue(null);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    await expect(service.setManualPrice(input, meta)).rejects.toMatchObject({
+      code: "NOT_FOUND",
+      message: "El piloto no existe.",
+    });
   });
 });

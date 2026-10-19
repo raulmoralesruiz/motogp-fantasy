@@ -7,8 +7,8 @@
  * Fuente de verdad: `docs/product/scoring.md`.
  */
 
-import type { GpStatus, Lineup } from "../../shared/types/index.js";
-import { DNF_PENALTY, WINNER_BONUS, mainRacePositionPoints } from "./tables.js";
+import type { GpStatus, Lineup } from "../../shared/types";
+import { DNF_PENALTY, WINNER_BONUS, mainRacePositionPoints } from "./tables";
 
 /**
  * Puntos de un piloto en la carrera principal de un GP.
