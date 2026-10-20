@@ -20,6 +20,13 @@ const serverEnvSchema = z.object({
   RESET_TOKEN_TTL_SEC: z.coerce.number().int().positive().default(3600),
   RESET_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(5),
   RESET_RATE_LIMIT_WINDOW_SEC: z.coerce.number().int().positive().default(300),
+  // US-03 · Eliminación de cuenta (ADR-0016): rate limit POR USUARIO
+  // (parámetro operativo, no regla de juego: no vive en `season_rules`).
+  ACCOUNT_DELETE_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(3),
+  ACCOUNT_DELETE_RATE_LIMIT_WINDOW_SEC: z.coerce.number()
+    .int()
+    .positive()
+    .default(3600),
   // URL pública de la app: monta el link de recuperación (US-02). En
   // producción la fija el build (build-arg) y el contenedor.
   NEXT_PUBLIC_APP_URL: z.string().min(1).default("http://localhost:3000"),

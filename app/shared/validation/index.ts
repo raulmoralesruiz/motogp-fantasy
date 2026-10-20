@@ -5,5 +5,6 @@
  * este archivo, tipos derivados con `z.infer` y mensajes de error en español.
  */
 export * from "./market";
+export * from "./profile";
 export * from "./season-rules";
 export * from "./seasons";

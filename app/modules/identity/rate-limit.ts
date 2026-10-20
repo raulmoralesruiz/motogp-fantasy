@@ -106,6 +106,15 @@ export interface RateLimitStore {
     ip: string,
     windowSec: number,
   ): Promise<{ count: number; remainingSec: number }>;
+  /**
+   * Registra un intento de eliminación de cuenta del usuario
+   * (ventana fija POR USUARIO, US-03/ADR-0016; clave independiente de las
+   * anteriores).
+   */
+  recordUserDeletion(
+    userId: string,
+    windowSec: number,
+  ): Promise<{ count: number; remainingSec: number }>;
 }
 
 /**
@@ -116,6 +125,7 @@ export class InMemoryRateLimitStore implements RateLimitStore {
   private nowMs = 0;
   private windows = new Map<string, { count: number; resetAtMs: number }>();
   private resetWindows = new Map<string, { count: number; resetAtMs: number }>();
+  private deleteWindows = new Map<string, { count: number; resetAtMs: number }>();
   private failures = new Map<string, number>();
   private locks = new Map<string, number>();
 
@@ -155,6 +165,13 @@ export class InMemoryRateLimitStore implements RateLimitStore {
     windowSec: number,
   ): Promise<{ count: number; remainingSec: number }> {
     return this.recordWindow(this.resetWindows, ip, windowSec);
+  }
+
+  async recordUserDeletion(
+    userId: string,
+    windowSec: number,
+  ): Promise<{ count: number; remainingSec: number }> {
+    return this.recordWindow(this.deleteWindows, userId, windowSec);
   }
 
   async recordFailure(account: string): Promise<number> {

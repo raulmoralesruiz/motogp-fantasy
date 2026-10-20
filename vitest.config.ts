@@ -41,6 +41,7 @@ export default defineConfig({
         // Servicios con transacciones Prisma: su cobertura la aporta la suite
         // de integración (test/integration/**). Lista EXPLÍCITA — añadir un
         // servicio nuevo a esta lista es una decisión visible en el diff.
+        "app/modules/identity/account-service.ts",
         "app/modules/identity/auth-service.ts",
         "app/modules/seasons/season-service.ts",
         "app/modules/seasons/gp-service.ts",

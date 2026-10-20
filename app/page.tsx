@@ -80,6 +80,9 @@ export default function HomePage() {
               <Link href="/admin">Panel de administración</Link>
             </p>
           )}
+          <p>
+            <Link href="/perfil">Perfil</Link>
+          </p>
           <Button
             type="button"
             onClick={() => logout.mutate()}

@@ -73,12 +73,13 @@
 
 - **Minimización:** solo se recoge email + seudónimo + datos de juego. Sin PII innecesario.
 - **Derecho de acceso:** el usuario puede exportar sus datos (lineups, puntos, ligas).
-- **Derecho de supresión:** al eliminar la cuenta:
-  - Se **anonimiza** el usuario (seudónimo → "Usuario eliminado", email borrado).
-  - Se retira de todas las ligas.
-  - Su histórico de puntos se **anonimiza** (se conserva el ranking numérico sin identidad) o se elimina según configuración — decisión pendiente.
-  - Se borran datos personales; se conservan datos de juego anonimizados para integridad de rankings.
-- **Retención de logs:** los logs de auditoría que contengan PII se anonimizan tras un periodo.
+- **Derecho de supresión:** al eliminar la cuenta se **anonimiza** el usuario (no se borra la fila; política completa en **ADR-0016**):
+  - Email → `anonimizado.<userId>@invalido.local` (libera el email original para re-registro); username → `usuario-eliminado-<8 chars del id>`; hash → sentinela (los logins viejos fallan siempre).
+  - Sesiones revocadas, tokens de recuperación y roles borrados; el usuario sale de todas las ligas (`left`) y sus invitaciones creadas quedan revocadas.
+  - Los **datos de juego se conservan** apuntando al usuario anonimizado (integridad de rankings; sin recálculos retroactivos).
+  - `audit_log` (append-only) se conserva; la entrada `user.account_deleted` no incluye PII (solo `userId` + contadores).
+  - Guardas: re-introducción de contraseña + rate-limit (3/h por usuario) + idempotencia (`PRECONDITION_FAILED` si ya está anonimizada).
+- **Retención de logs:** los logs de auditoría que contengan PII se anonimizan tras un periodo (periodo pendiente, §5).
 
 ## 2. Cabeceras y transporte
 
@@ -100,7 +101,7 @@
 
 ## 5. Decisiones pendientes
 
-- Política exacta de retención/anonimización al eliminar cuenta.
+- ~~Política exacta de retención/anonimización al eliminar cuenta.~~ **Resuelta: ADR-0016** (anonimización, 2026-10-20).
 - Si se habilita 2FA para `global_admin` (recomendado: sí).
 - Separación de deberes en el marcado de resultados definitivos.
 - Periodo exacto de retención de backups y logs.

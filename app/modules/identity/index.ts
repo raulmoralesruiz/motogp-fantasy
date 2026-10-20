@@ -7,8 +7,10 @@
  * contraseña (token de uso único con expiración, envío de email inyectable).
  * T-08 (hecho): RBAC — decisiones puras de roles (`roles.ts`) + bootstrap
  * de `global_admin` por env en el registro (ADR-0010).
- * Pendiente: US-03 (perfil/GDPR), T-09 (auditoría).
+ * US-03 (hecho): perfil/GDPR — exportación de datos + eliminación de
+ * cuenta por anonimización (ADR-0016).
  */
+export * from "./account-service";
 export * from "./auth-service";
 export * from "./email";
 export * from "./password";

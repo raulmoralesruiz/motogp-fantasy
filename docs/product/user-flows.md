@@ -66,6 +66,16 @@
 - **Resultados:** importar (automático o manual), marcar provisionales/definitivos, forzar recálculo.
 - **Auditoría:** ver log de acciones sensibles.
 
+### 1.8 Perfil y eliminación de cuenta (GDPR)
+
+1. El usuario entra en **Perfil** (pantalla 17) y ve sus datos (email, seudónimo, roles) y su actividad (lineups, puntos, ligas).
+2. **Exportar mis datos:** descarga un JSON con su cuenta, sesiones y datos de juego (derecho de acceso).
+3. **Eliminar mi cuenta:** operación destructiva con confirmación explícita:
+   - Re-introduce su contraseña (guarda contra sesiones comprometidas).
+   - Ve un aviso claro de qué pasa: se anonimizan sus datos personales, sale de todas las ligas y su histórico de juego se conserva sin identidad (ranking intacto).
+   - El servidor revoca sus sesiones, borra roles/tokens y registra la acción en auditoría sin PII (ADR-0016).
+   - Tras la eliminación queda deslogueado; su email puede re-registrarse como cuenta nueva.
+
 ## 2. Listado de pantallas (~18)
 
 | #   | Pantalla                     | Propósito                                                           |

@@ -121,3 +121,27 @@ describe("InMemoryRateLimitStore · recuperación (US-02 CA)", () => {
     expect((await store.recordResetRequest("1.1.1.1", 300)).count).toBe(1);
   });
 });
+
+describe("InMemoryRateLimitStore · eliminación de cuenta (US-03/ADR-0016)", () => {
+  it("recordUserDeletion mantiene una ventana independiente por usuario", async () => {
+    const store = new InMemoryRateLimitStore();
+    store.setNow(0);
+    // Mismo id de usuario: el contador de eliminación es independiente de
+    // los de login y recuperación.
+    expect((await store.recordAttempt("1.1.1.1", 60)).count).toBe(1);
+    expect((await store.recordUserDeletion("user-1", 3600)).count).toBe(1);
+    expect((await store.recordAttempt("1.1.1.1", 60)).count).toBe(2);
+    expect((await store.recordUserDeletion("user-1", 3600)).count).toBe(2);
+    // Otro usuario: contador propio.
+    expect((await store.recordUserDeletion("user-2", 3600)).count).toBe(1);
+  });
+
+  it("recordUserDeletion reinicia la ventana al expirar", async () => {
+    const store = new InMemoryRateLimitStore();
+    store.setNow(0);
+    expect((await store.recordUserDeletion("user-1", 3600)).count).toBe(1);
+    expect((await store.recordUserDeletion("user-1", 3600)).count).toBe(2);
+    store.setNow(3_601_000);
+    expect((await store.recordUserDeletion("user-1", 3600)).count).toBe(1);
+  });
+});

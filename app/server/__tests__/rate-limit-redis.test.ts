@@ -105,4 +105,22 @@ describe("redisRateLimitStore", () => {
       expect(result).toEqual({ count: 4, remainingSec: 0 });
     });
   });
+
+  describe("recordUserDeletion (US-03/ADR-0016, prefijo rl:delete:)", () => {
+    it("usa la clave de ventana de eliminación POR USUARIO", async () => {
+      mocks.redis.eval.mockResolvedValue(2);
+      mocks.redis.ttl.mockResolvedValue(3500);
+
+      const result = await redisRateLimitStore.recordUserDeletion("user-123", 3600);
+
+      expect(mocks.redis.eval).toHaveBeenCalledTimes(1);
+      const [script, numKeys, key, windowSec] = mocks.redis.eval.mock.calls[0] ?? [];
+      expect(script).toContain('redis.call("INCR", KEYS[1])');
+      expect(numKeys).toBe(1);
+      expect(key).toBe("rl:delete:user:user-123");
+      expect(windowSec).toBe("3600");
+      expect(mocks.redis.ttl).toHaveBeenCalledWith("rl:delete:user:user-123");
+      expect(result).toEqual({ count: 2, remainingSec: 3500 });
+    });
+  });
 });
