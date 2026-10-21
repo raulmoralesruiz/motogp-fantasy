@@ -1,0 +1,116 @@
+{
+  "rulesVersion": "lineups-v1",
+  "description": "Golden file del núcleo puro de lineups (composición, coste con precios congelados, presupuesto derivado de movimientos y contabilidad de cambios), versión lineups-v1. Fuentes de verdad: docs/product/game-rules.md §2/§3/§5, ADR-0015 y ADR-0017. Si una regla cambia, este archivo se actualiza de forma explícita y revisada — AGENTS.md §7.",
+  "fixtures": {
+    "affiliations": [
+      { "riderId": "r1", "teamId": "t1", "constructorId": "c1" },
+      { "riderId": "r2", "teamId": "t1", "constructorId": "c1" },
+      { "riderId": "r3", "teamId": "t1", "constructorId": "c1" },
+      { "riderId": "r4", "teamId": "t2", "constructorId": "c1" },
+      { "riderId": "r5", "teamId": "t2", "constructorId": "c1" },
+      { "riderId": "r6", "teamId": "t3", "constructorId": "c2" },
+      { "riderId": "r7", "teamId": "t3", "constructorId": "c2" },
+      { "riderId": "r8", "teamId": "t4", "constructorId": "c2" },
+      { "riderId": "r9", "teamId": "t4", "constructorId": "c2" }
+    ],
+    "limits": { "maxPerConstructor": 2, "maxPerTeam": 2 },
+    "limitsLenient": { "maxPerConstructor": 5, "maxPerTeam": 3 },
+    "slotsValidos": {
+      "gold": ["r1", "r6"],
+      "silver": ["r4", "r8"],
+      "constructorId": "c1",
+      "teamId": "t3"
+    },
+    "precios": [
+      { "assetType": "rider", "assetId": "r1", "price": 20 },
+      { "assetType": "rider", "assetId": "r6", "price": 15 },
+      { "assetType": "rider", "assetId": "r4", "price": 12.5 },
+      { "assetType": "rider", "assetId": "r8", "price": 10 },
+      { "assetType": "constructor", "assetId": "c1", "price": 18 },
+      { "assetType": "team", "assetId": "t3", "price": 16 }
+    ]
+  },
+  "cases": [
+    {
+      "id": "composicion-valida",
+      "fn": "validateLineup",
+      "args": { "slots": "@slotsValidos", "affiliations": "@affiliations", "limits": "@limits" },
+      "expected": true
+    },
+    {
+      "id": "composicion-3-oro",
+      "fn": "validateLineup",
+      "args": {
+        "slots": { "gold": ["r1", "r6", "r5"], "silver": ["r4", "r8"], "constructorId": "c1", "teamId": "t3" },
+        "affiliations": "@affiliations",
+        "limits": "@limitsLenient"
+      },
+      "expected": ["El lineup debe tener exactamente 2 pilotos oro (tiene 3)"]
+    },
+    {
+      "id": "duplicado-oro-plata",
+      "fn": "validateLineup",
+      "args": {
+        "slots": { "gold": ["r1", "r6"], "silver": ["r1", "r8"], "constructorId": "c1", "teamId": "t3" },
+        "affiliations": "@affiliations",
+        "limits": "@limitsLenient"
+      },
+      "expected": ["Piloto duplicado en el lineup: r1"]
+    },
+    {
+      "id": "concentracion-constructor",
+      "fn": "validateLineup",
+      "args": {
+        "slots": { "gold": ["r1", "r6"], "silver": ["r2", "r4"], "constructorId": "c1", "teamId": "t3" },
+        "affiliations": "@affiliations",
+        "limits": "@limits"
+      },
+      "expected": ["Concentración excedida: 3 pilotos del constructor c1 (máx 2)"]
+    },
+    {
+      "id": "coste-6-activos",
+      "fn": "lineupCost",
+      "args": { "slots": "@slotsValidos", "prices": "@precios" },
+      "expected": 91.5
+    },
+    {
+      "id": "coste-activo-sin-precio",
+      "fn": "lineupCost",
+      "args": {
+        "slots": "@slotsValidos",
+        "prices": [
+          { "assetType": "rider", "assetId": "r1", "price": 20 },
+          { "assetType": "rider", "assetId": "r4", "price": 12.5 },
+          { "assetType": "rider", "assetId": "r8", "price": 10 },
+          { "assetType": "constructor", "assetId": "c1", "price": 18 },
+          { "assetType": "team", "assetId": "t3", "price": 16 }
+        ]
+      },
+      "expected": [{ "assetType": "rider", "assetId": "r6" }]
+    },
+    {
+      "id": "presupuesto-primer-save-carry",
+      "fn": "firstSaveMovements",
+      "args": { "params": { "B": 100, "t": 0.25, "cmax": 8 }, "prevBalance": 8, "cost": 95 },
+      "expected": [["base", 100], ["carry", 2], ["spend", -95]]
+    },
+    {
+      "id": "presupuesto-primer-save-tope-cmax",
+      "fn": "firstSaveMovements",
+      "args": { "params": { "B": 100, "t": 0.25, "cmax": 8 }, "prevBalance": 40, "cost": 95 },
+      "expected": [["base", 100], ["carry", 8], ["spend", -95]]
+    },
+    {
+      "id": "cambio-devolucion",
+      "fn": "changeSpendMovement",
+      "args": { "costBefore": 95, "costAfter": 90 },
+      "expected": ["spend", 5]
+    },
+    {
+      "id": "saldo-derivado",
+      "fn": "balanceFromMovements",
+      "args": { "movements": [["base", 100], ["carry", 2], ["spend", -95]] },
+      "expected": 7
+    }
+  ]
+}

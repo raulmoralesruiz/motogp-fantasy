@@ -24,10 +24,16 @@ export const GP_STATUSES = ["scheduled", "locked", "finished", "cancelled"] as c
 
 export type GpStatusValue = (typeof GP_STATUSES)[number];
 
-/** Transiciones válidas por estado de origen (CA US-05). */
+/**
+ * Transiciones válidas por estado de origen (CA US-05 + US-13).
+ *
+ * US-13 (ADR-0017): `locked → scheduled` (reapertura) es permitida y
+ * auditada; el admin puede reabrir un GP bloqueado antes de `finished`
+ * (p. ej. si se detecta un error en los precios congelados).
+ */
 export const GP_TRANSITIONS: Record<GpStatusValue, readonly GpStatusValue[]> = {
   scheduled: ["locked", "cancelled"],
-  locked: ["finished", "cancelled"],
+  locked: ["scheduled", "finished", "cancelled"],
   finished: [],
   cancelled: [],
 };

@@ -448,6 +448,28 @@ describe("US-05 · Circuitos, GPs y calendario (PostgreSQL real)", () => {
     ).rejects.toMatchObject({ code: "BAD_REQUEST", message: /bloqueado/ });
   });
 
+  it("US-13: locked → scheduled (reapertura) es válida y auditada (ADR-0017)", async () => {
+    const { seasons } = await callerFor(ADMIN_IP, adminToken);
+    // gp2 está scheduled; cerramos y reabrimos.
+    await seasons.gps.updateStatus({ gpId: gp2Id, status: "locked" });
+    const reopened = await seasons.gps.updateStatus({ gpId: gp2Id, status: "scheduled" });
+    expect(reopened.status).toBe("scheduled");
+
+    const audit = await prisma.auditLog.findMany({
+      where: { action: "gp.status_changed", entityId: gp2Id },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(audit).toHaveLength(2);
+    expect(audit[0]).toMatchObject({
+      beforeData: { status: "scheduled" },
+      afterData: { status: "locked" },
+    });
+    expect(audit[1]).toMatchObject({
+      beforeData: { status: "locked" },
+      afterData: { status: "scheduled" },
+    });
+  });
+
   it("estado terminal: finished no admite cambios (BAD_REQUEST)", async () => {
     const { seasons } = await callerFor(ADMIN_IP, adminToken);
     await expect(

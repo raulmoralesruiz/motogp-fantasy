@@ -81,6 +81,9 @@ export default function HomePage() {
             </p>
           )}
           <p>
+            <Link href="/lineups">Lineups</Link>
+          </p>
+          <p>
             <Link href="/perfil">Perfil</Link>
           </p>
           <Button

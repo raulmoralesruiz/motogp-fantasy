@@ -27,6 +27,10 @@ describe("canTransitionGpStatus (US-05)", () => {
     expect(canTransitionGpStatus("locked", "cancelled")).toBe(true);
   });
 
+  it("locked → scheduled (reapertura) es válida (US-13, ADR-0017)", () => {
+    expect(canTransitionGpStatus("locked", "scheduled")).toBe(true);
+  });
+
   it("scheduled → finished NO es válida (el lockout debe preceder al fin)", () => {
     expect(canTransitionGpStatus("scheduled", "finished")).toBe(false);
   });

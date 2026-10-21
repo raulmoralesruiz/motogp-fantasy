@@ -45,6 +45,7 @@ export default defineConfig({
         "app/modules/identity/auth-service.ts",
         "app/modules/seasons/season-service.ts",
         "app/modules/seasons/gp-service.ts",
+        "app/modules/lineups/lineup-service.ts",
         "app/modules/admin/audit.ts",
         // Primitivas de UI: las cubren e2e (Playwright, Fase 5) y T-24 (RTL).
         "app/shared/components/**",

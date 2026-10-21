@@ -40,7 +40,9 @@
 
 - `lineups` — lineup activo (user, gp, estado: draft/locked/submitted, created/updated).
 - `lineup_slots` — slots del lineup (lineup, slot_type: gold/silver/constructor/team, asset_type, asset_id). **Constraint: exactamente 2 gold + 2 silver + 1 constructor + 1 team.**
-- `lineup_changes` — **historial de cambios** (lineup, gp, tipo: add/remove/swap/gold-silver, asset, coste_anterior, coste_nuevo, motivo, timestamp, user).
+- `lineup_changes` — **historial de cambios** (lineup, gp, tipo: add/remove/swap/gold-silver/**wildcard**, asset **nullable** — la entrada de wildcard no tiene activo, coste_anterior, coste_nuevo, motivo, timestamp, user). **Fuente de la que se derivan los contadores** (cambios usados, wildcard usada; ADR-0017).
+- `injury_confirmations` — **lesión confirmada por GP** (gp, asset_type, asset_id, motivo, confirmada_por, timestamp). Unique `(gp, asset, asset_id)`. Acción admin auditada (US-12, ADR-0017).
+- `change_exemptions` — **cambio gratuito concedido por lesión** (user, gp, injury_confirmation, used_at). Unique `(user, gp, injury)`. `used_at = null` → disponible (US-12, ADR-0017).
 
 ### Economía
 
@@ -84,6 +86,9 @@ prices N--1 (riders|constructors|teams) + gps
 users 1--N lineups N--1 gps
 lineups 1--N lineup_slots
 lineups 1--N lineup_changes
+gps 1--N injury_confirmations N--1 users (confirmada_por)
+injury_confirmations 1--N change_exemptions N--1 users
+change_exemptions N--1 gps
 users 1--N budget_movements N--1 gps
 leagues 1--N league_members N--1 users
 leagues 1--N league_invites
@@ -100,6 +105,8 @@ leagues 1--N rankings
 
 - `lineup_slots`: constraint de tabla que garantiza **exactamente 2 gold + 2 silver + 1 constructor + 1 team** por lineup (check sobre conteo por slot_type).
 - `lineups`: unique `(user, gp)` → **a lo sumo 1 lineup activo por usuario por GP**.
+- `injury_confirmations`: unique `(gp, asset_type, asset_id)` → una confirmación por activo por GP.
+- `change_exemptions`: unique `(user, gp, injury_confirmation_id)` → una exención por usuario por GP por lesión.
 - `league_members`: unique `(league, user)` → no duplicar membresía.
 - `results`: unique `(gp, event, rider)` → **idempotencia de importación**.
 - `prices`: unique `(asset_type, asset_id, gp)` → un precio por activo por GP.
@@ -110,6 +117,7 @@ leagues 1--N rankings
 
 - `lineups(user, gp)`, `lineups(gp)`.
 - `lineup_slots(lineup_id)`, `lineup_slots(asset_type, asset_id)`.
+- `injury_confirmations(gp)`, `change_exemptions(user, gp)`.
 - `results(gp, event)`, `results(rider)`.
 - `scores(gp)`, `scores(user)`.
 - `rankings(league, gp)`, `rankings(league)`.
@@ -127,6 +135,7 @@ leagues 1--N rankings
 | prices (por GP)                                                      | **Fuente de verdad** | Con motivo (fórmula/manual) y versión             |
 | lineups + lineup_slots                                               | **Fuente de verdad** | El lineup del usuario                             |
 | lineup_changes                                                       | **Fuente de verdad** | Historial de cambios (auditable)                  |
+| injury_confirmations + change_exemptions                             | **Fuente de verdad** | Lesiones confirmadas y exenciones (ADR-0017)      |
 | budget_movements                                                     | **Fuente de verdad** | De donde se deriva el presupuesto                 |
 | results (por piloto por evento)                                      | **Fuente de verdad** | Con estado provisional/definitivo y versión       |
 | results_history                                                      | **Fuente de verdad** | Histórico de correcciones                         |
@@ -142,14 +151,14 @@ leagues 1--N rankings
 
 | Operación                      | Transacción                                      | Bloqueo                                          |
 | ------------------------------ | ------------------------------------------------ | ------------------------------------------------ |
-| Guardar/actualizar lineup      | Sí (slots + cambios + validación de presupuesto) | `FOR UPDATE` sobre el lineup del usuario         |
-| Aplicar cambio (transfer)      | Sí (descuenta cambio, valida)                    | `FOR UPDATE` sobre lineup + counter de cambios   |
+| Guardar/actualizar lineup      | Sí (slots + cambios + validación de presupuesto) | `FOR UPDATE` sobre el GP (gate de lockout) + el lineup del usuario |
+| Aplicar cambio (transfer)      | Sí (valida cambios restantes, valida)            | `FOR UPDATE` sobre el GP + el lineup (contadores derivados del historial, ADR-0017) |
 | Importar resultados            | Sí (por lote, idempotente)                       | Por `(gp, event)`                                |
 | Marcar definitivo + recalcular | Sí (por GP)                                      | Lock por GP (un recálculo a la vez)              |
 | Unirse a liga                  | Sí (valida plaza + membership)                   | `FOR UPDATE` sobre league (contador de miembros) |
 | Actualizar precios             | Sí (por GP)                                      | Por GP                                           |
 
-- **Evitar condiciones de carrera en lockout:** el estado del GP (`locked`) + el timestamp de cierre se evalúan server-side dentro de la transacción; un intento de cambio tras el cierre se rechaza.
+- **Evitar condiciones de carrera en lockout:** el gate `status = locked ∨ now ≥ lockoutAt` se evalúa server-side dentro de la transacción de cada cambio (ADR-0017); un intento de cambio tras el cierre se rechaza incluso bajo concurrencia.
 - **Recálculo concurrente:** se usa un lock (p. ej. `advisory lock` por GP) para que dos jobs no recalculen el mismo GP a la vez.
 
 ## 7. Invariantes del sistema (garantizados)

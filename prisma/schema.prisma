@@ -86,6 +86,7 @@ enum LineupChangeType {
   remove
   swap
   gold_silver
+  wildcard // reset completo del lineup (1/temporada, ADR-0017): sin activo
 }
 
 enum BudgetMovementType {
@@ -177,6 +178,8 @@ model User {
   userRoles       UserRole[]
   lineups         Lineup[]
   lineupChanges   LineupChange[]
+  injuryConfirmations InjuryConfirmation[] @relation("injuryConfirmations")
+  changeExemptions  ChangeExemption[]
   budgetMovements BudgetMovement[]
   leagueMembers   LeagueMember[]
   leagueInvites   LeagueInvite[]
@@ -329,6 +332,8 @@ model Gp {
   prices          Price[]
   lineups         Lineup[]
   lineupChanges   LineupChange[]
+  injuryConfirmations InjuryConfirmation[]
+  changeExemptions  ChangeExemption[]
   budgetMovements BudgetMovement[]
   results         Result[]
   resultsEvents   ResultsEvent[]
@@ -481,13 +486,15 @@ model LineupSlot {
 }
 
 // Historial de cambios (auditable): cada transferencia queda registrada.
+// `assetType`/`assetId` son nullable: la entrada de `wildcard` (reset completo,
+// ADR-0017) no tiene activo; `gold_silver` apunta al piloto reasignado.
 model LineupChange {
   id         String           @id @default(uuid()) @db.Uuid
   lineupId   String           @map("lineup_id") @db.Uuid
   gpId       String           @map("gp_id") @db.Uuid
   type       LineupChangeType @map("type")
-  assetType  AssetType        @map("asset_type")
-  assetId    String           @map("asset_id") @db.Uuid
+  assetType  AssetType?       @map("asset_type")
+  assetId    String?          @map("asset_id") @db.Uuid
   costBefore Decimal?         @map("cost_before") @db.Decimal(10, 2)
   costAfter  Decimal?         @map("cost_after") @db.Decimal(10, 2)
   reason     String?
@@ -501,6 +508,47 @@ model LineupChange {
 
   @@index([lineupId])
   @@map("lineup_changes")
+}
+
+// Lesión confirmada por el admin para un GP (US-12, ADR-0017): concede +1
+// cambio gratuito a cada usuario cuyo lineup de ese GP contenga el activo.
+model InjuryConfirmation {
+  id          String    @id @default(uuid()) @db.Uuid
+  gpId        String    @map("gp_id") @db.Uuid
+  assetType   AssetType @map("asset_type")
+  assetId     String    @map("asset_id") @db.Uuid
+  reason      String?
+  confirmedBy String    @map("confirmed_by") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  gp     Gp                @relation(fields: [gpId], references: [id], onDelete: Cascade)
+  byUser User              @relation("injuryConfirmations", fields: [confirmedBy], references: [id])
+  exemptions ChangeExemption[]
+
+  @@unique([gpId, assetType, assetId])
+  @@index([gpId])
+  @@map("injury_confirmations")
+}
+
+// Cambio gratuito concedido a un usuario por una lesión confirmada (US-12,
+// ADR-0017). `usedAt = null` → disponible; se fija al consumirlo.
+model ChangeExemption {
+  id                   String   @id @default(uuid()) @db.Uuid
+  userId               String   @map("user_id") @db.Uuid
+  gpId                 String   @map("gp_id") @db.Uuid
+  injuryConfirmationId String   @map("injury_confirmation_id") @db.Uuid
+  usedAt               DateTime? @map("used_at") @db.Timestamptz
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gp     Gp               @relation(fields: [gpId], references: [id], onDelete: Cascade)
+  injury InjuryConfirmation @relation(fields: [injuryConfirmationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gpId, injuryConfirmationId])
+  @@index([userId, gpId])
+  @@map("change_exemptions")
 }
 
 // ── Economía ─────────────────────────────────────────────────────────────────

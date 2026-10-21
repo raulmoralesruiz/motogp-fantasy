@@ -6,6 +6,7 @@ import { router } from "../trpc";
 
 import { adminRouter } from "./admin";
 import { getDefaultAuthRouter } from "./auth";
+import { getDefaultLineupsRouter } from "./lineups";
 import { getDefaultMarketRouter } from "./market";
 import { getDefaultProfileRouter } from "./profile";
 import { getDefaultSeasonsRouter } from "./seasons";
@@ -18,6 +19,7 @@ export const appRouter = router({
   admin: adminRouter,
   seasons: getDefaultSeasonsRouter(),
   market: getDefaultMarketRouter(),
+  lineups: getDefaultLineupsRouter(),
 });
 
 export type AppRouter = typeof appRouter;

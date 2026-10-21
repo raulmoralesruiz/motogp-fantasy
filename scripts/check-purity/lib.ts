@@ -44,6 +44,11 @@ export interface PurityConfig {
   moduleRoots: string[];
   /** Directorios permitidos fuera del módulo (relativos a la raíz del repo). */
   allowedExternalDirs: string[];
+  /**
+   * Directorios adicionales permitidos por raíz de módulo (p. ej. el núcleo
+   * puro de `lineups` puede reutilizar `economy`, que es a su vez puro).
+   */
+  allowedByRoot?: Record<string, string[]>;
 }
 
 /** Módulos de Node con I/O (o acceso a entorno/reloj). */
@@ -122,9 +127,13 @@ function checkFile(
 ): PurityViolation[] {
   const sf = ts.createSourceFile(file.path, file.content, ts.ScriptTarget.Latest, true);
   const violations: PurityViolation[] = [];
+  const allowedDirs = [
+    ...config.allowedExternalDirs,
+    ...(config.allowedByRoot?.[moduleRoot] ?? []),
+  ];
 
   for (const imp of extractImports(sf)) {
-    const violation = classifyImport(file.path, moduleRoot, imp, config);
+    const violation = classifyImport(file.path, moduleRoot, imp, allowedDirs);
     if (violation) violations.push(violation);
   }
 
@@ -214,7 +223,7 @@ function classifyImport(
   filePath: string,
   moduleRoot: string,
   imp: ImportInfo,
-  config: PurityConfig,
+  allowedDirs: string[],
 ): PurityViolation | null {
   const spec = imp.specifier;
   const bare = spec.startsWith("node:") ? spec.slice("node:".length) : spec;
@@ -244,7 +253,7 @@ function classifyImport(
     resolved = `app/${spec.slice("@/".length)}`;
   }
 
-  if (resolved !== null && !isAllowedPath(resolved, moduleRoot, config)) {
+  if (resolved !== null && !isAllowedPath(resolved, moduleRoot, allowedDirs)) {
     return {
       file: filePath,
       line: imp.line,
@@ -276,10 +285,10 @@ function resolveRelative(fromFile: string, specifier: string): string {
 function isAllowedPath(
   resolved: string,
   moduleRoot: string,
-  config: PurityConfig,
+  allowedDirs: string[],
 ): boolean {
   if (resolved === moduleRoot || resolved.startsWith(`${moduleRoot}/`)) return true;
-  return config.allowedExternalDirs.some(
+  return allowedDirs.some(
     (d) => resolved === d || resolved.startsWith(`${d}/`),
   );
 }
