@@ -10,6 +10,7 @@ import CreateCircuitForm from "./create-circuit-form";
 import CreateSeasonForm from "./create-season-form";
 import GpsSection from "./gps-section";
 import MarketSection from "./market-section";
+import ResultsSection from "./results-section";
 
 const STATUS_LABELS: Record<string, string> = {
   planned: "planificada",
@@ -19,12 +20,12 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 /**
- * Panel de administración global (US-04, US-05, US-06, flujo 18):
+ * Panel de administración global (US-04, US-05, US-06, US-16, flujo 18):
  * temporadas y versiones de reglas; circuitos, GPs (estado, lockout,
  * eventos) e import de calendario en 2 pasos (ADR-0012); mercado (pilotos,
- * constructores, equipos y afiliaciones por GP). Solo `global_admin` ve el
- * contenido; el resto es rechazado server-side (403) — la UI es una vista
- * (AGENTS.md §8).
+ * constructores, equipos y afiliaciones por GP); importación manual de
+ * resultados por evento (ADR-0018). Solo `global_admin` ve el contenido; el
+ * resto es rechazado server-side (403) — la UI es una vista (AGENTS.md §8).
  */
 export default function AdminPage() {
   const me = trpc.auth.me.useQuery();
@@ -40,8 +41,9 @@ export default function AdminPage() {
         Admin <span>panel</span>
       </h1>
       <p className="muted">
-        Temporadas, reglas, circuitos, GPs, calendario y mercado (US-04,
-        US-05, US-06). <Link href="/">Volver al inicio</Link>
+        Temporadas, reglas, circuitos, GPs, calendario, mercado y
+        resultados (US-04, US-05, US-06, US-16).{" "}
+        <Link href="/">Volver al inicio</Link>
       </p>
 
       {me.isPending ? (
@@ -123,6 +125,9 @@ export default function AdminPage() {
 
           <h2>Mercado</h2>
           <MarketSection seasons={seasons.data ?? []} />
+
+          <h2>Resultados</h2>
+          <ResultsSection seasons={seasons.data ?? []} />
         </>
       )}
     </main>

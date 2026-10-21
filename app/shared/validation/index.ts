@@ -6,5 +6,6 @@
  */
 export * from "./market";
 export * from "./profile";
+export * from "./results";
 export * from "./season-rules";
 export * from "./seasons";

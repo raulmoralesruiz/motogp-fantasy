@@ -22,6 +22,7 @@ interface NormalizedEventResults {
   entries: Array<{
     riderRef: string; // referencia estable del piloto (se mapea a riders.id)
     position: number | null; // null si DNF/non-starter
+    started: boolean; // false = non-starter (ABSENT); true ∧ ¬finished = DNF (ADR-0018)
     finished: boolean;
     penalties: string[]; // p. ej. ['time-penalty', 'dq']
     bonuses: string[]; // p. ej. ['fastest-lap', 'pole']
@@ -35,6 +36,7 @@ interface NormalizedEventResults {
 - **Mapeo de identidades:** cada fuente tiene un mapeo `riderRef → riders.id` (mantenido por el admin). Si un piloto de la fuente no está en `riders`, se crea o se marca como "sin mapear" (requiere acción del admin).
 - **Idempotencia:** la importación usa la clave natural `(gp, event, rider)`; re-importar no duplica.
 - **Proveniencia:** cada resultado guarda `source` (nombre+versión de la fuente) y `raw` (payload original) para auditoría.
+- **Semántica del pipeline** (estados provisional/definitivo/corrected, `results_version`, re-importación como corrección con histórico, códigos importables vs derivados): **ADR-0018**.
 
 ### 1.2 Calendario (`CalendarSource` — US-05, ADR-0012)
 

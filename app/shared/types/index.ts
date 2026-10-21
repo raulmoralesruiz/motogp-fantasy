@@ -35,6 +35,29 @@ export interface TeamAsset {
 
 export type GpStatus = "FINISHED" | "DNF" | "ABSENT";
 
+/**
+ * Eventos que admiten resultados (ADR-0018): Q1 no es un evento de
+ * resultados (no aparece en el contrato `ResultsSource`).
+ */
+export const RESULT_EVENT_KINDS = ["q2", "sprint", "race"] as const;
+export type ResultEventKind = (typeof RESULT_EVENT_KINDS)[number];
+
+/**
+ * Códigos de bono importables (los aporta el admin o la fuente; ADR-0018).
+ * El resto de bonos (ganador, posiciones ganadas, extraordinario) los deriva
+ * el motor de puntuación (US-19). Los VALORES viven en `season_rules`.
+ */
+export const RESULT_BONUS_CODES = ["fastest-lap", "pole"] as const;
+export type ResultBonusCode = (typeof RESULT_BONUS_CODES)[number];
+
+/**
+ * Códigos de penalización importables (ADR-0018). El DNF (−5) lo deriva el
+ * motor desde `started ∧ ¬finished` en la carrera principal. Los VALORES
+ * viven en `season_rules`.
+ */
+export const RESULT_PENALTY_CODES = ["dq", "time-penalty"] as const;
+export type ResultPenaltyCode = (typeof RESULT_PENALTY_CODES)[number];
+
 /** Resultado de un piloto en la carrera principal de un GP. */
 export interface GpResult {
   riderId: string;

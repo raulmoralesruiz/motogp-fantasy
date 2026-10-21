@@ -57,7 +57,7 @@
 
 ### Resultados
 
-- `results` — **resultado por piloto por evento** (gp, event, rider, posición, puntos_crudos, estado: provisional/definitive/corrected, results_version, source: auto/manual, imported_at). **Clave natural idempotente: (gp, event, rider).**
+- `results` — **resultado por piloto por evento** (gp, event, rider, posición, puntos_crudos, estado: provisional/definitive/corrected, results_version, source: auto/manual, raw (JSON: payload validado de la importación sin riderId, para auditoría — ADR-0018), imported_at). **Clave natural idempotente: (gp, event, rider).**
 - `results_events` — metadatos del evento de resultado (gp, event, estado, neutralizada, cancelada, results_version).
 - `results_history` — **histórico de correcciones** (result_id, anterior, nuevo, motivo, results_version, timestamp, user).
 

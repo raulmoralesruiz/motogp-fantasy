@@ -19,7 +19,12 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..", "..");
 
 /** Módulos puros a auditar (T-03, AGENTS.md §3). */
-const MODULE_ROOTS = ["app/modules/economy", "app/modules/scoring", "app/modules/lineups/core"];
+const MODULE_ROOTS = [
+  "app/modules/economy",
+  "app/modules/scoring",
+  "app/modules/lineups/core",
+  "app/modules/results/core",
+];
 /** Directorios permitidos fuera del módulo. */
 const ALLOWED_EXTERNAL_DIRS = ["app/shared/types"];
 /**
@@ -63,7 +68,7 @@ function main(): void {
 
   if (violations.length === 0) {
     console.log(
-      `✅ Check de pureza: ${files.length} archivos auditados (economy, scoring, lineups/core) — sin violaciones.`,
+      `✅ Check de pureza: ${files.length} archivos auditados (economy, scoring, lineups/core, results/core) — sin violaciones.`,
     );
     return;
   }

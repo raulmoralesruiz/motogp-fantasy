@@ -193,3 +193,44 @@ a {
 .form .button {
   margin-top: 0.3rem;
 }
+
+/* Tabla de importación de resultados (panel admin, US-16). */
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.results-table th,
+.results-table td {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #21262d;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.results-table th {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.results-table input[type="number"] {
+  width: 5rem;
+  padding: 0.3rem 0.4rem;
+  font-size: 0.9rem;
+}
+
+.results-table input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--accent);
+}
+
+.results-table .codes label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--fg);
+  white-space: nowrap;
+}
