@@ -10,7 +10,11 @@
 
 import { z } from "zod";
 
-import { RESULT_BONUS_CODES, RESULT_PENALTY_CODES } from "../types/index.js";
+import {
+  RESULT_BONUS_CODES,
+  RESULT_EVENT_KINDS,
+  RESULT_PENALTY_CODES,
+} from "../types";
 
 const bonusCode = z.enum(RESULT_BONUS_CODES);
 const penaltyCode = z.enum(RESULT_PENALTY_CODES);
@@ -105,7 +109,70 @@ export const eventResultsInputSchema = z.object({
   eventId: z.string().uuid("El identificador de evento no es válido"),
 });
 
+// ── US-17 (ADR-0019): auto-import desde la fuente ────────────────────────────
+
+/** Importación automática de un evento desde la fuente (job + botón admin). */
+export const importFromSourceInputSchema = z.object({
+  gpId: z.string().uuid("El identificador de GP no es válido"),
+  event: z.enum(RESULT_EVENT_KINDS, {
+    message: "El evento debe ser q2, sprint o race",
+  }),
+});
+
+/**
+ * Vincula un GP a un evento de la fuente (`Gp.sourceRef`, ADR-0019).
+ * `eventRef` explícito o, si se omite, match único por nombre normalizado
+ * contra el catálogo de la temporada (lo resuelve el servicio).
+ */
+export const linkSourceInputSchema = z.object({
+  gpId: z.string().uuid("El identificador de GP no es válido"),
+  eventRef: z
+    .string()
+    .min(1, "El identificador de evento de la fuente no puede estar vacío")
+    .max(120, "El identificador de evento de la fuente no puede superar los 120 caracteres")
+    .optional(),
+});
+
+/** Desvincula un GP de la fuente (`Gp.sourceRef = null`, ADR-0019). */
+export const unlinkSourceInputSchema = z.object({
+  gpId: z.string().uuid("El identificador de GP no es válido"),
+});
+
+/** Asocia un piloto de la fuente a un piloto del mercado (ADR-0019). */
+export const setRiderMappingInputSchema = z.object({
+  riderRef: z
+    .string()
+    .min(1, "La referencia del piloto en la fuente no puede estar vacía")
+    .max(120, "La referencia del piloto en la fuente no puede superar los 120 caracteres"),
+  riderId: z.string().uuid("El identificador de piloto no es válido"),
+});
+
+/** Elimina la asociación de un piloto de la fuente (ADR-0019). */
+export const deleteRiderMappingInputSchema = z.object({
+  riderRef: z
+    .string()
+    .min(1, "La referencia del piloto en la fuente no puede estar vacía")
+    .max(120, "La referencia del piloto en la fuente no puede superar los 120 caracteres"),
+});
+
+/** Estado operativo del auto-import de un GP (UI de admin, US-17). */
+export const sourceStateInputSchema = z.object({
+  gpId: z.string().uuid("El identificador de GP no es válido"),
+});
+
+/** Catálogo de eventos de la fuente de la temporada del GP (UI de admin). */
+export const sourceEventsInputSchema = z.object({
+  gpId: z.string().uuid("El identificador de GP no es válido"),
+});
+
 export type ResultEntryInput = z.infer<typeof resultEntrySchema>;
 export type ImportEventInput = z.infer<typeof importEventInputSchema>;
 export type GpEventsInput = z.infer<typeof gpEventsInputSchema>;
 export type EventResultsInput = z.infer<typeof eventResultsInputSchema>;
+export type ImportFromSourceInput = z.infer<typeof importFromSourceInputSchema>;
+export type LinkSourceInput = z.infer<typeof linkSourceInputSchema>;
+export type UnlinkSourceInput = z.infer<typeof unlinkSourceInputSchema>;
+export type SetRiderMappingInput = z.infer<typeof setRiderMappingInputSchema>;
+export type DeleteRiderMappingInput = z.infer<typeof deleteRiderMappingInputSchema>;
+export type SourceStateInput = z.infer<typeof sourceStateInputSchema>;
+export type SourceEventsInput = z.infer<typeof sourceEventsInputSchema>;

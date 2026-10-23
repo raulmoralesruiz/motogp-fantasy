@@ -31,6 +31,7 @@ function gpFixture(overrides: Partial<GpView> = {}): GpView {
     date: new Date("2026-04-19T14:00:00Z"),
     status: "scheduled",
     lockoutAt: null,
+    sourceRef: null,
     events: [
       { id: "e1", type: "q2", orderNum: 1, startTime: null, status: "scheduled" },
       { id: "e2", type: "race", orderNum: 2, startTime: null, status: "scheduled" },

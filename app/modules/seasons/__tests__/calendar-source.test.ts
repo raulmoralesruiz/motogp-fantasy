@@ -94,6 +94,8 @@ describe("normalizePulseLiveCalendar (US-05)", () => {
     });
     // La fecha del GP es la de la carrera (Date UTC, superjson-safe).
     expect(gp?.date).toEqual(new Date("2026-03-01T13:00:00.000Z"));
+    // Referencia estable en la fuente (US-17, ADR-0019): `id` del evento.
+    expect(gp?.sourceEventRef).toBe("ev-1");
     expect(gp?.events).toEqual([
       { type: "q1", startTime: new Date("2026-02-28T12:00:00.000Z") },
       { type: "q2", startTime: new Date("2026-02-28T12:45:00.000Z") },

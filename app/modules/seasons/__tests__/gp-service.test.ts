@@ -143,6 +143,7 @@ describe("GpService.getGp (T-24)", () => {
       date: new Date("2026-04-19T14:00:00Z"),
       status: "scheduled",
       lockoutAt: null,
+      sourceRef: null,
       circuit: { id: "c1", name: "Jerez", country: "España", location: null },
       // Dos eventos del mismo tipo (carrera reiniciada): el sort debe
       // desempatar por orderNum (1 antes que 2).

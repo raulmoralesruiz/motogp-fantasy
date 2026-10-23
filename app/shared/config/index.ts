@@ -6,3 +6,4 @@
  * `season_rules` (JSONB versionado); aquí viven como defaults tipados.
  */
 export * from "./season-rules";
+export * from "./results-poll";

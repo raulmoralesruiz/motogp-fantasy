@@ -4,10 +4,15 @@
  * US-08 (hecho): job de precios por GP (`applyPricesForGp`), con lock por GP
  * inyectado (`GpLockStore`); orquesta `PriceService.applyFormulaForGp`.
  *
- * Pendiente (fase de resultados, US-16…US-20): implementación de producción
+ * US-17 (hecho): job de polling de importación automática de resultados
+ * (`pollResults`, ADR-0019): ventana de fin de semana `[now − 48h,
+ * now + 24h]`, `now` inyectado, sin lock store adicional (el `FOR UPDATE`
+ * del GP serializa); orquesta `ResultsService.importEventFromSource` /
+ * `recordSourceFailure`.
+ *
+ * Pendiente (fase de resultados, US-18…US-20): implementación de producción
  * del lock (Redis), cola/worker BullMQ y disparo automático tras cada GP
- * definitivo. Placeholder T-03: job de recálculo (T-10) e importación
- * automática (US-17).
+ * definitivo. Placeholder T-03: job de recálculo (T-10).
  *
  * Responsabilidad:
  * - Workers sobre BullMQ/Redis: importación de resultados, recálculo con lock
@@ -17,3 +22,4 @@
  *   módulos).
  */
 export * from "./prices";
+export * from "./results-poll";

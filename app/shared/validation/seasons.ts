@@ -175,6 +175,12 @@ export const calendarGpSchema = z
       )
       .min(2, "Un GP necesita al menos Q2 y la carrera")
       .max(4, "Un GP tiene a lo sumo 4 eventos (Q1, Q2, sprint, carrera)"),
+    /**
+     * Referencia estable del evento en la fuente (US-17, ADR-0019):
+     * `null` si la fuente no la proporciona. `nullish()`: los previews
+     * antiguos sin el campo siguen siendo válidos.
+     */
+    sourceEventRef: z.string().min(1).nullish(),
   })
   .refine((gp) => hasQ2AndRace(gp.events), {
     message: "Q2 y la carrera son obligatorias",

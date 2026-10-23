@@ -22,3 +22,4 @@
  */
 export * from "./core";
 export * from "./results-service";
+export * from "./pulselive-source";

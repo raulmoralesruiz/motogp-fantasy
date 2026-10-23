@@ -35,6 +35,7 @@ const calendar: NormalizedSeasonCalendar = {
       name: "GP de Qatar",
       circuit: { name: "Lusail", country: "Qatar", location: null },
       date: new Date("2026-03-08T14:00:00Z"),
+      sourceEventRef: null,
       events: [
         { type: "q1", startTime: null },
         { type: "q2", startTime: null },
@@ -50,6 +51,7 @@ const calendar: NormalizedSeasonCalendar = {
         location: "Santiago del Estero",
       },
       date: new Date("2026-03-22T17:00:00Z"),
+      sourceEventRef: null,
       events: [{ type: "race", startTime: null }],
     },
   ],

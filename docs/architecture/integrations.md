@@ -7,28 +7,31 @@
 ### 1.1 Resultados (`ResultsSource`)
 
 ```typescript
+type SourceGpStatus = "provisional" | "definitive" | "cancelled" | "not-started";
+
 interface ResultsSource {
-  // Devuelve los resultados crudos de un GP (por evento) en un formato normalizado.
-  fetchEventResults(gpId: string, event: EventType): Promise<NormalizedEventResults>;
-  // Devuelve el estado de un GP (provisional/definitivo/cancelado).
-  fetchGpStatus(gpId: string): Promise<GpStatus>;
+  // Devuelve los resultados de un GP (por evento) en un formato normalizado.
+  fetchEventResults(gpId: string, event: ResultEventKind): Promise<NormalizedEventResults>;
+  // Devuelve el estado del GP según la fuente (ADR-0019).
+  fetchGpStatus(gpId: string): Promise<SourceGpStatus>;
   // Metadatos de la fuente (para auditoría).
   readonly meta: { name: string; version: string; authorized: boolean };
 }
 
 interface NormalizedEventResults {
-  event: EventType; // 'q2' | 'sprint' | 'race'
+  event: ResultEventKind; // 'q2' | 'sprint' | 'race'
   status: "provisional" | "definitive" | "cancelled";
   entries: Array<{
     riderRef: string; // referencia estable del piloto (se mapea a riders.id)
     position: number | null; // null si DNF/non-starter
     started: boolean; // false = non-starter (ABSENT); true ∧ ¬finished = DNF (ADR-0018)
     finished: boolean;
-    penalties: string[]; // p. ej. ['time-penalty', 'dq']
-    bonuses: string[]; // p. ej. ['fastest-lap', 'pole']
+    penalties: ResultPenaltyCode[]; // p. ej. ['time-penalty', 'dq'] (PulseLive: siempre [])
+    bonuses: ResultBonusCode[]; // p. ej. ['fastest-lap', 'pole']
+    rawPoints: number | null; // puntos oficiales de la fuente (auditoría; null si no los aporta)
     raw: Record<string, unknown>; // payload original (auditoría)
   }>;
-  fetchedAt: string;
+  fetchedAt: Date; // momento de la consulta (UTC, superjson-safe)
   sourceVersion: string;
 }
 ```
@@ -37,6 +40,8 @@ interface NormalizedEventResults {
 - **Idempotencia:** la importación usa la clave natural `(gp, event, rider)`; re-importar no duplica.
 - **Proveniencia:** cada resultado guarda `source` (nombre+versión de la fuente) y `raw` (payload original) para auditoría.
 - **Semántica del pipeline** (estados provisional/definitivo/corrected, `results_version`, re-importación como corrección con histórico, códigos importables vs derivados): **ADR-0018**.
+- **Refinamiento del contrato (ADR-0019):** `SourceGpStatus` añade `not-started` (la sesión no se ha celebrado; el job la salta sin contarla como fallo); `rawPoints` = puntos oficiales de la fuente (auditoría); `fetchedAt` como `Date` (superjson-safe, como el calendario).
+- **Implementación del MVP (US-17):** núcleo puro en `app/modules/results/pulselive-source.ts`: `normalizePulseLiveClassification(payload, ctx)` (testeada con fixtures grabados en vivo, GP de Indonesia 2026) y `selectPulseLiveSession` (última `Q`/`SPR`/`RAC` por fecha, coherente con ADR-0012). Fail-closed: estado de entrada desconocido, falta de `riders_id`, inconsistencia posición/terminado (ambos sentidos) o piloto de `fastestLap` ausente de la clasificación → `ResultsNormalizationError` (mensaje en español con el nombre del GP).
 
 ### 1.2 Calendario (`CalendarSource` — US-05, ADR-0012)
 
@@ -78,10 +83,11 @@ interface NormalizedSeasonCalendar {
 - **Verificado:** la API está en vivo y responde. Endpoints clave:
   - `/results/seasons`, `/results/events?seasonUuid=&isFinished=`
   - `/results/categories?seasonUuid=`, `/results/sessions?eventUuid=&categoryUuid=`
-  - `/results/session/{id}/classification?seasonYear=`
+  - `/results/classification?sessionUuid=&categoryUuid=`
   - `/results/standings?seasonUuid=&categoryUuid=`
   - `/riders`, `/teams?categoryUuid=&seasonYear=` (rosters históricos vía teams)
 - **Verificado también para calendario (US-05, 2026-10-18):** `/results/seasons` → temporada por año; `/results/categories?seasonUuid=` → categoría MotoGP (`legacy_id: 3`); `/results/events?seasonUuid=`; `/results/sessions?eventUuid=&categoryUuid=` (N+1: ~24 peticiones por temporada — aceptable para una acción puntual de admin). Temporada 2026: 22 eventos no-test → 21 GPs con el patrón típico `FP,PR,FP,Q,Q,SPR,WUP,RAC`; el GP de Cataluña tiene **2 `RAC`** (carrera reiniciada), caso que cubre la regla «la última por fecha».
+- **Verificado también para resultados (US-17, 2026-10-21):** escaneo completo de la temporada 2026 (22 GPs no-test, 177 sesiones, 69 sesiones Q/SPR/RAC clasificadas, 0 sin clasificación). El parámetro de `/results/sessions` es el campo **`id`** del evento (**no** `toad_api_uuid`); el de `/results/classification` es el campo **`id`** de la sesión. Tipos de sesión: `FP`, `PR`, `Q` (1–2 por GP), `SPR`, `WUP`, `RAC` (23 en 2026: un GP con 2 `RAC` = carrera reiniciada). Estados de sesión observados: `FINISHED`, `NOT-STARTED`; `/classification` de una sesión `NOT-STARTED` devuelve **HTTP 400** (error de Spring) → el job debe gatear sobre el estado de la sesión antes de fetchear (ADR-0019). Estados de entrada: `INSTND` (terminó), `OUTSTND`/`NOTFINISHFIRST` (DNF), `NOTONRESTARTGRID` (ausente). `rider.riders_id` es la referencia estable del piloto (`riderRef`, ADR-0019). Payload `/classification`: `{classification[], records[], file, files}`; `records[]` incluye `type: "bestLap"|"poleLap"|"fastestLap"|"recordLap"` (`fastestLap` = vuelta rápida de la sesión → bono `fastest-lap` en carrera, ADR-0019; `bestLap` = lap de referencia histórico, con `year`).
 - **Ventajas:** gratis, sin auth, datos oficiales de carrera.
 - **Riesgos:**
   - **No es un contrato estable ni autorizado explícitamente** para uso comercial; puede cambiar o bloquearse.
@@ -115,7 +121,7 @@ interface NormalizedSeasonCalendar {
 | Producción | Sportradar (licenciado) | PulseLive + manual | SLA y autorización contractual                     |
 | Histórico  | Bases comunitarias      | Manual             | Backfill de temporadas pasadas                     |
 
-> **Ninguna integración se da por disponible sin verificación.** PulseLive se verificó en vivo en la fase 2 (resultados) y el 2026-10-18 (calendario, US-05). Sportradar y las comunitarias **no** se han verificado contractualmente; se tratan como "por validar" antes de depender de ellas.
+> **Ninguna integración se da por disponible sin verificación.** PulseLive se verificó en vivo en la fase 2 (resultados), el 2026-10-18 (calendario, US-05) y el 2026-10-21 (resultados, US-17). Sportradar y las comunitarias **no** se han verificado contractualmente; se tratan como "por validar" antes de depender de ellas.
 
 ## 4. Pipeline de importación
 

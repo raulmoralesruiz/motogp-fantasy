@@ -322,12 +322,14 @@ model Gp {
   date      DateTime  @db.Timestamptz
   status    GpStatus  @default(scheduled)
   lockoutAt DateTime? @map("lockout_at") @db.Timestamptz // cierre de lineups
+  sourceRef String?   @map("source_ref") // campo `id` del evento en la fuente (US-17, ADR-0019)
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   season          Season           @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   circuit         Circuit          @relation(fields: [circuitId], references: [id])
   weekendEvents   WeekendEvent[]
+  sourceStates    SourceState[]
   riderAffiliations RiderAffiliation[]
   prices          Price[]
   lineups         Lineup[]
@@ -372,8 +374,9 @@ model Rider {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  affiliations RiderAffiliation[]
-  results      Result[]
+  affiliations   RiderAffiliation[]
+  results        Result[]
+  riderMappings  RiderMapping[]
 
   @@map("riders")
 }
@@ -777,4 +780,42 @@ model AuditLog {
   @@index([actorId, createdAt])
   @@index([entity, entityId])
   @@map("audit_log")
+}
+
+// ── Fuentes de resultados (US-17, ADR-0019) ────────────────────────────────
+
+// Mapeo de identidad piloto fuente → riders.id: por fuente (future-proof
+// para Sportradar), mantenido por el admin (results.riderMapping.set/delete).
+model RiderMapping {
+  source    String   // nombre de la fuente (p. ej. "pulselive")
+  riderRef  String   @map("rider_ref") // referencia estable del piloto en la fuente
+  riderId   String   @map("rider_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  rider Rider @relation(fields: [riderId], references: [id], onDelete: Cascade)
+
+  @@id([source, riderRef])
+  @@index([riderId])
+  @@map("rider_mappings")
+}
+
+// Estado operativo del import automático por (GP, evento, fuente): fallos
+// consecutivos, último error y pilotos sin mapear (alerta UI admin).
+model SourceState {
+  gpId                String    @map("gp_id") @db.Uuid
+  event               String // q2 | sprint | race
+  source              String // nombre de la fuente (p. ej. "pulselive")
+  consecutiveFailures Int       @default(0) @map("consecutive_failures")
+  lastError           String?   @map("last_error")
+  lastAttemptAt       DateTime? @map("last_attempt_at") @db.Timestamptz
+  lastSuccessAt       DateTime? @map("last_success_at") @db.Timestamptz
+  lastUnmapped        Json?     @map("last_unmapped") // [{riderRef, name}]
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  gp Gp @relation(fields: [gpId], references: [id], onDelete: Cascade)
+
+  @@id([gpId, event, source])
+  @@map("source_state")
 }

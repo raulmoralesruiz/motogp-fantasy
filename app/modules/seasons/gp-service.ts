@@ -125,6 +125,8 @@ export interface GpView {
   date: Date;
   status: GpStatus;
   lockoutAt: Date | null;
+  /** Referencia del evento en la fuente (US-17, ADR-0019); `null` = sin vincular. */
+  sourceRef: string | null;
   /** En orden canónico: q1, q2, sprint, race. */
   events: WeekendEventView[];
 }
@@ -522,6 +524,9 @@ export class GpService {
             circuitId,
             date: gp.date,
             lockoutAt: null,
+            // Vinculación directa con la fuente (US-17, ADR-0019): el
+            // auto-import ya no necesita `linkSource` para GPs importados.
+            sourceRef: gp.sourceEventRef ?? null,
             weekendEvents: {
               create: gp.events.map((event) => ({
                 type: event.type,
@@ -545,6 +550,7 @@ export class GpService {
             events: gp.events.map((event) => event.type),
             source: calendar.source.name,
             seasonRef: calendar.seasonRef,
+            sourceRef: gp.sourceEventRef ?? null,
           },
           ip: meta.ip,
         });
@@ -639,6 +645,7 @@ export class GpService {
       date: gp.date,
       status: gp.status,
       lockoutAt: gp.lockoutAt,
+      sourceRef: gp.sourceRef,
       events: [...gp.weekendEvents]
         .sort(
           (a, b) =>

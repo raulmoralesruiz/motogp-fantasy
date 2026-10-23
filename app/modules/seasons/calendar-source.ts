@@ -51,6 +51,11 @@ export interface CalendarGp {
   /** Fecha de la carrera (UTC; fallback: `date_end` a medianoche). */
   date: Date;
   events: CalendarWeekendEvent[];
+  /**
+   * Referencia estable del evento en la fuente (mapa a `Gp.sourceRef`,
+   * US-17/ADR-0019); `null` si la fuente no la proporciona.
+   */
+  sourceEventRef: string | null;
 }
 
 /** Calendario normalizado de temporada (lo devuelve `CalendarSource`). */
@@ -250,6 +255,7 @@ export function normalizePulseLiveCalendar(
       },
       date,
       events: weekend.events,
+      sourceEventRef: event.id,
     };
   });
 

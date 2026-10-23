@@ -8,11 +8,20 @@ import {
   deriveStatus,
   resultEventLabel,
 } from "@/modules/results/core";
-import type { GpEventView, ImportEventResult } from "@/modules/results";
+import type {
+  GpEventView,
+  ImportEventFromSourceResult,
+  ImportEventResult,
+} from "@/modules/results";
 import type { SeasonWithRules } from "@/modules/seasons";
 import { Alert, Button, Field } from "@/shared/components";
+import { PROVISIONAL_RESULTS_POLL } from "@/shared/config";
 import type { ResultBonusCode, ResultPenaltyCode } from "@/shared/types";
-import { importEventInputSchema } from "@/shared/validation/results";
+import {
+  importEventInputSchema,
+  linkSourceInputSchema,
+  setRiderMappingInputSchema,
+} from "@/shared/validation/results";
 import { trpc } from "@/trpc/client";
 import { zodIssues } from "@/trpc/errors";
 
@@ -60,15 +69,31 @@ function eventOptionLabel(event: GpEventView): string {
   return `${resultEventLabel(event.type)} — ${results}`;
 }
 
+/** Fecha y hora para la UI de admin (es-ES). */
+function formatDateTime(value: Date): string {
+  return value.toLocaleString("es-ES", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 /**
- * Sección de importación manual de resultados (US-16, ADR-0018):
- * temporada → GP → evento (q2/sprint/race) y una tabla con una fila por
- * piloto del mercado. Los resultados entran como `provisional`; las
- * re-importaciones corrigen con histórico (los resultados no se borran).
+ * Sección de importación de resultados (US-16 manual + US-17 automático,
+ * ADR-0018/0019): temporada → GP → evento (q2/sprint/race).
  *
- * Regla de inclusión del payload: se incluye un piloto si la fila tiene
- * cualquier dato O si tiene fila pre-cargada en BD (el servidor trata lo
- * inalterado como no-op y lo vaciado como corrección a ABSENT).
+ * Manual: una tabla con una fila por piloto del mercado. Los resultados
+ * entran como `provisional`; las re-importaciones corrigen con histórico
+ * (los resultados no se borran). Regla de inclusión del payload: se incluye
+ * un piloto si la fila tiene cualquier dato O si tiene fila pre-cargada en
+ * BD (el servidor trata lo inalterado como no-op y lo vaciado como
+ * corrección a ABSENT).
+ *
+ * Automático (US-17): vínculo del GP con la fuente (PulseLive), importación
+ * por evento, estado del auto-import (fallos del job) y mapeo de pilotos de
+ * la fuente a pilotos del mercado.
  */
 export default function ResultsSection({ seasons }: ResultsSectionProps) {
   const [seasonId, setSeasonId] = useState("");
@@ -78,15 +103,37 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
   const [reason, setReason] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
   const [lastImport, setLastImport] = useState<ImportEventResult | null>(null);
+  // US-17 (ADR-0019): estado del bloque de la fuente.
+  const [lastSourceImport, setLastSourceImport] = useState<ImportEventFromSourceResult | null>(
+    null,
+  );
+  const [sourceLocalError, setSourceLocalError] = useState<string | null>(null);
+  const [linkEventRef, setLinkEventRef] = useState("");
+  const [mappingRiderRef, setMappingRiderRef] = useState("");
+  const [mappingRiderId, setMappingRiderId] = useState("");
 
   const gps = trpc.seasons.gps.list.useQuery({ seasonId }, { enabled: seasonId !== "" });
+  const selectedGp = gps.data?.find((gp) => gp.id === gpId) ?? null;
+  const sourceLinked = selectedGp?.sourceRef ?? null;
   const gpEvents = trpc.results.gpEvents.useQuery({ gpId }, { enabled: gpId !== "" });
   const hasEvent = gpId !== "" && eventId !== "";
-  const riders = trpc.market.riders.list.useQuery(undefined, { enabled: hasEvent });
+  // US-17: los pilotos también los necesita el mapeo de pilotos (por GP,
+  // no solo por evento).
+  const riders = trpc.market.riders.list.useQuery(undefined, { enabled: gpId !== "" });
   const eventResults = trpc.results.eventResults.useQuery(
     { gpId, eventId },
     { enabled: hasEvent },
   );
+  // US-17 (ADR-0019): estado del auto-import, catálogo de eventos de la
+  // fuente (solo con sentido sin vínculo) y mapeos de pilotos.
+  const sourceState = trpc.results.sourceState.useQuery({ gpId }, { enabled: gpId !== "" });
+  const sourceEvents = trpc.results.sourceEvents.useQuery(
+    { gpId },
+    { enabled: gpId !== "" && sourceLinked === null },
+  );
+  const riderMappings = trpc.results.riderMappings.useQuery(undefined, {
+    enabled: gpId !== "",
+  });
 
   const importMutation = trpc.results.importEvent.useMutation({
     onSuccess: (data) => {
@@ -94,6 +141,43 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
       setLocalError(null);
       void eventResults.refetch();
       void gpEvents.refetch();
+    },
+  });
+
+  // US-17 (ADR-0019): mutations de la fuente.
+  const importFromSourceMutation = trpc.results.importFromSource.useMutation({
+    onSuccess: (data) => {
+      setLastSourceImport(data);
+      setSourceLocalError(null);
+      void sourceState.refetch();
+      void gpEvents.refetch();
+      void eventResults.refetch();
+    },
+  });
+  const linkMutation = trpc.results.linkSource.useMutation({
+    onSuccess: () => {
+      setLinkEventRef("");
+      setSourceLocalError(null);
+      void gps.refetch();
+    },
+  });
+  const unlinkMutation = trpc.results.unlinkSource.useMutation({
+    onSuccess: () => {
+      setSourceLocalError(null);
+      void gps.refetch();
+    },
+  });
+  const setMappingMutation = trpc.results.setRiderMapping.useMutation({
+    onSuccess: () => {
+      setMappingRiderRef("");
+      setMappingRiderId("");
+      setSourceLocalError(null);
+      void riderMappings.refetch();
+    },
+  });
+  const deleteMappingMutation = trpc.results.deleteRiderMapping.useMutation({
+    onSuccess: () => {
+      void riderMappings.refetch();
     },
   });
 
@@ -128,9 +212,24 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
     setLocalError(null);
   }, [eventId]);
 
+  // Los mensajes transitorios del bloque de la fuente se reinician al
+  // cambiar de GP.
+  useEffect(() => {
+    setLastSourceImport(null);
+    setSourceLocalError(null);
+    setLinkEventRef("");
+  }, [gpId]);
+
   const selectedEvent = gpEvents.data?.find((e) => e.id === eventId) ?? null;
   const penaltyCodes = selectedEvent ? PENALTY_CODES_BY_EVENT[selectedEvent.type] : [];
   const bonusCodes = selectedEvent ? BONUS_CODES_BY_EVENT[selectedEvent.type] : [];
+  // US-17: eventos importables desde la fuente (q2/sprint/race no cancelados).
+  const importableEvents =
+    gpEvents.data?.filter(
+      (event) =>
+        (event.type === "q2" || event.type === "sprint" || event.type === "race") &&
+        event.status !== "cancelled",
+    ) ?? [];
 
   function setRow(riderId: string, patch: Partial<RiderRow>) {
     setRows((prev) => {
@@ -269,6 +368,35 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
     importMutation.mutate(parsed.data);
   }
 
+  // US-17: vínculo del GP con la fuente (el catálogo ya resuelve el
+  // eventRef; el match por nombre lo haría el servidor si no se pasara).
+  function onLink(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (gpId === "") return;
+    const parsed = linkSourceInputSchema.safeParse({ gpId, eventRef: linkEventRef });
+    if (!parsed.success) {
+      setSourceLocalError(parsed.error.issues.map((issue) => issue.message).join(" "));
+      return;
+    }
+    setSourceLocalError(null);
+    linkMutation.mutate(parsed.data);
+  }
+
+  // US-17: añade un mapeo piloto de fuente → piloto del mercado.
+  function onAddMapping(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const parsed = setRiderMappingInputSchema.safeParse({
+      riderRef: mappingRiderRef.trim(),
+      riderId: mappingRiderId,
+    });
+    if (!parsed.success) {
+      setSourceLocalError(parsed.error.issues.map((issue) => issue.message).join(" "));
+      return;
+    }
+    setSourceLocalError(null);
+    setMappingMutation.mutate(parsed.data);
+  }
+
   const loadError = eventResults.isError
     ? eventResults.error.message
     : riders.isError
@@ -283,6 +411,22 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
       ? serverIssues.map((issue) => issue.message).join(" ")
       : importMutation.error.message
     : null;
+  // US-17: primer error de las mutations de la fuente (reactivo, sin estado).
+  const sourceErrorMutation = [
+    importFromSourceMutation,
+    linkMutation,
+    unlinkMutation,
+    setMappingMutation,
+    deleteMappingMutation,
+  ].find((mutation) => mutation.isError);
+  let sourceError: string | null = null;
+  if (sourceErrorMutation) {
+    const sourceIssues = zodIssues(sourceErrorMutation.error);
+    sourceError =
+      sourceIssues.length > 0
+        ? sourceIssues.map((issue) => issue.message).join(" ")
+        : sourceErrorMutation.error.message;
+  }
   const entries = hasEvent ? buildEntries() : [];
 
   return (
@@ -342,6 +486,203 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
 
       {gpId !== "" && (
         <>
+          {/* US-17 (ADR-0019): importación automática desde la fuente. */}
+          <div>
+            <h3>Importación automática (PulseLive)</h3>
+
+            {sourceLocalError ? <Alert variant="error">{sourceLocalError}</Alert> : null}
+            {sourceError ? <Alert variant="error">{sourceError}</Alert> : null}
+
+            {sourceLinked ? (
+              <p>
+                Vinculado a la fuente: <code>{sourceLinked}</code>{" "}
+                <Button
+                  onClick={() => unlinkMutation.mutate({ gpId })}
+                  disabled={unlinkMutation.isPending}
+                >
+                  Desvincular
+                </Button>
+              </p>
+            ) : (
+              <form className="form" onSubmit={onLink} noValidate>
+                {sourceEvents.isPending ? (
+                  <p className="muted">Consultando el catálogo de la fuente…</p>
+                ) : sourceEvents.isError ? (
+                  <p className="bad">
+                    No se pudieron cargar los eventos de la fuente: {sourceEvents.error.message}
+                  </p>
+                ) : (
+                  <>
+                    <div className="field">
+                      <label htmlFor="resultsSourceEventRef">Evento de la fuente</label>
+                      <select
+                        id="resultsSourceEventRef"
+                        value={linkEventRef}
+                        onChange={(event) => setLinkEventRef(event.target.value)}
+                      >
+                        <option value="">— Elige un evento de la fuente —</option>
+                        {sourceEvents.data.map((sourceEvent) => (
+                          <option key={sourceEvent.eventRef} value={sourceEvent.eventRef}>
+                            {sourceEvent.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <Button type="submit" disabled={linkMutation.isPending}>
+                      Vincular GP
+                    </Button>
+                  </>
+                )}
+              </form>
+            )}
+
+            {sourceLinked && importableEvents.length > 0 && (
+              <p>
+                <span className="muted">Importar desde la fuente: </span>
+                {importableEvents.map((event) => (
+                  <Button
+                    key={event.id}
+                    onClick={() => importFromSourceMutation.mutate({ gpId, event: event.type })}
+                    disabled={importFromSourceMutation.isPending}
+                  >
+                    Importar {resultEventLabel(event.type)}
+                  </Button>
+                ))}
+              </p>
+            )}
+
+            {lastSourceImport ? (
+              <Alert variant="success">
+                Importación automática: {lastSourceImport.created} creados,{" "}
+                {lastSourceImport.corrected} corregidos, {lastSourceImport.unchanged} sin
+                cambios y {lastSourceImport.kept} conservados.
+                {lastSourceImport.unmapped.length > 0
+                  ? ` Sin mapear: ${lastSourceImport.unmapped
+                      .map((unmapped) => unmapped.name ?? unmapped.riderRef)
+                      .join(", ")}.`
+                  : ""}
+              </Alert>
+            ) : null}
+
+            <h4>Estado del auto-import</h4>
+            {sourceState.isPending ? (
+              <p className="muted">Consultando…</p>
+            ) : sourceState.isError ? (
+              <p className="bad">No se pudo cargar el estado: {sourceState.error.message}</p>
+            ) : sourceState.data.length === 0 ? (
+              <p className="muted">Aún no hay intentos registrados.</p>
+            ) : (
+              <table className="results-table">
+                <thead>
+                  <tr>
+                    <th>Evento</th>
+                    <th>Fallos seguidos</th>
+                    <th>Último error</th>
+                    <th>Último intento</th>
+                    <th>Último éxito</th>
+                    <th>Sin mapear</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sourceState.data.map((state) => (
+                    <tr
+                      key={state.event}
+                      className={
+                        state.consecutiveFailures >= PROVISIONAL_RESULTS_POLL.failureAlertThreshold
+                          ? "bad"
+                          : undefined
+                      }
+                    >
+                      <td>{resultEventLabel(state.event)}</td>
+                      <td>{state.consecutiveFailures}</td>
+                      <td>{state.lastError ?? "—"}</td>
+                      <td>{state.lastAttemptAt ? formatDateTime(state.lastAttemptAt) : "—"}</td>
+                      <td>{state.lastSuccessAt ? formatDateTime(state.lastSuccessAt) : "—"}</td>
+                      <td>
+                        {state.lastUnmapped && state.lastUnmapped.length > 0
+                          ? state.lastUnmapped
+                              .map((unmapped) => unmapped.name ?? unmapped.riderRef)
+                              .join(", ")
+                          : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            <h4>Mapeo de pilotos</h4>
+            {riderMappings.isPending ? (
+              <p className="muted">Consultando…</p>
+            ) : riderMappings.isError ? (
+              <p className="bad">No se pudieron cargar los mapeos: {riderMappings.error.message}</p>
+            ) : (
+              <>
+                {riderMappings.data.length === 0 ? (
+                  <p className="muted">Aún no hay mapeos de pilotos.</p>
+                ) : (
+                  <table className="results-table">
+                    <thead>
+                      <tr>
+                        <th>Referencia en la fuente</th>
+                        <th>Piloto del mercado</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {riderMappings.data.map((mapping) => (
+                        <tr key={mapping.riderRef}>
+                          <td>{mapping.riderRef}</td>
+                          <td>{mapping.riderName}</td>
+                          <td>
+                            <Button
+                              onClick={() =>
+                                deleteMappingMutation.mutate({ riderRef: mapping.riderRef })
+                              }
+                              disabled={deleteMappingMutation.isPending}
+                            >
+                              Eliminar
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+                <form className="form" onSubmit={onAddMapping} noValidate>
+                  <Field
+                    label="Referencia en la fuente"
+                    name="mappingRiderRef"
+                    value={mappingRiderRef}
+                    onChange={(event) => setMappingRiderRef(event.target.value)}
+                    placeholder="ID del piloto en la fuente"
+                  />
+                  <div className="field">
+                    <label htmlFor="resultsMappingRiderId">Piloto del mercado</label>
+                    <select
+                      id="resultsMappingRiderId"
+                      value={mappingRiderId}
+                      onChange={(event) => setMappingRiderId(event.target.value)}
+                    >
+                      <option value="">— Elige un piloto —</option>
+                      {(riders.data ?? []).map((rider) => (
+                        <option key={rider.id} value={rider.id}>
+                          {rider.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <Button
+                    type="submit"
+                    disabled={setMappingMutation.isPending || riders.isPending}
+                  >
+                    Añadir mapeo
+                  </Button>
+                </form>
+              </>
+            )}
+          </div>
+
           {gpEvents.isPending ? (
             <p className="muted">Consultando…</p>
           ) : gpEvents.isError ? (

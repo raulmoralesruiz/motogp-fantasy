@@ -66,6 +66,7 @@ class FakeCalendarSource implements CalendarSource {
             location: "Ciudad Falsa",
           },
           date: new Date("2027-03-07T13:00:00.000Z"),
+          sourceEventRef: `fake-event-1-${year}`,
           events: [
             { type: "q2", startTime: new Date("2027-03-06T12:00:00.000Z") },
             { type: "race", startTime: new Date("2027-03-07T13:00:00.000Z") },
@@ -80,6 +81,7 @@ class FakeCalendarSource implements CalendarSource {
             location: null,
           },
           date: new Date("2027-03-14T13:00:00.000Z"),
+          sourceEventRef: `fake-event-2-${year}`,
           events: [
             { type: "q1", startTime: null },
             { type: "q2", startTime: null },
@@ -96,6 +98,7 @@ class FakeCalendarSource implements CalendarSource {
             location: null,
           },
           date: new Date("2027-03-21T13:00:00.000Z"),
+          sourceEventRef: `fake-event-3-${year}`,
           events: [
             { type: "q2", startTime: null },
             { type: "race", startTime: null },
@@ -650,6 +653,7 @@ describe("US-05 · Circuitos, GPs y calendario (PostgreSQL real)", () => {
           name: "GP Sin Carrera",
           circuit: { name: "Circuito Roto", country: "Falsia", location: null },
           date: new Date("2027-03-07T13:00:00.000Z"),
+          sourceEventRef: null,
           events: [{ type: "q2", startTime: null }],
         },
       ],
