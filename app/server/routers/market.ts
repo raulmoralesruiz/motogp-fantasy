@@ -1,12 +1,13 @@
 /**
- * Router de mercado (US-06/US-07): pilotos, constructores, equipos,
- * afiliaciones por GP y precios (apertura P0 + histórico).
+ * Router de mercado (US-06/US-07/US-08/US-14): pilotos, constructores,
+ * equipos, afiliaciones por GP, precios (apertura P0 + histórico + fórmula +
+ * ajuste manual) y exploración del mercado (lista + detalle por GP).
  *
  * Autorización (T-08, security.md §1.5):
  * - Mutaciones: solo `global_admin` (`adminProcedure`) — acciones sensibles
  *   con auditoría en la misma transacción (T-09).
- * - `list`/`get`/`history`: cualquier usuario autenticado (información
- *   pública del mercado).
+ * - `list`/`get`/`history`/`market`: cualquier usuario autenticado
+ *   (información pública del mercado).
  *
  * El constructor de una afiliación nunca lo envía el cliente: el servicio
  * lo deriva del equipo (invariante 5: constructor ≠ equipo).
@@ -20,6 +21,8 @@ import {
   createRiderInputSchema,
   createTeamInputSchema,
   listAssetPricesInputSchema,
+  marketDetailInputSchema,
+  marketListInputSchema,
   priceHistoryInputSchema,
   riderIdInputSchema,
   setManualPriceInputSchema,
@@ -172,6 +175,28 @@ export function createMarketRouter(deps: MarketRouterDeps) {
       applyFormula: adminProcedure
         .input(applyFormulaInputSchema)
         .mutation(({ input }) => priceService.applyFormulaForGp(input)),
+    }),
+
+    /** Exploración del mercado (US-14). */
+    market: router({
+      /**
+       * Activos de un tipo en el GP elegido (cualquier usuario
+       * autenticado): precio actual (precio del GP, con fallback a P0),
+       * tendencia, mini-histórico y concentración (nº de lineups del GP
+       * que contienen el activo, sin PII). Filtros: constructor/equipo
+       * (solo riders) y rango de precio inclusivo.
+       */
+      list: protectedProcedure
+        .input(marketListInputSchema)
+        .query(({ input }) => priceService.listMarket(input)),
+
+      /**
+       * Detalle de un activo en el GP elegido (cualquier usuario
+       * autenticado): vista del activo + histórico completo de precios.
+       */
+      detail: protectedProcedure
+        .input(marketDetailInputSchema)
+        .query(({ input }) => priceService.marketDetail(input)),
     }),
   });
 }

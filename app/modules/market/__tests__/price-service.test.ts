@@ -30,7 +30,8 @@ function makePrisma() {
   const gp = { findUnique: vi.fn(), findMany: vi.fn() };
   const weekendEvent = { findFirst: vi.fn() };
   const result = { count: vi.fn(), findMany: vi.fn() };
-  const riderAffiliation = { findMany: vi.fn() };
+  const riderAffiliation = { findMany: vi.fn(), findFirst: vi.fn() };
+  const lineupSlot = { findMany: vi.fn() };
   const prisma = {
     rider,
     constructor,
@@ -41,6 +42,7 @@ function makePrisma() {
     weekendEvent,
     result,
     riderAffiliation,
+    lineupSlot,
     $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(prisma)),
   };
   return {
@@ -54,6 +56,7 @@ function makePrisma() {
     weekendEvent,
     result,
     riderAffiliation,
+    lineupSlot,
   };
 }
 
@@ -896,5 +899,533 @@ describe("PriceService.setManualPrice (US-08)", () => {
       code: "NOT_FOUND",
       message: "El piloto no existe.",
     });
+  });
+});
+
+// ── Exploración del mercado (US-14) ──────────────────────────────────────────
+
+/**
+ * Escenario base de `listMarket`/`marketDetail` (US-14): 3 riders (r1 con
+ * afiliación c1/t1, r2 con c2/t2, r3 sin afiliación), precios P0 + J1 + J3
+ * para r1 y r2 (r3 sin precios) y lineups L1 (r1+r2) y L2 (r1) del GP g3.
+ */
+const RIDERS_LIST = [
+  riderRow, // r1 "Francesco Bagnaia"
+  { id: "r2", name: "Marc Márquez", number: 93, isActive: true },
+  { id: "r3", name: "Sin Afiliación", number: 7, isActive: true },
+];
+const PRICES_LIST = [
+  { ...p0Row, assetId: "r1" },
+  { ...gp1Row, assetId: "r1" },
+  { ...gp3Row, assetId: "r1" },
+  { ...p0Row, id: "p0-r2", assetId: "r2", price: 15 },
+  { ...gp1Row, id: "p1-r2", assetId: "r2", price: 14 },
+  { ...gp3Row, id: "p3-r2", assetId: "r2", price: 25 },
+];
+const SLOTS_G3 = [
+  { assetId: "r1", lineupId: "L1" },
+  { assetId: "r2", lineupId: "L1" },
+  { assetId: "r1", lineupId: "L2" },
+];
+const AFFILIATIONS_G3 = [
+  { riderId: "r1", constructorId: "c1", teamId: "t1", gpId: "g3" },
+  { riderId: "r2", constructorId: "c2", teamId: "t2", gpId: "g3" },
+];
+const CONSTRUCTORS_LIST = [
+  { id: "c1", name: "Ducati" },
+  { id: "c2", name: "Repsol" },
+];
+const TEAMS_LIST = [
+  { id: "t1", name: "Ducati Lenovo", constructorId: "c1" },
+  { id: "t2", name: "Repsol Honda", constructorId: "c2" },
+];
+
+function mountMarketScenario(fake: ReturnType<typeof makePrisma>) {
+  fake.gp.findUnique.mockResolvedValue({
+    id: "g3",
+    seasonId: "s1",
+    round: 3,
+    name: "GP de España",
+    status: "scheduled",
+  });
+  fake.rider.findMany.mockResolvedValue(RIDERS_LIST);
+  fake.price.findMany.mockResolvedValue(PRICES_LIST);
+  fake.lineupSlot.findMany.mockResolvedValue(SLOTS_G3);
+  fake.riderAffiliation.findMany.mockResolvedValue(AFFILIATIONS_G3);
+  fake.constructor.findMany.mockResolvedValue(CONSTRUCTORS_LIST);
+  fake.team.findMany.mockResolvedValue(TEAMS_LIST);
+}
+
+describe("PriceService.listMarket (US-14)", () => {
+  it("precio del GP, tendencia, mini-histórico, afiliación y popularidad", async () => {
+    const fake = makePrisma();
+    mountMarketScenario(fake);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.listMarket({ gpId: "g3", assetType: "rider" });
+
+    expect(result).toEqual([
+      {
+        assetId: "r1",
+        name: "Francesco Bagnaia",
+        constructorId: "c1",
+        constructorName: "Ducati",
+        teamId: "t1",
+        teamName: "Ducati Lenovo",
+        currentPrice: 19,
+        isP0Fallback: false,
+        trend: "down",
+        miniHistory: [
+          { gpId: null, gpRound: null, gpName: null, price: 20 },
+          { gpId: "g1", gpRound: 1, gpName: "GP de Qatar", price: 22 },
+          { gpId: "g3", gpRound: 3, gpName: "GP de España", price: 19 },
+        ],
+        popularity: 2,
+      },
+      {
+        assetId: "r2",
+        name: "Marc Márquez",
+        constructorId: "c2",
+        constructorName: "Repsol",
+        teamId: "t2",
+        teamName: "Repsol Honda",
+        currentPrice: 25,
+        isP0Fallback: false,
+        trend: "up",
+        miniHistory: [
+          { gpId: null, gpRound: null, gpName: null, price: 15 },
+          { gpId: "g1", gpRound: 1, gpName: "GP de Qatar", price: 14 },
+          { gpId: "g3", gpRound: 3, gpName: "GP de España", price: 25 },
+        ],
+        popularity: 1,
+      },
+      {
+        assetId: "r3",
+        name: "Sin Afiliación",
+        constructorId: null,
+        constructorName: null,
+        teamId: null,
+        teamName: null,
+        currentPrice: null,
+        isP0Fallback: false,
+        trend: "flat",
+        miniHistory: [],
+        popularity: 0,
+      },
+    ]);
+  });
+
+  it("GP sin precio propio → fallback a P0 (isP0Fallback) y tendencia estable", async () => {
+    const fake = makePrisma();
+    mountMarketScenario(fake);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.listMarket({ gpId: "g2", assetType: "rider" });
+
+    const r1 = result.find((r) => r.assetId === "r1");
+    expect(r1).toMatchObject({
+      currentPrice: 20,
+      isP0Fallback: true,
+      trend: "flat",
+      miniHistory: [
+        { gpId: null, gpRound: null, gpName: null, price: 20 },
+        { gpId: "g1", gpRound: 1, gpName: "GP de Qatar", price: 22 },
+        { gpId: "g3", gpRound: 3, gpName: "GP de España", price: 19 },
+      ],
+    });
+    const r2 = result.find((r) => r.assetId === "r2");
+    expect(r2).toMatchObject({ currentPrice: 15, isP0Fallback: true, trend: "flat" });
+  });
+
+  it("tendencia sube frente al P0 cuando el GP es el primer punto con precio", async () => {
+    const fake = makePrisma();
+    mountMarketScenario(fake);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.listMarket({ gpId: "g1", assetType: "rider" });
+
+    expect(result.find((r) => r.assetId === "r1")).toMatchObject({
+      currentPrice: 22,
+      isP0Fallback: false,
+      trend: "up",
+    });
+    expect(result.find((r) => r.assetId === "r2")).toMatchObject({
+      currentPrice: 14,
+      trend: "down",
+    });
+  });
+
+  it("tendencia estable cuando el precio actual iguala al punto anterior", async () => {
+    const fake = makePrisma();
+    mountMarketScenario(fake);
+    // r1: P0=20, J1=22, J3=22 → actual (J3) = anterior (J1) → estable.
+    fake.price.findMany.mockResolvedValue([
+      { ...p0Row, assetId: "r1" },
+      { ...gp1Row, assetId: "r1" },
+      { ...gp3Row, assetId: "r1", price: 22 },
+    ]);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.listMarket({ gpId: "g3", assetType: "rider" });
+
+    expect(result.find((r) => r.assetId === "r1")).toMatchObject({
+      currentPrice: 22,
+      isP0Fallback: false,
+      trend: "flat",
+    });
+  });
+
+  it("filtro por constructor: solo riders afiliados a ese constructor en el GP", async () => {
+    const fake = makePrisma();
+    mountMarketScenario(fake);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.listMarket({
+      gpId: "g3",
+      assetType: "rider",
+      constructorId: "c1",
+    });
+
+    expect(result.map((r) => r.assetId)).toEqual(["r1"]);
+  });
+
+  it("filtro por equipo: solo riders afiliados a ese equipo en el GP", async () => {
+    const fake = makePrisma();
+    mountMarketScenario(fake);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.listMarket({
+      gpId: "g3",
+      assetType: "rider",
+      teamId: "t2",
+    });
+
+    expect(result.map((r) => r.assetId)).toEqual(["r2"]);
+  });
+
+  it("rango de precio (inclusivo) sobre el precio actual; excluye los sin precio", async () => {
+    const fake = makePrisma();
+    mountMarketScenario(fake);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.listMarket({
+      gpId: "g3",
+      assetType: "rider",
+      priceMin: 19,
+      priceMax: 22,
+    });
+
+    expect(result.map((r) => r.assetId)).toEqual(["r1"]);
+  });
+
+  it("rango de precio con solo mínimo: excluye el activo sin precio", async () => {
+    const fake = makePrisma();
+    mountMarketScenario(fake);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.listMarket({
+      gpId: "g3",
+      assetType: "rider",
+      priceMin: 1,
+    });
+
+    expect(result.map((r) => r.assetId)).toEqual(["r1", "r2"]);
+  });
+
+  it("priceMin excluye los activos por debajo del mínimo", async () => {
+    const fake = makePrisma();
+    mountMarketScenario(fake);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.listMarket({
+      gpId: "g3",
+      assetType: "rider",
+      priceMin: 20,
+    });
+
+    // r1 (19) queda por debajo del mínimo; r2 (25) pasa; r3 (sin precio) queda fuera.
+    expect(result.map((r) => r.assetId)).toEqual(["r2"]);
+  });
+
+  it("mini-histórico limitado a los últimos 8 puntos", async () => {
+    const fake = makePrisma();
+    mountMarketScenario(fake);
+    // 10 puntos para r1: P0 + rondas 1..9 (la ronda 3 ya está en gp3Row).
+    const extra = [2, 4, 5, 6, 7, 8, 9].map((round, i) => ({
+      id: `px-${round}`,
+      assetType: "rider",
+      assetId: "r1",
+      gpId: `gx-${round}`,
+      price: 20 + i,
+      reason: "formula",
+      rulesVersion: "pricing-v1",
+      createdBy: null,
+      createdAt: new Date(`2026-0${round + 1}-01T09:00:00Z`),
+      gp: { id: `gx-${round}`, round, name: `GP ${round}` },
+    }));
+    fake.price.findMany.mockResolvedValue([
+      ...PRICES_LIST.filter((p) => p.assetId === "r1"),
+      ...extra,
+    ]);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.listMarket({ gpId: "g3", assetType: "rider" });
+
+    const r1 = result.find((r) => r.assetId === "r1");
+    expect(r1?.miniHistory).toHaveLength(8);
+    // Los 8 últimos de los 10 puntos (P0 + rondas 1..9): rondas 2..9.
+    expect(r1?.miniHistory.map((p) => p.gpRound)).toEqual([2, 3, 4, 5, 6, 7, 8, 9]);
+  });
+
+  it("constructores: sin afiliación y sin consultas de riders", async () => {
+    const fake = makePrisma();
+    fake.gp.findUnique.mockResolvedValue({ id: "g3", round: 3, name: "GP de España" });
+    fake.constructor.findMany.mockResolvedValue([constructorRow]);
+    fake.price.findMany.mockResolvedValue([
+      { ...p0Row, id: "p0-c1", assetType: "constructor", assetId: "c1", price: 10 },
+      { ...gp3Row, id: "p3-c1", assetType: "constructor", assetId: "c1", price: 12 },
+    ]);
+    fake.lineupSlot.findMany.mockResolvedValue([
+      { assetId: "c1", lineupId: "L1" },
+    ]);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.listMarket({ gpId: "g3", assetType: "constructor" });
+
+    expect(result).toEqual([
+      {
+        assetId: "c1",
+        name: "Ducati",
+        constructorId: null,
+        constructorName: null,
+        teamId: null,
+        teamName: null,
+        currentPrice: 12,
+        isP0Fallback: false,
+        trend: "up",
+        miniHistory: [
+          { gpId: null, gpRound: null, gpName: null, price: 10 },
+          { gpId: "g3", gpRound: 3, gpName: "GP de España", price: 12 },
+        ],
+        popularity: 1,
+      },
+    ]);
+    // No riders: sin afiliaciones ni nombres de constructores/equipos.
+    expect(fake.riderAffiliation.findMany).not.toHaveBeenCalled();
+    expect(fake.team.findMany).not.toHaveBeenCalled();
+  });
+
+  it("GP inexistente → NOT_FOUND", async () => {
+    const fake = makePrisma();
+    fake.gp.findUnique.mockResolvedValue(null);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    await expect(
+      service.listMarket({ gpId: "nope", assetType: "rider" }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND", message: "El GP no existe." });
+  });
+});
+
+describe("PriceService.marketDetail (US-14)", () => {
+  function mountDetailScenario(fake: ReturnType<typeof makePrisma>) {
+    fake.gp.findUnique.mockResolvedValue({
+      id: "g3",
+      seasonId: "s1",
+      round: 3,
+      name: "GP de España",
+      status: "scheduled",
+    });
+    fake.rider.findUnique.mockResolvedValue(riderRow);
+    // Entrada desordenada: el servicio ordena P0 → ronda.
+    fake.price.findMany.mockResolvedValue([gp3Row, p0Row, gp1Row]);
+    fake.lineupSlot.findMany.mockResolvedValue([
+      { lineupId: "L1" },
+      { lineupId: "L2" },
+    ]);
+    fake.riderAffiliation.findFirst.mockResolvedValue({
+      riderId: "r1",
+      constructorId: "c1",
+      teamId: "t1",
+      gpId: "g3",
+    });
+    fake.constructor.findUnique.mockResolvedValue({ id: "c1", name: "Ducati" });
+    fake.team.findUnique.mockResolvedValue({
+      id: "t1",
+      name: "Ducati Lenovo",
+      constructorId: "c1",
+    });
+  }
+
+  it("vista del activo (precio, tendencia, popularidad) + histórico completo", async () => {
+    const fake = makePrisma();
+    mountDetailScenario(fake);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.marketDetail({
+      gpId: "g3",
+      assetType: "rider",
+      assetId: "r1",
+    });
+
+    expect(result.asset).toEqual({
+      assetId: "r1",
+      name: "Francesco Bagnaia",
+      constructorId: "c1",
+      constructorName: "Ducati",
+      teamId: "t1",
+      teamName: "Ducati Lenovo",
+      currentPrice: 19,
+      isP0Fallback: false,
+      trend: "down",
+      miniHistory: [
+        { gpId: null, gpRound: null, gpName: null, price: 20 },
+        { gpId: "g1", gpRound: 1, gpName: "GP de Qatar", price: 22 },
+        { gpId: "g3", gpRound: 3, gpName: "GP de España", price: 19 },
+      ],
+      popularity: 2,
+    });
+    expect(result.history).toEqual([
+      {
+        id: "p0",
+        gpRound: null,
+        gpName: null,
+        price: 20,
+        reason: "manual",
+        createdAt: new Date("2026-09-01T09:00:00Z"),
+      },
+      {
+        id: "p1",
+        gpRound: 1,
+        gpName: "GP de Qatar",
+        price: 22,
+        reason: "formula",
+        createdAt: new Date("2026-06-01T09:00:00Z"),
+      },
+      {
+        id: "p3",
+        gpRound: 3,
+        gpName: "GP de España",
+        price: 19,
+        reason: "formula",
+        createdAt: new Date("2026-07-01T09:00:00Z"),
+      },
+    ]);
+  });
+
+  it("GP sin precio propio → fallback a P0 en la vista", async () => {
+    const fake = makePrisma();
+    mountDetailScenario(fake);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.marketDetail({
+      gpId: "g2",
+      assetType: "rider",
+      assetId: "r1",
+    });
+
+    expect(result.asset).toMatchObject({
+      currentPrice: 20,
+      isP0Fallback: true,
+      trend: "flat",
+    });
+  });
+
+  it("rider sin afiliación en el GP → sin constructor ni equipo", async () => {
+    const fake = makePrisma();
+    mountDetailScenario(fake);
+    fake.riderAffiliation.findFirst.mockResolvedValue(null);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.marketDetail({
+      gpId: "g3",
+      assetType: "rider",
+      assetId: "r1",
+    });
+
+    expect(result.asset).toMatchObject({
+      constructorId: null,
+      constructorName: null,
+      teamId: null,
+      teamName: null,
+    });
+  });
+
+  it("afiliación sin constructor ni equipo (rama defensiva): sin nombres", async () => {
+    const fake = makePrisma();
+    mountDetailScenario(fake);
+    // En BD son no-null (ver schema); la rama defensiva se cubre aquí.
+    fake.riderAffiliation.findFirst.mockResolvedValue({
+      riderId: "r1",
+      constructorId: null,
+      teamId: null,
+      gpId: "g3",
+    });
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.marketDetail({
+      gpId: "g3",
+      assetType: "rider",
+      assetId: "r1",
+    });
+
+    expect(result.asset).toMatchObject({
+      constructorId: null,
+      constructorName: null,
+      teamId: null,
+      teamName: null,
+    });
+    // Sin ID, no se consulta constructor ni equipo.
+    expect(fake.constructor.findUnique).not.toHaveBeenCalled();
+    expect(fake.team.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("constructor (no rider): sin afiliación", async () => {
+    const fake = makePrisma();
+    fake.gp.findUnique.mockResolvedValue({ id: "g3", round: 3, name: "GP de España" });
+    fake.constructor.findUnique.mockResolvedValue(constructorRow);
+    fake.price.findMany.mockResolvedValue([
+      { ...p0Row, id: "p0-c1", assetType: "constructor", assetId: "c1", price: 10 },
+    ]);
+    fake.lineupSlot.findMany.mockResolvedValue([]);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const result = await service.marketDetail({
+      gpId: "g3",
+      assetType: "constructor",
+      assetId: "c1",
+    });
+
+    expect(result.asset).toMatchObject({
+      name: "Ducati",
+      constructorName: null,
+      teamName: null,
+      currentPrice: 10,
+      isP0Fallback: true,
+      trend: "flat",
+      popularity: 0,
+    });
+    expect(result.history).toHaveLength(1);
+    expect(fake.riderAffiliation.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("GP inexistente → NOT_FOUND", async () => {
+    const fake = makePrisma();
+    fake.gp.findUnique.mockResolvedValue(null);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    await expect(
+      service.marketDetail({ gpId: "nope", assetType: "rider", assetId: "r1" }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND", message: "El GP no existe." });
+  });
+
+  it("activo inexistente → NOT_FOUND", async () => {
+    const fake = makePrisma();
+    fake.gp.findUnique.mockResolvedValue({ id: "g3", round: 3, name: "GP de España" });
+    fake.rider.findUnique.mockResolvedValue(null);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    await expect(
+      service.marketDetail({ gpId: "g3", assetType: "rider", assetId: "nope" }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND", message: "El piloto no existe." });
   });
 });

@@ -103,6 +103,43 @@ export const priceHistoryInputSchema = z.object({
   assetId: z.string().uuid("El identificador del activo no es válido"),
 });
 
+/**
+ * Exploración del mercado (US-14): lista filtrable por tipo de activo,
+ * constructor/equipo (solo riders, vía su afiliación en el GP) y rango de
+ * precio sobre el precio actual del GP elegido (con fallback a P0).
+ * `priceMin`/`priceMax` siguen el mismo patrón de sanidad que los ajustes
+ * de precio (positivo, ≤9999.99, ≤2 decimales).
+ */
+export const marketListInputSchema = z.object({
+  gpId: z.string().uuid("El identificador de GP no es válido"),
+  assetType: assetTypeEnum,
+  constructorId: z.string().uuid("El identificador de constructor no es válido").optional(),
+  teamId: z.string().uuid("El identificador de equipo no es válido").optional(),
+  priceMin: z
+    .number()
+    .positive("El precio mínimo debe ser positivo")
+    .max(9999.99, "El precio mínimo no puede superar 9999.99")
+    .refine((p) => Number(p.toFixed(2)) === p, {
+      message: "El precio mínimo no puede tener más de 2 decimales",
+    })
+    .optional(),
+  priceMax: z
+    .number()
+    .positive("El precio máximo debe ser positivo")
+    .max(9999.99, "El precio máximo no puede superar 9999.99")
+    .refine((p) => Number(p.toFixed(2)) === p, {
+      message: "El precio máximo no puede tener más de 2 decimales",
+    })
+    .optional(),
+});
+
+/** Detalle de un activo en el mercado (US-14): histórico completo + concentración. */
+export const marketDetailInputSchema = z.object({
+  gpId: z.string().uuid("El identificador de GP no es válido"),
+  assetType: assetTypeEnum,
+  assetId: z.string().uuid("El identificador del activo no es válido"),
+});
+
 /** Activos de un tipo con su P0 (US-07): lista para el panel admin. */
 export const listAssetPricesInputSchema = z.object({
   assetType: assetTypeEnum,
@@ -148,3 +185,5 @@ export type PriceHistoryInput = z.infer<typeof priceHistoryInputSchema>;
 export type ListAssetPricesInput = z.infer<typeof listAssetPricesInputSchema>;
 export type SetManualPriceInput = z.infer<typeof setManualPriceInputSchema>;
 export type ApplyFormulaInput = z.infer<typeof applyFormulaInputSchema>;
+export type MarketListInput = z.infer<typeof marketListInputSchema>;
+export type MarketDetailInput = z.infer<typeof marketDetailInputSchema>;

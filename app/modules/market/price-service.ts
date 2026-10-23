@@ -21,6 +21,12 @@
  * - `listAssetPrices`: activos + P0 actual (o null) para el panel admin.
  * - `getPriceHistory`: P0 + una fila por GP, orden P0 → ronda (lectura
  *   pública).
+ * - `listMarket`/`marketDetail` (US-14): exploración del mercado en un GP —
+ *   lista de activos con precio actual (precio del GP, con fallback a P0),
+ *   tendencia frente al punto anterior del histórico, mini-histórico (últimos
+ *   8 puntos) y concentración (nº de lineups del GP que contienen el activo,
+ *   sin PII); filtros por constructor/equipo (solo riders, vía su afiliación
+ *   en el GP) y rango de precio (inclusivo) sobre el precio actual.
  *
  * Fila de P0: `gpId = null`, `reason = manual`, `createdBy = actor`,
  * `rulesVersion = null` (no la produce una fórmula).
@@ -32,7 +38,13 @@
  * (DNF/baja → perf 0, la fórmula topa a [0,100]).
  */
 import { TRPCError } from "@trpc/server";
-import type { Prisma, PrismaClient } from "@prisma/client";
+import type {
+  Constructor as PrismaConstructor,
+  Prisma,
+  PrismaClient,
+  RiderAffiliation,
+  Team,
+} from "@prisma/client";
 
 import { appendAudit } from "@/modules/admin";
 import {
@@ -89,6 +101,29 @@ export interface SetManualPriceInput {
   price: number;
 }
 
+/**
+ * Lista del mercado en un GP (US-14): todos los activos de un tipo con
+ * filtros opcionales.
+ */
+export interface MarketListInput {
+  gpId: string;
+  assetType: AssetType;
+  /** Solo riders: afiliación en el GP (sin afiliación → fuera al filtrar). */
+  constructorId?: string;
+  /** Solo riders: afiliación en el GP (sin afiliación → fuera al filtrar). */
+  teamId?: string;
+  /** Rango inclusivo sobre el precio actual (GP ?? P0). */
+  priceMin?: number;
+  priceMax?: number;
+}
+
+/** Detalle de un activo en el mercado (US-14). */
+export interface MarketDetailInput {
+  gpId: string;
+  assetType: AssetType;
+  assetId: string;
+}
+
 // ── Vistas ──
 
 /** Activo con su precio de apertura (P0) (null si no está fijado). */
@@ -137,6 +172,50 @@ export interface SetManualPriceResult {
   status: "created" | "updated" | "unchanged";
 }
 
+// ── Exploración del mercado (US-14) ──
+
+/** Tendencia de precio frente al punto anterior del histórico. */
+export type PriceTrend = "up" | "down" | "flat";
+
+/**
+ * Punto de precio del histórico (US-14). `gpId = null` → precio de apertura
+ * (P0); `gpRound`/`gpName` son null en el P0.
+ */
+export interface MarketPricePoint {
+  gpId: string | null;
+  gpRound: number | null;
+  gpName: string | null;
+  price: number;
+}
+
+/** Activo del mercado en el GP elegido (US-14). */
+export interface MarketAssetView {
+  assetId: string;
+  name: string;
+  /** Solo riders: afiliación en el GP (null si no tiene). */
+  constructorId: string | null;
+  constructorName: string | null;
+  teamId: string | null;
+  teamName: string | null;
+  /** Precio del GP; si el GP no tiene precio, P0 (null si no hay ninguno). */
+  currentPrice: number | null;
+  /** true si el precio mostrado es el P0 (el GP no tiene precio propio). */
+  isP0Fallback: boolean;
+  /** Sube/baja/estable frente al punto anterior del histórico. */
+  trend: PriceTrend;
+  /** Últimos puntos del histórico (orden P0 → ronda), máx. 8. */
+  miniHistory: MarketPricePoint[];
+  /** Nº de lineups de este GP que contienen el activo (sin PII). */
+  popularity: number;
+}
+
+/** Detalle de un activo en el mercado (US-14): vista + histórico completo. */
+export interface MarketDetailView {
+  asset: MarketAssetView;
+  /** Histórico completo de precios (orden P0 → ronda). */
+  history: PriceHistoryRow[];
+}
+
 // ── Utilidades ──
 
 /** Violación de unique de Prisma (P2002): creación concurrente. */
@@ -169,6 +248,51 @@ function round2(value: number): number {
 /** Clave compuesta de activo (tipo + id) para los mapas de precios. */
 function assetKey(assetType: AssetType, assetId: string): string {
   return `${assetType}:${assetId}`;
+}
+
+/** Nº de puntos del histórico que muestra el mini-histórico (US-14). */
+const MINI_HISTORY_POINTS = 8;
+
+/** Fila de precio con su GP (id/ronda/nombre) o null (P0). */
+type PriceRowWithGp = {
+  id: string;
+  assetId: string;
+  gpId: string | null;
+  price: Prisma.Decimal;
+  reason: "formula" | "manual";
+  createdAt: Date;
+  gp: { id: string; round: number; name: string } | null;
+};
+
+/** Orden P0 → ronda de GP (misma convención que `getPriceHistory`). */
+function sortPriceRows(rows: PriceRowWithGp[]): PriceRowWithGp[] {
+  return [...rows].sort((a, b) => {
+    if (a.gpId === null) return -1;
+    if (b.gpId === null) return 1;
+    return (a.gp?.round ?? 0) - (b.gp?.round ?? 0);
+  });
+}
+
+/** Fila de precio → punto del histórico (US-14). */
+function toPricePoint(row: PriceRowWithGp): MarketPricePoint {
+  return {
+    gpId: row.gpId,
+    gpRound: row.gp?.round ?? null,
+    gpName: row.gp?.name ?? null,
+    price: Number(row.price),
+  };
+}
+
+/** Fila de precio → fila del histórico (US-07). */
+function toHistoryRow(row: PriceRowWithGp): PriceHistoryRow {
+  return {
+    id: row.id,
+    gpRound: row.gp?.round ?? null,
+    gpName: row.gp?.name ?? null,
+    price: Number(row.price),
+    reason: row.reason,
+    createdAt: row.createdAt,
+  };
 }
 
 export class PriceService {
@@ -305,24 +429,231 @@ export class PriceService {
         message: assetNotFoundMessage(input.assetType),
       });
     }
-    const rows = await this.deps.prisma.price.findMany({
-      where: { assetType: input.assetType, assetId: input.assetId },
-      include: { gp: { select: { round: true, name: true } } },
-    });
+    const rows = await this.fetchPriceRows(input.assetType, input.assetId);
     // P0 (gpId null) primero, luego por ronda de GP.
-    rows.sort((a, b) => {
-      if (a.gpId === null) return -1;
-      if (b.gpId === null) return 1;
-      return a.gp!.round - b.gp!.round;
+    return sortPriceRows(rows).map(toHistoryRow);
+  }
+
+  /**
+   * Lista del mercado en el GP elegido (US-14): todos los activos de un
+   * tipo con precio actual (precio del GP, con fallback a P0), tendencia
+   * frente al punto anterior del histórico, mini-histórico (últimos 8
+   * puntos) y concentración (nº de lineups de este GP que contienen el
+   * activo, sin PII).
+   *
+   * Filtros: `constructorId`/`teamId` solo aplican a riders (vía su
+   * afiliación en el GP; un rider sin afiliación queda fuera al filtrar);
+   * `priceMin`/`priceMax` (inclusivos) sobre el precio actual y excluyen
+   * los activos sin precio.
+   */
+  async listMarket(input: MarketListInput): Promise<MarketAssetView[]> {
+    const gp = await this.deps.prisma.gp.findUnique({
+      where: { id: input.gpId },
     });
-    return rows.map((row) => ({
-      id: row.id,
-      gpRound: row.gp?.round ?? null,
-      gpName: row.gp?.name ?? null,
-      price: Number(row.price),
-      reason: row.reason,
-      createdAt: row.createdAt,
-    }));
+    if (!gp) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "El GP no existe." });
+    }
+
+    const isRider = input.assetType === "rider";
+    const [assets, prices, slots, affiliations, constructors, teams] =
+      await Promise.all([
+        this.listAssets(input.assetType),
+        this.deps.prisma.price.findMany({
+          where: { assetType: input.assetType },
+          include: { gp: { select: { id: true, round: true, name: true } } },
+        }),
+        this.deps.prisma.lineupSlot.findMany({
+          where: { assetType: input.assetType, lineup: { gpId: input.gpId } },
+          select: { assetId: true, lineupId: true },
+        }),
+        isRider
+          ? this.deps.prisma.riderAffiliation.findMany({
+              where: { gpId: input.gpId },
+            })
+          : Promise.resolve([] as RiderAffiliation[]),
+        isRider
+          ? this.deps.prisma.constructor.findMany({ orderBy: { name: "asc" } })
+          : Promise.resolve([] as PrismaConstructor[]),
+        isRider
+          ? this.deps.prisma.team.findMany({ orderBy: { name: "asc" } })
+          : Promise.resolve([] as Team[]),
+      ]);
+
+    // Puntos de precio por activo, ordenados P0 → ronda de GP.
+    const pointsByAsset = new Map<string, MarketPricePoint[]>();
+    for (const row of prices) {
+      const list = pointsByAsset.get(row.assetId) ?? [];
+      list.push(toPricePoint(row));
+      pointsByAsset.set(row.assetId, list);
+    }
+    for (const list of pointsByAsset.values()) {
+      list.sort((a, b) => {
+        if (a.gpId === null) return -1;
+        if (b.gpId === null) return 1;
+        return (a.gpRound ?? 0) - (b.gpRound ?? 0);
+      });
+    }
+
+    // Concentración: lineups distintos de este GP que contienen el activo
+    // (todos los estados; sin PII: no se expone ningún dato de usuario).
+    const lineupsByAsset = new Map<string, Set<string>>();
+    for (const slot of slots) {
+      const set = lineupsByAsset.get(slot.assetId) ?? new Set<string>();
+      set.add(slot.lineupId);
+      lineupsByAsset.set(slot.assetId, set);
+    }
+
+    // Afiliación de los riders en el GP + nombres de constructores/equipos.
+    const affiliationByRider = new Map<string, RiderAffiliation>();
+    for (const aff of affiliations) {
+      affiliationByRider.set(aff.riderId, aff);
+    }
+    const constructorNameById = new Map(
+      constructors.map((c) => [c.id, c.name]),
+    );
+    const teamNameById = new Map(teams.map((t) => [t.id, t.name]));
+
+    const views = assets.map((asset) => {
+      const points = pointsByAsset.get(asset.id) ?? [];
+      const { currentPrice, isP0Fallback, trend } =
+        this.currentPriceAndTrend(points, input.gpId);
+      const affiliation = isRider
+        ? (affiliationByRider.get(asset.id) ?? null)
+        : null;
+
+      return {
+        assetId: asset.id,
+        name: asset.name,
+        constructorId: affiliation?.constructorId ?? null,
+        constructorName:
+          affiliation?.constructorId
+            ? (constructorNameById.get(affiliation.constructorId) ?? null)
+            : null,
+        teamId: affiliation?.teamId ?? null,
+        teamName:
+          affiliation?.teamId
+            ? (teamNameById.get(affiliation.teamId) ?? null)
+            : null,
+        currentPrice,
+        isP0Fallback,
+        trend,
+        miniHistory: points.slice(-MINI_HISTORY_POINTS),
+        popularity: lineupsByAsset.get(asset.id)?.size ?? 0,
+      };
+    });
+
+    return views.filter((view) => {
+      // Filtros de constructor/equipo: solo riders (afiliación en el GP).
+      if (
+        isRider &&
+        input.constructorId !== undefined &&
+        view.constructorId !== input.constructorId
+      ) {
+        return false;
+      }
+      if (
+        isRider &&
+        input.teamId !== undefined &&
+        view.teamId !== input.teamId
+      ) {
+        return false;
+      }
+      // Rango de precio (inclusivo) sobre el precio actual: excluye los
+      // activos sin precio.
+      if (input.priceMin !== undefined || input.priceMax !== undefined) {
+        if (view.currentPrice === null) return false;
+        if (
+          input.priceMin !== undefined &&
+          view.currentPrice < input.priceMin
+        ) {
+          return false;
+        }
+        if (input.priceMax !== undefined && view.currentPrice > input.priceMax) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }
+
+  /**
+   * Detalle de un activo en el mercado (US-14): la vista del activo en el
+   * GP elegido (precio actual, tendencia, mini-histórico, concentración) +
+   * el histórico completo de precios.
+   */
+  async marketDetail(input: MarketDetailInput): Promise<MarketDetailView> {
+    const gp = await this.deps.prisma.gp.findUnique({
+      where: { id: input.gpId },
+    });
+    if (!gp) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "El GP no existe." });
+    }
+    const assetRow = await this.findOneAsset(input.assetType, input.assetId);
+    if (!assetRow) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: assetNotFoundMessage(input.assetType),
+      });
+    }
+
+    const isRider = input.assetType === "rider";
+    const [rows, slots, affiliation] = await Promise.all([
+      this.fetchPriceRows(input.assetType, input.assetId),
+      this.deps.prisma.lineupSlot.findMany({
+        where: {
+          assetType: input.assetType,
+          assetId: input.assetId,
+          lineup: { gpId: input.gpId },
+        },
+        select: { lineupId: true },
+      }),
+      isRider
+        ? this.deps.prisma.riderAffiliation.findFirst({
+            where: { riderId: input.assetId, gpId: input.gpId },
+          })
+        : Promise.resolve(null),
+    ]);
+
+    // Nombres de constructor/equipo (solo riders con afiliación en el GP).
+    let constructorName: string | null = null;
+    let teamName: string | null = null;
+    if (isRider && affiliation) {
+      const [constructor, team] = await Promise.all([
+        affiliation.constructorId
+          ? this.deps.prisma.constructor.findUnique({
+              where: { id: affiliation.constructorId },
+            })
+          : Promise.resolve(null),
+        affiliation.teamId
+          ? this.deps.prisma.team.findUnique({
+              where: { id: affiliation.teamId },
+            })
+          : Promise.resolve(null),
+      ]);
+      constructorName = constructor?.name ?? null;
+      teamName = team?.name ?? null;
+    }
+
+    const sorted = sortPriceRows(rows);
+    const points = sorted.map(toPricePoint);
+    const { currentPrice, isP0Fallback, trend } =
+      this.currentPriceAndTrend(points, input.gpId);
+
+    const asset: MarketAssetView = {
+      assetId: assetRow.id,
+      name: assetRow.name,
+      constructorId: isRider ? (affiliation?.constructorId ?? null) : null,
+      constructorName,
+      teamId: isRider ? (affiliation?.teamId ?? null) : null,
+      teamName,
+      currentPrice,
+      isP0Fallback,
+      trend,
+      miniHistory: points.slice(-MINI_HISTORY_POINTS),
+      popularity: new Set(slots.map((s) => s.lineupId)).size,
+    };
+
+    return { asset, history: sorted.map(toHistoryRow) };
   }
 
   /**
@@ -700,22 +1031,73 @@ export class PriceService {
     assetType: AssetType,
     assetId: string,
   ): Promise<boolean> {
+    return (await this.findOneAsset(assetType, assetId)) !== null;
+  }
+
+  /** El activo del tipo dado (fila completa), o null si no existe. */
+  private async findOneAsset(
+    assetType: AssetType,
+    assetId: string,
+  ): Promise<{ id: string; name: string } | null> {
     switch (assetType) {
       case "rider":
-        return Boolean(
-          await this.deps.prisma.rider.findUnique({ where: { id: assetId } }),
-        );
+        return this.deps.prisma.rider.findUnique({ where: { id: assetId } });
       case "constructor":
-        return Boolean(
-          await this.deps.prisma.constructor.findUnique({
-            where: { id: assetId },
-          }),
-        );
+        return this.deps.prisma.constructor.findUnique({
+          where: { id: assetId },
+        });
       case "team":
-        return Boolean(
-          await this.deps.prisma.team.findUnique({ where: { id: assetId } }),
-        );
+        return this.deps.prisma.team.findUnique({ where: { id: assetId } });
     }
+  }
+
+  /**
+   * Filas de precio de un activo (P0 + una por GP) con el GP incluido
+   * (id/ronda/nombre; null en el P0).
+   */
+  private async fetchPriceRows(
+    assetType: AssetType,
+    assetId: string,
+  ): Promise<PriceRowWithGp[]> {
+    return this.deps.prisma.price.findMany({
+      where: { assetType, assetId },
+      include: { gp: { select: { id: true, round: true, name: true } } },
+    });
+  }
+
+  /**
+   * Precio actual (precio del GP; si el GP no tiene precio, P0) + tendencia
+   * frente al punto anterior del histórico (US-14). Sin punto anterior →
+   * estable.
+   */
+  private currentPriceAndTrend(
+    points: MarketPricePoint[],
+    gpId: string,
+  ): {
+    currentPrice: number | null;
+    isP0Fallback: boolean;
+    trend: PriceTrend;
+  } {
+    const gpPoint = points.find((p) => p.gpId === gpId) ?? null;
+    const p0Point = points.find((p) => p.gpId === null) ?? null;
+    const currentPrice = gpPoint?.price ?? p0Point?.price ?? null;
+    const isP0Fallback = gpPoint === null && p0Point !== null;
+
+    let trend: PriceTrend = "flat";
+    if (currentPrice !== null) {
+      const currentPoint = gpPoint ?? p0Point!;
+      const idx = points.indexOf(currentPoint);
+      const prev = idx > 0 ? points[idx - 1] : undefined;
+      if (prev) {
+        trend =
+          currentPrice > prev.price
+            ? "up"
+            : currentPrice < prev.price
+              ? "down"
+              : "flat";
+      }
+    }
+    return { currentPrice, isP0Fallback, trend };
   }
 
   /**

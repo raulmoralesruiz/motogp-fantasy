@@ -17,7 +17,16 @@
  * auditar si es el mismo valor, actualiza con before/after; P2002 concurrente
  * → re-ejecuta el flujo), `listAssetPrices` y `getPriceHistory`.
  *
- * Pendiente: US-08 (fórmula de precios + ajuste manual).
+ * US-08 (hecho): fórmula de precios por GP (`pricing-v1`) + ajuste manual +
+ * gate de lockout (ADR-0015).
+ *
+ * US-14 (hecho): exploración del mercado (`PriceService.listMarket` /
+ * `marketDetail`): lista de activos de un GP con precio actual (precio del GP,
+ * con fallback a P0), tendencia frente al punto anterior del histórico,
+ * mini-histórico (últimos 8 puntos) y concentración (nº de lineups del GP que
+ * contienen el activo, sin PII); filtros por constructor/equipo (solo riders,
+ * vía su afiliación en el GP) y rango de precio inclusivo sobre el precio
+ * actual.
  *
  * Responsabilidad:
  * - Activos del mercado: pilotos, constructores y equipos (activos distintos,

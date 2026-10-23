@@ -194,6 +194,81 @@ a {
   margin-top: 0.3rem;
 }
 
+/* Mercado (US-14): pestañas de tipo de activo. */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.tab {
+  padding: 0.45rem 0.9rem;
+  font-size: 0.95rem;
+  color: var(--fg);
+  background: #10151c;
+  border: 1px solid #21262d;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.tab[aria-pressed="true"] {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Mercado (US-14): fila de filtros (constructor/equipo/rango de precio). */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  align-items: flex-start;
+  margin: 0 0 1rem;
+}
+
+.filters .field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.filters label {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.filters select,
+.filters input {
+  padding: 0.55rem 0.7rem;
+  font-size: 1rem;
+  color: var(--fg);
+  background: #10151c;
+  border: 1px solid #21262d;
+  border-radius: 6px;
+}
+
+.filters .field-error {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--bad);
+}
+
+/* Mercado (US-14): botón plano de acción de fila (ver detalle / cerrar). */
+.row-action {
+  padding: 0.15rem 0.5rem;
+  font-size: 0.85rem;
+  color: var(--accent);
+  background: none;
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.row-action:hover {
+  background: rgba(225, 6, 0, 0.12);
+}
+
 /* Tabla de importación de resultados (panel admin, US-16). */
 .results-table {
   width: 100%;

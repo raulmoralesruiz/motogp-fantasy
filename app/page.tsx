@@ -84,6 +84,9 @@ export default function HomePage() {
             <Link href="/lineups">Lineups</Link>
           </p>
           <p>
+            <Link href="/mercado">Mercado</Link>
+          </p>
+          <p>
             <Link href="/perfil">Perfil</Link>
           </p>
           <Button
