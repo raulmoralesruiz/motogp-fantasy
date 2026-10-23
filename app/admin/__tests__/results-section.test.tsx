@@ -22,6 +22,7 @@ import type { CircuitView, GpView, SeasonWithRules } from "../../modules/seasons
 import { PROVISIONAL_SEASON_RULES } from "../../shared/config/season-rules";
 import { act, fireEvent, render, screen, userEvent } from "../../../test/rtl";
 import { asMockFn, mockResult, resetTrpcMocks, trpc, type MockFn } from "../../../test/trpc-mock";
+import { clientError } from "../../../test/errors";
 
 import ResultsSection from "../results-section";
 
@@ -952,6 +953,213 @@ describe("ResultsSection", () => {
       expect(screen.getByRole("alert")).toHaveTextContent(
         "El GP ya está vinculado a otra fuente",
       );
+    });
+
+    it("al vincular con éxito: refetch de GPs y el selector de evento vuelve a vacío", async () => {
+      const gpsRefetch = vi.fn();
+      mockLoaded();
+      mockGps({ isPending: false, isError: false, isSuccess: true, data: [gp], refetch: gpsRefetch });
+      mockSourceEvents({ data: [{ eventRef: "ev-1", name: "MotoGP — Indonesia" }] });
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+      await user.selectOptions(screen.getByLabelText("Evento de la fuente"), "ev-1");
+      await user.click(screen.getByRole("button", { name: "Vincular GP" }));
+
+      const options = asMockFn(trpc.results.linkSource.useMutation).mock
+        .calls[0]?.[0] as { onSuccess: () => void };
+      act(() => {
+        options.onSuccess();
+      });
+
+      expect(gpsRefetch).toHaveBeenCalledTimes(1);
+      expect(screen.getByLabelText("Evento de la fuente")).toHaveValue("");
+    });
+
+    it("al desvincular con éxito: refetch de GPs", async () => {
+      const gpsRefetch = vi.fn();
+      mockLoaded();
+      mockGps({
+        isPending: false,
+        isError: false,
+        isSuccess: true,
+        data: [gpLinked],
+        refetch: gpsRefetch,
+      });
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      await user.click(screen.getByRole("button", { name: "Desvincular" }));
+
+      const options = asMockFn(trpc.results.unlinkSource.useMutation).mock
+        .calls[0]?.[0] as { onSuccess: () => void };
+      act(() => {
+        options.onSuccess();
+      });
+
+      expect(gpsRefetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("al añadir un mapeo con éxito: refetch de mapeos y los campos vuelven a vacío", async () => {
+      const mappingsRefetch = vi.fn();
+      mockLoaded();
+      mockRiderMappings({ refetch: mappingsRefetch });
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+      await user.type(screen.getByLabelText("Referencia en la fuente"), "rider-2");
+      await user.selectOptions(screen.getByLabelText("Piloto del mercado"), r2);
+      await user.click(screen.getByRole("button", { name: "Añadir mapeo" }));
+
+      const options = asMockFn(trpc.results.setRiderMapping.useMutation).mock
+        .calls[0]?.[0] as { onSuccess: () => void };
+      act(() => {
+        options.onSuccess();
+      });
+
+      expect(mappingsRefetch).toHaveBeenCalledTimes(1);
+      expect(screen.getByLabelText("Referencia en la fuente")).toHaveValue("");
+      expect(screen.getByLabelText("Piloto del mercado")).toHaveValue("");
+    });
+
+    it("al eliminar un mapeo con éxito: refetch de mapeos", async () => {
+      const mappingsRefetch = vi.fn();
+      mockLoaded();
+      mockRiderMappings({
+        data: [
+          { source: "pulselive:v1", riderRef: "rider-1", riderId: r1, riderName: "Piloto Uno" },
+        ],
+        refetch: mappingsRefetch,
+      });
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      await user.click(screen.getByRole("button", { name: "Eliminar" }));
+
+      const options = asMockFn(trpc.results.deleteRiderMapping.useMutation).mock
+        .calls[0]?.[0] as { onSuccess: () => void };
+      act(() => {
+        options.onSuccess();
+      });
+
+      expect(mappingsRefetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("muestra el error al cargar el catálogo de eventos de la fuente", async () => {
+      mockLoaded();
+      mockSourceEvents({
+        data: undefined,
+        isPending: false,
+        isError: true,
+        isSuccess: false,
+        error: new Error("fallo del catálogo"),
+      });
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      expect(
+        screen.getByText("No se pudieron cargar los eventos de la fuente: fallo del catálogo"),
+      ).toBeInTheDocument();
+    });
+
+    it("muestra el error al cargar el estado del auto-import", async () => {
+      mockLoaded();
+      mockSourceState({
+        data: undefined,
+        isPending: false,
+        isError: true,
+        isSuccess: false,
+        error: new Error("fallo de estado"),
+      });
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      expect(screen.getByText("No se pudo cargar el estado: fallo de estado")).toBeInTheDocument();
+    });
+
+    it("muestra el error al cargar los mapeos de pilotos", async () => {
+      mockLoaded();
+      mockRiderMappings({
+        data: undefined,
+        isPending: false,
+        isError: true,
+        isSuccess: false,
+        error: new Error("fallo de mapeos"),
+      });
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      expect(screen.getByText("No se pudieron cargar los mapeos: fallo de mapeos")).toBeInTheDocument();
+    });
+
+    it("muestra el resumen de la importación automática sin pilotos sin mapear", async () => {
+      mockGps({ isPending: false, isError: false, isSuccess: true, data: [gpLinked] });
+      mockGpEvents({ isPending: false, isError: false, isSuccess: true, data: [event] });
+      mockRiders({ isPending: false, isError: false, isSuccess: true, data: riders });
+      mockEventResults({ isPending: false, isError: false, isSuccess: true, data: [] });
+      mockSourceState();
+      mockRiderMappings();
+      mockSourceMutations();
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      await user.click(screen.getByRole("button", { name: "Importar carrera principal" }));
+
+      const options = asMockFn(trpc.results.importFromSource.useMutation).mock
+        .calls[0]?.[0] as {
+        onSuccess: (data: ImportEventFromSourceResult) => void;
+      };
+      act(() => {
+        options.onSuccess({ created: 2, corrected: 1, unchanged: 0, kept: 1, unmapped: [] });
+      });
+
+      const status = screen.getByRole("status");
+      expect(status).toHaveTextContent(
+        "Importación automática: 2 creados, 1 corregidos, 0 sin cambios y 1 conservados.",
+      );
+      expect(status).not.toHaveTextContent("Sin mapear");
+    });
+
+    it("muestra los issues Zod del error de las mutations de la fuente", async () => {
+      mockLoaded();
+      mockResult(trpc.results.linkSource.useMutation, {
+        mutate: vi.fn(),
+        isPending: false,
+        isError: true,
+        isSuccess: false,
+        error: clientError("Invalid input", {
+          zod: {
+            issues: [
+              { path: ["eventRef"], message: "El evento de la fuente no existe en el catálogo" },
+            ],
+          },
+          code: "BAD_REQUEST",
+          message: "Invalid input",
+        }),
+        data: undefined,
+      });
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      const alert = screen.getByRole("alert");
+      expect(alert).toHaveTextContent("El evento de la fuente no existe en el catálogo");
+      expect(alert).not.toHaveTextContent("Invalid input");
     });
   });
 });

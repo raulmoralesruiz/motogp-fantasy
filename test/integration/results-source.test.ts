@@ -33,6 +33,13 @@
  *   conservados); GP/evento cancelados (`PRECONDITION_FAILED`), GP sin evento
  *   (`NOT_FOUND`).
  * - Router sin fuente/catálogo: rechazo explícito.
+ * - Cobertura complementaria del servicio: anti-duplicado (dos riderRefs al
+ *   mismo piloto → una sola fila, gana la primera entrada); GP inexistente
+ *   detectado dentro de la transacción (fuente «mentirosa» → `NOT_FOUND`);
+ *   validación semántica por entrada (bono inválido en el evento →
+ *   `BAD_REQUEST` atómico, sin escrituras); `sourceState` con `lastUnmapped`
+ *   parseado defensivo (lista válida; no-array → null) y `name` null cuando
+ *   el payload crudo no tiene `rider`.
  */
 
 import { randomUUID } from "node:crypto";
@@ -1365,5 +1372,216 @@ describe("US-17 · Importación automática de resultados desde la fuente (Postg
       code: "INTERNAL_SERVER_ERROR",
       message: "No hay catálogo de eventos de la fuente configurado.",
     });
+  });
+
+  // ── Cobertura complementaria del servicio ─────────────────────────────────
+
+  it("sourceState: lastUnmapped parseado (lista válida; no-array → null)", async () => {
+    const { results } = await callerFor(ADMIN_IP, adminToken);
+
+    // Lista válida con ramas defensivas: `name` null se conserva; riderRef
+    // vacío, no-objeto y riderRef no-string se filtran.
+    await prisma.sourceState.create({
+      data: {
+        gpId: gpDobleId,
+        event: "q2",
+        source: "pulselive",
+        consecutiveFailures: 3,
+        lastError: "fallo simulado",
+        lastUnmapped: [
+          { riderRef: "rid-77", name: "Piloto X" },
+          { riderRef: "rid-78", name: null },
+          { riderRef: "", name: "Ref vacía" },
+          "no-objeto",
+          { riderRef: 123, name: "Ref numérica" },
+        ],
+      },
+    });
+    // Columna Json con un no-array → `parseUnmapped` devuelve null.
+    await prisma.sourceState.create({
+      data: {
+        gpId: gpSinMatchId,
+        event: "race",
+        source: "pulselive",
+        lastUnmapped: "no-es-una-lista",
+      },
+    });
+
+    const viewsDoble = await results.sourceState({ gpId: gpDobleId });
+    expect(viewsDoble).toEqual([
+      {
+        event: "q2",
+        source: "pulselive",
+        consecutiveFailures: 3,
+        lastError: "fallo simulado",
+        lastAttemptAt: null,
+        lastSuccessAt: null,
+        lastUnmapped: [
+          { riderRef: "rid-77", name: "Piloto X" },
+          { riderRef: "rid-78", name: null },
+        ],
+      },
+    ]);
+
+    const viewsSinMatch = await results.sourceState({ gpId: gpSinMatchId });
+    expect(viewsSinMatch).toHaveLength(1);
+    expect(viewsSinMatch[0]?.lastUnmapped).toBeNull();
+  });
+
+  it("dos riderRefs al mismo piloto: anti-duplicado (gana la primera entrada)", async () => {
+    // GP nuevo (vinculado) con su propio evento q2: el fetch pasa antes de la
+    // transacción, así que la fuente fake lo resuelve sin problema.
+    const gpDupId = (
+      await prisma.gp.create({
+        data: {
+          seasonId: world.season.id,
+          round: 7,
+          name: "GP Duplicado",
+          circuitId: world.gp.circuitId,
+          date: new Date("2099-07-13T12:00:00Z"),
+          sourceRef: "ev-duplicado",
+        },
+      })
+    ).id;
+    const q2Dup = (
+      await prisma.weekendEvent.create({
+        data: { gpId: gpDupId, type: "q2", orderNum: 1 },
+      })
+    ).id;
+
+    const { results } = await callerFor(ADMIN_IP, adminToken);
+    // rid-dup-1 → r1: dos refs de la fuente al MISMO piloto del mercado.
+    await results.setRiderMapping({ riderRef: "rid-dup-1", riderId: r1 });
+    fixture.setResults(
+      gpDupId,
+      "q2",
+      sourceResults("q2", [
+        sourceEntry("rid-1", { position: 1, finished: true, rawPoints: 25 }),
+        sourceEntry("rid-dup-1", { position: 2, finished: true, rawPoints: 20 }),
+      ]),
+    );
+
+    const summary = await results.importFromSource({ gpId: gpDupId, event: "q2" });
+    expect(summary).toEqual({
+      created: 1,
+      corrected: 0,
+      unchanged: 0,
+      kept: 0,
+      unmapped: [],
+    });
+
+    // Una sola fila por piloto; gana la PRIMERA entrada (posición 1), no la
+    // segunda (posición 2).
+    expect(
+      await prisma.result.count({ where: { gpId: gpDupId, eventId: q2Dup } }),
+    ).toBe(1);
+    const rowR1 = await prisma.result.findUnique({
+      where: {
+        gpId_eventId_riderId: { gpId: gpDupId, eventId: q2Dup, riderId: r1 },
+      },
+    });
+    expect(rowR1).toMatchObject({ source: "auto", position: 1 });
+    expect(rowR1?.rawPoints?.toNumber()).toBe(25);
+
+    // Limpieza: el mapeo extra no contamina la lista de mapeos de la suite.
+    await results.deleteRiderMapping({ riderRef: "rid-dup-1" });
+  });
+
+  it("fuente «mentirosa» (resultados para GP inexistente): NOT_FOUND en la tx", async () => {
+    // La fuente fake de la suite comprueba el GP ella misma (y fallaría antes
+    // de la transacción); aquí una fuente que devuelve resultados sin
+    // comprobar: el servicio no confía en el fetch y rechaza dentro de la
+    // transacción (NOT_FOUND).
+    const fuenteMentira: ResultsSource & SourceEventCatalog = {
+      meta: { name: "pulselive", version: "v1", authorized: false },
+      async fetchEventResults() {
+        return sourceResults("race", [
+          sourceEntry("rid-1", { position: 1, finished: true, rawPoints: 25 }),
+        ]);
+      },
+      async fetchGpStatus() {
+        return "provisional";
+      },
+      async listSeasonEvents() {
+        return [];
+      },
+    };
+    const routerMentira = createResultsRouter({ prisma, source: fuenteMentira });
+    const { results } = await callerFor(ADMIN_IP, adminToken, routerMentira);
+    await expect(
+      results.importFromSource({ gpId: randomUUID(), event: "race" }),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+      message: "El GP no existe.",
+    });
+  });
+
+  it("bono inválido en el evento (fastest-lap en Q2): BAD_REQUEST atómico", async () => {
+    fixture.setResults(
+      world.gp.id,
+      "q2",
+      sourceResults("q2", [
+        sourceEntry("rid-1", {
+          position: 1,
+          finished: true,
+          rawPoints: 25,
+          bonuses: ["fastest-lap"],
+        }),
+      ]),
+    );
+    const { results } = await callerFor(ADMIN_IP, adminToken);
+    await expect(
+      results.importFromSource({ gpId: world.gp.id, event: "q2" }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: `${r1}: El bono «fastest-lap» no es válido en Q2`,
+    });
+
+    // Atómico: la fila de r1 no se toca (sigue en la posición 2 de antes).
+    const rowR1 = await prisma.result.findUnique({
+      where: {
+        gpId_eventId_riderId: { gpId: world.gp.id, eventId: q2, riderId: r1 },
+      },
+    });
+    expect(rowR1).toMatchObject({ source: "auto", position: 2 });
+  });
+
+  it("sin mapear sin nombre en el payload crudo: unmapped con name null", async () => {
+    // `raw` sin `rider`: `riderNameFromRaw` no puede extraer el nombre → null.
+    fixture.setResults(
+      world.gp.id,
+      "q2",
+      sourceResults("q2", [
+        {
+          riderRef: "rid-sin-nombre",
+          position: null,
+          started: true,
+          finished: false,
+          penalties: [],
+          bonuses: [],
+          rawPoints: null,
+          raw: { position: null },
+        },
+      ]),
+    );
+    const { results } = await callerFor(ADMIN_IP, adminToken);
+    const summary = await results.importFromSource({ gpId: world.gp.id, event: "q2" });
+    expect(summary).toEqual({
+      created: 0,
+      corrected: 0,
+      unchanged: 0,
+      kept: 4, // r1..r4 en BD y no en el payload: se conservan (diffResults).
+      unmapped: [{ riderRef: "rid-sin-nombre", name: null }],
+    });
+
+    // Persistido en `source_state` (lo muestra la UI de admin).
+    const state = await prisma.sourceState.findUnique({
+      where: {
+        gpId_event_source: { gpId: world.gp.id, event: "q2", source: "pulselive" },
+      },
+    });
+    expect(state?.lastUnmapped).toEqual([
+      { riderRef: "rid-sin-nombre", name: null },
+    ]);
   });
 });
