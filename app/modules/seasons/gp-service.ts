@@ -138,6 +138,19 @@ export interface CalendarImportReport {
   skipped: Array<{ round: number; reason: string }>;
 }
 
+/**
+ * Próximo GP de la temporada (US-15, dashboard): la temporada más reciente
+ * (por año — mismo criterio de por defecto que la UI de mercado) y el primer
+ * GP `scheduled` por ronda (el siguiente en el que se pueden guardar
+ * lineups). `null` si no hay temporada; `gp = null` si la temporada no
+ * tiene GPs programados (todos cerrados/finalizados/cancelados, o sin
+ * calendario).
+ */
+export interface NextGpView {
+  season: { id: string; name: string; year: number };
+  gp: GpView | null;
+}
+
 // ── Utilidades ─────────────────────────────────────────────────────────────
 
 type GpWithRelations = Gp & { circuit: Circuit; weekendEvents: WeekendEvent[] };
@@ -323,6 +336,25 @@ export class GpService {
       include: { circuit: true, weekendEvents: true },
     });
     return gps.map((gp) => this.toGpView(gp));
+  }
+
+  /**
+   * Próximo GP de la temporada (US-15, dashboard): temporada más reciente
+   * por año + primer GP `scheduled` por ronda. `null` si no hay temporada;
+   * `gp = null` si la temporada no tiene GPs programados.
+   */
+  async nextGp(): Promise<NextGpView | null> {
+    const season = await this.deps.prisma.season.findFirst({
+      orderBy: [{ year: "desc" }, { name: "desc" }],
+      select: { id: true, name: true, year: true },
+    });
+    if (!season) return null;
+    const gp = await this.deps.prisma.gp.findFirst({
+      where: { seasonId: season.id, status: "scheduled" },
+      orderBy: { round: "asc" },
+      include: { circuit: true, weekendEvents: true },
+    });
+    return { season, gp: gp ? this.toGpView(gp) : null };
   }
 
   /** GP con su circuito y eventos. */

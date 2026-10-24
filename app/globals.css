@@ -167,6 +167,76 @@ a {
   border-radius: 6px;
 }
 
+/* Alert (componente <Alert>): variantes warning e info (US-15, dashboard). */
+.alert-warning {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.9rem;
+  color: #d29922;
+  background: rgba(210, 153, 34, 0.1);
+  border: 1px solid rgba(210, 153, 34, 0.4);
+  border-radius: 6px;
+}
+
+.alert-info {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.9rem;
+  color: #58a6ff;
+  background: rgba(88, 166, 255, 0.1);
+  border: 1px solid rgba(88, 166, 255, 0.4);
+  border-radius: 6px;
+}
+
+/* Dashboard (US-15): contenedor de avisos (espaciado entre alertas). */
+.alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+/* Dashboard (US-15): rejilla de tarjetas — 1 columna en móvil (mobile-first). */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1rem;
+  margin: 0.5rem 0 1rem;
+}
+
+.card {
+  padding: 0.9rem 1rem;
+  background: #10151c;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+}
+
+.card h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.card ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.card li {
+  margin: 0.3rem 0;
+}
+
+/* CTA de tarjeta (tamaño de toque ≥44 px — user-flows.md §3). */
+.card .cta {
+  display: inline-block;
+  margin-top: 0.6rem;
+  padding: 0.6rem 1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border-radius: 6px;
+}
+
 /* Botón primario (componente <Button> de app/shared/components). */
 .button {
   margin-top: 0.5rem;

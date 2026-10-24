@@ -568,7 +568,7 @@ export class LineupService {
           orderBy: { name: "asc" },
           include: { constructor: true },
         }),
-        this.builderBudget(gp, userId),
+        this.budgetForGp(gp, userId),
       ]);
     const priceOf = (assetType: string, assetId: string): number | null => {
       const price = prices.find(
@@ -933,11 +933,12 @@ export class LineupService {
   }
 
   /**
-   * Presupuesto del usuario para el GP (US-10): si ya guardó, el registrado
-   * en `budget_movements` (base + carry); si no, el que recibirá en el
-   * primer save — la misma fórmula que `save` valida (opción E, ADR-0017).
+   * Presupuesto del usuario para el GP (US-10, y US-15 dashboard): si ya
+   * guardó, el registrado en `budget_movements` (base + carry); si no, el
+   * que recibirá en el primer save — la misma fórmula que `save` valida
+   * (opción E, ADR-0017). Nunca depende del valor de mercado (invariante 8).
    */
-  private async builderBudget(
+  async budgetForGp(
     gp: { id: string; seasonId: string; round: number },
     userId: string,
   ): Promise<GpBudget> {

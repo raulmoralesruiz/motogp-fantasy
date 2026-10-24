@@ -6,6 +6,7 @@ import { router } from "../trpc";
 
 import { adminRouter } from "./admin";
 import { getDefaultAuthRouter } from "./auth";
+import { getDefaultDashboardRouter } from "./dashboard";
 import { getDefaultLineupsRouter } from "./lineups";
 import { getDefaultMarketRouter } from "./market";
 import { getDefaultProfileRouter } from "./profile";
@@ -22,6 +23,7 @@ export const appRouter = router({
   market: getDefaultMarketRouter(),
   lineups: getDefaultLineupsRouter(),
   results: getDefaultResultsRouter(),
+  dashboard: getDefaultDashboardRouter(),
 });
 
 export type AppRouter = typeof appRouter;

@@ -183,6 +183,23 @@ export interface EventResultView {
 }
 
 /**
+ * Aviso «Resultados actualizados» (US-15, dashboard): un GP donde el
+ * usuario tiene lineup guardado y hay correcciones registradas en
+ * `results_history` (US-16/US-17; el recálculo de US-19 también las
+ * escribe). Orden: última corrección primero.
+ */
+export interface RecalculationNotice {
+  gpId: string;
+  gpName: string;
+  round: number;
+  seasonName: string;
+  /** Nº de correcciones registradas en ese GP. */
+  corrections: number;
+  /** Fecha de la última corrección. */
+  lastAt: Date;
+}
+
+/**
  * JSON plano de los valores (columna `raw` y auditoría).
  *
  * `type` (no `interface`): Prisma exige un index signature en
@@ -1210,5 +1227,78 @@ export class ResultsService {
       throw new TRPCError({ code: "NOT_FOUND", message: "El GP no existe." });
     }
     return this.eventCatalog.listSeasonEvents(gp.season.year);
+  }
+
+  /**
+   * Avisos de recálculo para el dashboard (US-15): GPs donde el usuario
+   * tiene lineup guardado y hay correcciones en `results_history`
+   * (anterior→nuevo, motivo, actor). Sin lineups ni correcciones → `[]`.
+   *
+   * Solo lectura: no toca `results_version` ni recalcula (eso es US-19).
+   */
+  async recalculationNotices(userId: string): Promise<RecalculationNotice[]> {
+    const lineups = await this.prisma.lineup.findMany({
+      where: { userId },
+      select: { gpId: true },
+    });
+    if (lineups.length === 0) return [];
+    const gpIds = [...new Set(lineups.map((l) => l.gpId))];
+
+    const rows = await this.prisma.resultsHistory.findMany({
+      where: { result: { gpId: { in: gpIds } } },
+      select: {
+        createdAt: true,
+        result: {
+          select: {
+            gpId: true,
+            gp: {
+              select: {
+                name: true,
+                round: true,
+                season: { select: { name: true } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const byGp = new Map<
+      string,
+      {
+        gpName: string;
+        round: number;
+        seasonName: string;
+        corrections: number;
+        lastAt: Date;
+      }
+    >();
+    for (const row of rows) {
+      const entry = byGp.get(row.result.gpId);
+      if (entry) {
+        entry.corrections += 1;
+        if (row.createdAt > entry.lastAt) entry.lastAt = row.createdAt;
+      } else {
+        byGp.set(row.result.gpId, {
+          gpName: row.result.gp.name,
+          round: row.result.gp.round,
+          seasonName: row.result.gp.season.name,
+          corrections: 1,
+          lastAt: row.createdAt,
+        });
+      }
+    }
+
+    return [...byGp.entries()]
+      .map(([gpId, e]) => ({
+        gpId,
+        gpName: e.gpName,
+        round: e.round,
+        seasonName: e.seasonName,
+        corrections: e.corrections,
+        lastAt: e.lastAt,
+      }))
+      .sort((a, b) => b.lastAt.getTime() - a.lastAt.getTime());
   }
 }
