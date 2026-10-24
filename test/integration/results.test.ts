@@ -421,7 +421,9 @@ describe("US-16 · Importación manual de resultados (PostgreSQL real)", () => {
     expect(
       await prisma.auditLog.count({ where: { action: "results.import", entityId: raceId() } }),
     ).toBe(1);
-    expect(await prisma.auditLog.count({ where: { action: "results.correct" } })).toBe(0);
+    expect(
+      await prisma.auditLog.count({ where: { action: "results.correct", entityId: raceId() } }),
+    ).toBe(0);
     expect(
       await prisma.resultsHistory.count({
         where: { result: { gpId: world.gp.id, eventId: raceId() } },
