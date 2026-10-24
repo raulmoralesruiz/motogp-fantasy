@@ -1,7 +1,8 @@
 /**
  * Tests de los barrels de los módulos (Fase 0, T-03, T-24; Fase 2,
- * ADR-0017 + US-15; Fase 3, ADR-0018/ADR-0019): `leagues` exporta
- * `LeagueService` (US-15, dashboard: ligas activas + rankings).
+ * ADR-0017 + US-15; Fase 3, ADR-0018/ADR-0019/US-21): `leagues` exporta
+ * `LeagueService` (US-15, dashboard: ligas activas + rankings) y la fórmula
+ * pura de ranking/desempates (US-21, leagues.md §8).
  * `lineups` implementa el núcleo puro (Fase 2, unidad 1) y exporta sus
  * fórmulas (valores; el resto son tipos). `jobs` implementa los jobs de
  * precios (US-08, ADR-0015) y de resultados (US-17, ADR-0019), `market`
@@ -21,8 +22,8 @@ import * as market from "../market/index.js";
 import * as results from "../results/index.js";
 
 describe("barrels de módulos (Fase 0, T-03)", () => {
-  it("leagues exporta LeagueService (US-15, dashboard)", () => {
-    expect(Object.keys(leagues).sort()).toEqual(["LeagueService"]);
+  it("leagues exporta LeagueService y la fórmula pura de ranking (US-15/US-21)", () => {
+    expect(Object.keys(leagues).sort()).toEqual(["LeagueService", "sortRanking"]);
   });
 
   it("lineups exporta el núcleo puro y LineupService (Fase 2, ADR-0017)", () => {

@@ -20,6 +20,7 @@
  */
 import type { PrismaClient } from "@prisma/client";
 
+import { LeagueService } from "@/modules/leagues";
 import {
   PulseLiveResultsSource,
   PulseLiveSourceError,
@@ -93,6 +94,10 @@ export function createResultsRouter(deps: ResultsRouterDeps) {
     source,
     eventCatalog: source,
   });
+  // US-21: publica los rankings (módulo `leagues`) al publicarse resultados
+  // definitivos. Orquestación BFF: el router compone módulos (la regla "módulos
+  // no importan módulos" se respeta — `results` no importa `leagues`).
+  const leagues = new LeagueService({ prisma: deps.prisma });
 
   return router({
     /**
@@ -103,9 +108,18 @@ export function createResultsRouter(deps: ResultsRouterDeps) {
      */
     importEvent: adminProcedure
       .input(importEventInputSchema)
-      .mutation(({ ctx, input }) =>
-        service.importEvent(input, { actorId: ctx.user.id, ip: ctx.ip }),
-      ),
+      .mutation(async ({ ctx, input }) => {
+        const result = await service.importEvent(input, {
+          actorId: ctx.user.id,
+          ip: ctx.ip,
+        });
+        // US-21: si la corrección disparó un recálculo (US-19), los rankings
+        // cambian → se republican con la nueva `results_version`.
+        if (result.recalculated && result.resultsVersion) {
+          await leagues.recalculateRankings(input.gpId, result.resultsVersion);
+        }
+        return result;
+      }),
 
     /**
      * Eventos de resultados del GP con su estado (q2/sprint/race; Q1 no es
@@ -205,9 +219,19 @@ export function createResultsRouter(deps: ResultsRouterDeps) {
      */
     markDefinitive: adminProcedure
       .input(markDefinitiveInputSchema)
-      .mutation(({ ctx, input }) =>
-        service.markDefinitive(input.gpId, { actorId: ctx.user.id, ip: ctx.ip }),
-      ),
+      .mutation(async ({ ctx, input }) => {
+        const result = await service.markDefinitive(input.gpId, {
+          actorId: ctx.user.id,
+          ip: ctx.ip,
+        });
+        // US-21: al publicarse resultados definitivos se recalculan y
+        // versionan los rankings (leagues.md §8). No-op si el GP ya era
+        // definitivo (no hay nueva `results_version`).
+        if (!result.noop && result.resultsVersion) {
+          await leagues.recalculateRankings(input.gpId, result.resultsVersion);
+        }
+        return result;
+      }),
 
     /**
      * Cancelar un evento de resultados del GP (US-18, ADR-0020): el evento
