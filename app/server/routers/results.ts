@@ -6,8 +6,11 @@
  *
  * Autorización (T-08, security.md §1.5): todos los procedimientos son
  * `adminProcedure` — importar o corregir resultados es una acción sensible
- * (auditoría en la misma transacción, T-09). El recálculo y el flujo
- * provisional→definitivo llegan con US-18/US-19.
+ * (auditoría en la misma transacción, T-09).
+ *
+ * US-18 (ADR-0020): marcar definitivo (primer recálculo rv-1 inline),
+ * cancelar/neutralizar evento y estado derivado del GP. El recálculo por
+ * corrección (nueva `results_version`) llega con US-19.
  *
  * El auto-import (botón admin) usa la misma semántica que el job:
  * `source: "auto"`, `actorId = null` en la auditoría (los valores vienen de
@@ -26,11 +29,13 @@ import {
 } from "@/modules/results";
 import {
   deleteRiderMappingInputSchema,
+  eventFlagInputSchema,
   eventResultsInputSchema,
   gpEventsInputSchema,
   importEventInputSchema,
   importFromSourceInputSchema,
   linkSourceInputSchema,
+  markDefinitiveInputSchema,
   setRiderMappingInputSchema,
   sourceEventsInputSchema,
   sourceStateInputSchema,
@@ -188,6 +193,54 @@ export function createResultsRouter(deps: ResultsRouterDeps) {
      * Mapeos de pilotos de la fuente vigentes (admin, US-17).
      */
     riderMappings: adminProcedure.query(() => service.riderMappings()),
+
+    /**
+     * Marcar el GP como definitivo (US-18, ADR-0020): voltea las filas
+     * `provisional`/`corrected` a `definitive` y ejecuta el primer
+     * recálculo (rv-1) en la misma transacción. Auditado; no-op (sin
+     * auditoría) si el GP ya era definitivo.
+     */
+    markDefinitive: adminProcedure
+      .input(markDefinitiveInputSchema)
+      .mutation(({ ctx, input }) =>
+        service.markDefinitive(input.gpId, { actorId: ctx.user.id, ip: ctx.ip }),
+      ),
+
+    /**
+     * Cancelar un evento de resultados del GP (US-18, ADR-0020): el evento
+     * no puntúa (0 para todos; scoring.md §6). Auditado; no-op si ya estaba
+     * cancelado.
+     */
+    cancelEvent: adminProcedure
+      .input(eventFlagInputSchema)
+      .mutation(({ ctx, input }) =>
+        service.cancelEvent(input.gpId, input.eventId, {
+          actorId: ctx.user.id,
+          ip: ctx.ip,
+        }),
+      ),
+
+    /**
+     * Neutralizar un evento de resultados del GP (US-18, ADR-0020): flag de
+     * metadatos (se puntúa con el resultado oficial declarado). Auditado;
+     * no-op si ya estaba neutralizado.
+     */
+    neutralizeEvent: adminProcedure
+      .input(eventFlagInputSchema)
+      .mutation(({ ctx, input }) =>
+        service.neutralizeEvent(input.gpId, input.eventId, {
+          actorId: ctx.user.id,
+          ip: ctx.ip,
+        }),
+      ),
+
+    /**
+     * Estado de definitivo de un GP (US-18, ADR-0020): derivado de las filas
+     * (definitivo = sin filas `provisional`) + `resultsVersion` + conteos.
+     */
+    gpState: adminProcedure
+      .input(gpEventsInputSchema)
+      .query(({ input }) => service.gpState(input.gpId)),
   });
 }
 

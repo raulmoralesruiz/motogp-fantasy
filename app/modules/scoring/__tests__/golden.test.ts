@@ -7,20 +7,27 @@
  */
 import { describe, expect, it } from "vitest";
 
+import { PROVISIONAL_SEASON_RULES } from "../../../shared/config/season-rules.js";
 import type { GpStatus, Lineup } from "../../../shared/types/index.js";
 import {
   lineupPoints,
   mainRacePositionPoints,
   riderMainPoints,
+  scoreRiderWeekend,
   topTwoAverage,
+  type RiderPointsBreakdown,
+  type RiderScoringContext,
+  type RiderWeekend,
 } from "../index.js";
 import goldenRaw from "./golden/scoring-v1.json";
+
+type GoldenResult = number | number[] | RiderPointsBreakdown;
 
 interface GoldenCase {
   id: string;
   fn: string;
   args: Record<string, unknown>;
-  expected: number | number[];
+  expected: GoldenResult;
 }
 
 const golden = goldenRaw as {
@@ -33,7 +40,7 @@ function toMap(obj: Record<string, number>): Map<string, number> {
   return new Map(Object.entries(obj));
 }
 
-function runCase(c: GoldenCase): number | number[] {
+function runCase(c: GoldenCase): GoldenResult {
   const a = c.args;
   switch (c.fn) {
     case "lineupPoints":
@@ -49,6 +56,24 @@ function runCase(c: GoldenCase): number | number[] {
       return riderMainPoints(a.status as GpStatus, a.position as number | null);
     case "topTwoAverage":
       return topTwoAverage(a.values as number[]);
+    case "scoreRiderWeekend": {
+      const ctx = a.ctx as {
+        q2Grid: Record<string, number>;
+        teamOf: Record<string, string>;
+        priceOf: Record<string, number>;
+      };
+      const riderCtx: RiderScoringContext = {
+        q2Grid: new Map(Object.entries(ctx.q2Grid)),
+        teamOf: new Map(Object.entries(ctx.teamOf)),
+        priceOf: new Map(Object.entries(ctx.priceOf)),
+      };
+      return scoreRiderWeekend(
+        a.riderId as string,
+        a.weekend as RiderWeekend,
+        PROVISIONAL_SEASON_RULES.scoring,
+        riderCtx,
+      );
+    }
     default:
       throw new Error(`Golden scoring: función desconocida "${c.fn}"`);
   }
@@ -62,7 +87,11 @@ describe(`Golden scoring (${golden.rulesVersion})`, () => {
   for (const c of golden.cases) {
     it(c.id, () => {
       const result = runCase(c);
-      if (Array.isArray(result) || Array.isArray(c.expected)) {
+      if (
+        Array.isArray(result) ||
+        Array.isArray(c.expected) ||
+        (typeof result === "object" && result !== null)
+      ) {
         expect(result).toEqual(c.expected);
       } else {
         expect(result).toBeCloseTo(c.expected as number, 6);

@@ -9,17 +9,21 @@ import {
   resultEventLabel,
 } from "@/modules/results/core";
 import type {
+  EventFlagResult,
   GpEventView,
   ImportEventFromSourceResult,
   ImportEventResult,
+  MarkDefinitiveResult,
 } from "@/modules/results";
 import type { SeasonWithRules } from "@/modules/seasons";
 import { Alert, Button, Field } from "@/shared/components";
 import { PROVISIONAL_RESULTS_POLL } from "@/shared/config";
 import type { ResultBonusCode, ResultPenaltyCode } from "@/shared/types";
 import {
+  eventFlagInputSchema,
   importEventInputSchema,
   linkSourceInputSchema,
+  markDefinitiveInputSchema,
   setRiderMappingInputSchema,
 } from "@/shared/validation/results";
 import { trpc } from "@/trpc/client";
@@ -111,6 +115,11 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
   const [linkEventRef, setLinkEventRef] = useState("");
   const [mappingRiderRef, setMappingRiderRef] = useState("");
   const [mappingRiderId, setMappingRiderId] = useState("");
+  // US-18 (ADR-0020): definitivo + estados de evento.
+  const [lastDefinitive, setLastDefinitive] = useState<MarkDefinitiveResult | null>(null);
+  const [definitiveLocalError, setDefinitiveLocalError] = useState<string | null>(null);
+  const [eventFlagMessage, setEventFlagMessage] = useState<string | null>(null);
+  const [eventLocalError, setEventLocalError] = useState<string | null>(null);
 
   const gps = trpc.seasons.gps.list.useQuery({ seasonId }, { enabled: seasonId !== "" });
   const selectedGp = gps.data?.find((gp) => gp.id === gpId) ?? null;
@@ -134,6 +143,8 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
   const riderMappings = trpc.results.riderMappings.useQuery(undefined, {
     enabled: gpId !== "",
   });
+  // US-18 (ADR-0020): estado de definitivo del GP (derivado de las filas).
+  const gpState = trpc.results.gpState.useQuery({ gpId }, { enabled: gpId !== "" });
 
   const importMutation = trpc.results.importEvent.useMutation({
     onSuccess: (data) => {
@@ -181,6 +192,43 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
     },
   });
 
+  // US-18 (ADR-0020): definitivo + estados de evento.
+  const markDefinitiveMutation = trpc.results.markDefinitive.useMutation({
+    onSuccess: (data) => {
+      setLastDefinitive(data);
+      setDefinitiveLocalError(null);
+      void gpState.refetch();
+      void gpEvents.refetch();
+      void eventResults.refetch();
+    },
+  });
+  const cancelEventMutation = trpc.results.cancelEvent.useMutation({
+    onSuccess: (data: EventFlagResult) => {
+      setEventFlagMessage(
+        data.noop
+          ? "El evento ya estaba cancelado (sin cambios)."
+          : "Evento cancelado: no puntuará (0 para todos).",
+      );
+      setEventLocalError(null);
+      void gpState.refetch();
+      void gpEvents.refetch();
+      void eventResults.refetch();
+    },
+  });
+  const neutralizeEventMutation = trpc.results.neutralizeEvent.useMutation({
+    onSuccess: (data: EventFlagResult) => {
+      setEventFlagMessage(
+        data.noop
+          ? "El evento ya estaba neutralizado (sin cambios)."
+          : "Evento neutralizado: se puntuará con el resultado oficial declarado.",
+      );
+      setEventLocalError(null);
+      void gpState.refetch();
+      void gpEvents.refetch();
+      void eventResults.refetch();
+    },
+  });
+
   // Pre-carga: cuando llegan (o cambian) los datos, se reconstruye el
   // formulario con las filas actuales de BD. El structural sharing de
   // TanStack garantiza que el efecto solo se re-ejecuta si los datos
@@ -218,6 +266,15 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
     setLastSourceImport(null);
     setSourceLocalError(null);
     setLinkEventRef("");
+  }, [gpId]);
+
+  // US-18 (ADR-0020): mensajes transitorios del definitivo/estados de
+  // evento se reinician al cambiar de GP.
+  useEffect(() => {
+    setLastDefinitive(null);
+    setDefinitiveLocalError(null);
+    setEventFlagMessage(null);
+    setEventLocalError(null);
   }, [gpId]);
 
   const selectedEvent = gpEvents.data?.find((e) => e.id === eventId) ?? null;
@@ -382,6 +439,56 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
     linkMutation.mutate(parsed.data);
   }
 
+  /**
+   * Marcar el GP como definitivo (US-18, ADR-0020): confirmación con las
+   * filas afectadas; el servidor voltea las filas y ejecuta el primer
+   * recálculo (rv-1) en la misma transacción.
+   */
+  function onMarkDefinitive() {
+    const state = gpState.data;
+    if (!gpId || !state) return;
+    const ok = window.confirm(
+      `¿Marcar el GP como definitivo?\n` +
+        `Se puntuarán los lineups (primer recálculo ${state.resultsVersion ?? "rv-1"}).` +
+        `\nAfecta a ${state.counts.provisional} fila(s) provisional(es) y ` +
+        `${state.counts.corrected} corregida(s).`,
+    );
+    if (!ok) return;
+    const parsed = markDefinitiveInputSchema.safeParse({ gpId });
+    if (!parsed.success) {
+      setDefinitiveLocalError(parsed.error.issues.map((issue) => issue.message).join(" "));
+      return;
+    }
+    setDefinitiveLocalError(null);
+    markDefinitiveMutation.mutate(parsed.data);
+  }
+
+  /**
+   * Estado de evento (US-18, ADR-0020): cancelar (no puntúa) o neutralizar
+   * (se puntúa con el resultado oficial), con confirmación.
+   */
+  function onEventFlag(event: GpEventView, action: "cancel" | "neutralize") {
+    if (!gpId) return;
+    const label = resultEventLabel(event.type);
+    const ok =
+      action === "cancel"
+        ? window.confirm(
+            `¿Cancelar ${label}? El evento no puntuará (0 para todos). Acción irreversible.`,
+          )
+        : window.confirm(
+            `¿Neutralizar ${label}? Se puntuará con el resultado oficial declarado.`,
+          );
+    if (!ok) return;
+    const parsed = eventFlagInputSchema.safeParse({ gpId, eventId: event.id });
+    if (!parsed.success) {
+      setEventLocalError(parsed.error.issues.map((issue) => issue.message).join(" "));
+      return;
+    }
+    setEventLocalError(null);
+    const mutation = action === "cancel" ? cancelEventMutation : neutralizeEventMutation;
+    mutation.mutate(parsed.data);
+  }
+
   // US-17: añade un mapeo piloto de fuente → piloto del mercado.
   function onAddMapping(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -426,6 +533,27 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
       sourceIssues.length > 0
         ? sourceIssues.map((issue) => issue.message).join(" ")
         : sourceErrorMutation.error.message;
+  }
+  // US-18 (ADR-0020): errores de servidor del definitivo y de los estados
+  // de evento (reactivo, sin estado).
+  const definitiveServerIssues = markDefinitiveMutation.isError
+    ? zodIssues(markDefinitiveMutation.error)
+    : [];
+  const definitiveError = markDefinitiveMutation.isError
+    ? definitiveServerIssues.length > 0
+      ? definitiveServerIssues.map((issue) => issue.message).join(" ")
+      : markDefinitiveMutation.error.message
+    : null;
+  const eventFlagErrorMutation = [cancelEventMutation, neutralizeEventMutation].find(
+    (mutation) => mutation.isError,
+  );
+  let eventServerError: string | null = null;
+  if (eventFlagErrorMutation) {
+    const eventIssues = zodIssues(eventFlagErrorMutation.error);
+    eventServerError =
+      eventIssues.length > 0
+        ? eventIssues.map((issue) => issue.message).join(" ")
+        : eventFlagErrorMutation.error.message;
   }
   const entries = hasEvent ? buildEntries() : [];
 
@@ -486,6 +614,90 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
 
       {gpId !== "" && (
         <>
+          {/* US-18 (ADR-0020): definitivo + estados de evento. */}
+          <div>
+            <h3>Definitivo</h3>
+
+            {definitiveLocalError ? <Alert variant="error">{definitiveLocalError}</Alert> : null}
+            {definitiveError ? <Alert variant="error">{definitiveError}</Alert> : null}
+            {eventLocalError ? <Alert variant="error">{eventLocalError}</Alert> : null}
+            {eventServerError ? <Alert variant="error">{eventServerError}</Alert> : null}
+            {eventFlagMessage ? <Alert variant="success">{eventFlagMessage}</Alert> : null}
+            {lastDefinitive ? (
+              <Alert variant="success">
+                {lastDefinitive.noop
+                  ? "El GP ya era definitivo (sin cambios)."
+                  : `GP definitivo: ${lastDefinitive.madeDefinitive} fila(s) a definitivo, ` +
+                    `${lastDefinitive.reconfirmed} reconfirmadas y ${lastDefinitive.lineupsScored} ` +
+                    `lineups puntuados (${lastDefinitive.resultsVersion}).`}
+              </Alert>
+            ) : null}
+
+            {gpState.isPending ? (
+              <p className="muted">Consultando…</p>
+            ) : gpState.isError ? (
+              <p className="bad">No se pudo cargar el estado: {gpState.error.message}</p>
+            ) : (
+              <>
+                <p>
+                  Estado:{" "}
+                  <strong>
+                    {gpState.data.definitive
+                      ? `definitivo${
+                          gpState.data.resultsVersion ? ` (${gpState.data.resultsVersion})` : ""
+                        }`
+                      : "provisional"}
+                  </strong>{" "}
+                  · {gpState.data.counts.provisional} provisional(es),{" "}
+                  {gpState.data.counts.definitive} definitivo(s),{" "}
+                  {gpState.data.counts.corrected} corregido(s) ·{" "}
+                  {gpState.data.totalResults} resultados · {gpState.data.lineups} lineups
+                </p>
+                {gpState.data.totalResults === 0 ? (
+                  <p className="muted">
+                    Importa los resultados antes de marcar el GP definitivo.
+                  </p>
+                ) : !gpState.data.definitive ? (
+                  <Button
+                    onClick={onMarkDefinitive}
+                    disabled={markDefinitiveMutation.isPending}
+                  >
+                    {markDefinitiveMutation.isPending ? "Marcando…" : "Marcar definitivo"}
+                  </Button>
+                ) : null}
+
+                {gpEvents.data && gpEvents.data.length > 0 && (
+                    <p>
+                      <span className="muted">Estados de evento: </span>
+                      {gpEvents.data.map((event) => (
+                          <span key={event.id}>
+                            {resultEventLabel(event.type)}:{" "}
+                            <Button
+                              onClick={() => onEventFlag(event, "cancel")}
+                              disabled={
+                                cancelEventMutation.isPending ||
+                                neutralizeEventMutation.isPending
+                              }
+                            >
+                              Cancelar
+                            </Button>{" "}
+                            <Button
+                              onClick={() => onEventFlag(event, "neutralize")}
+                              disabled={
+                                cancelEventMutation.isPending ||
+                                neutralizeEventMutation.isPending
+                              }
+                            >
+                              Neutralizar
+                            </Button>{" "}
+                          </span>
+                        ))}
+                    </p>
+                  )}
+              </>
+            )}
+          </div>
+
           {/* US-17 (ADR-0019): importación automática desde la fuente. */}
           <div>
             <h3>Importación automática (PulseLive)</h3>

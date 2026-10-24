@@ -46,12 +46,22 @@ import {
 import { TRPCError } from "@trpc/server";
 
 import { appendAudit } from "@/modules/admin/audit";
+import {
+  groupTopTwoAverage,
+  lineupWeekendPoints,
+  scoreRiderWeekend,
+  type EventOutcome,
+  type RiderPointsBreakdown,
+  type RiderWeekend,
+  type ScoringRules,
+} from "@/modules/scoring";
 import type {
   GpStatus,
   ResultBonusCode,
   ResultEventKind,
   ResultPenaltyCode,
 } from "@/shared/types";
+import { seasonRulesSchema, type SeasonRules } from "@/shared/validation/season-rules";
 import type {
   DeleteRiderMappingInput,
   EventResultsInput,
@@ -198,6 +208,70 @@ export interface RecalculationNotice {
   /** Fecha de la última corrección. */
   lastAt: Date;
 }
+
+/**
+ * Resultado de "marcar definitivo" (US-18, ADR-0020): el GP pasa a
+ * definitivo y se ejecuta el primer recálculo (rv-1) en la misma
+ * transacción.
+ */
+export interface MarkDefinitiveResult {
+  /** Filas `provisional → definitive`. */
+  madeDefinitive: number;
+  /** Filas `corrected → definitive` (reconfirmadas). */
+  reconfirmed: number;
+  /** Filas ya `definitive` (sin cambio). */
+  alreadyDefinitive: number;
+  /** Lineups puntuados (filas `Score` escritas). */
+  lineupsScored: number;
+  /** Versión de resultados asignada (`rv-1`) o `null` si no-op. */
+  resultsVersion: string | null;
+  /** `true` si el GP ya era definitivo (sin escrituras ni auditoría). */
+  noop: boolean;
+}
+
+/** Resultado de cancelar/neutralizar un evento (US-18, ADR-0020). */
+export interface EventFlagResult {
+  /** `true` si la acción era cancelar. */
+  cancelled: boolean;
+  /** `true` si la acción era neutralizar. */
+  neutralized: boolean;
+  /** `true` si el evento ya estaba en ese estado (sin auditoría). */
+  noop: boolean;
+}
+
+/**
+ * Estado de definitivo de un GP (US-18, ADR-0020): la UI lo usa para
+ * mostrar "provisional" hasta el definitivo (CA US-18; pantalla en US-22).
+ */
+export interface GpStateView {
+  gpId: string;
+  gpName: string;
+  round: number;
+  seasonName: string;
+  /** `true` si hay resultados y ninguna fila `provisional` (definitivo). */
+  definitive: boolean;
+  /** Versión de resultados en vigor (`rv-N`) o `null` si aún no recalculado. */
+  resultsVersion: string | null;
+  /** Conteo de filas por estado. */
+  counts: { provisional: number; definitive: number; corrected: number };
+  /** Nº total de filas de resultado del GP. */
+  totalResults: number;
+  /** Nº de lineups guardados para el GP. */
+  lineups: number;
+}
+
+/**
+ * Desglose de un lineup para `Score.breakdown` (US-18; lo consume US-20).
+ * `type` (no `interface`): Prisma exige index signature en `InputJsonObject`.
+ */
+type ScoreBreakdownJson = {
+  rulesVersion: string;
+  gold: Array<{ riderId: string; weight: number; points: number; breakdown: RiderPointsBreakdown }>;
+  silver: Array<{ riderId: string; weight: number; points: number; breakdown: RiderPointsBreakdown }>;
+  constructor: { id: string; points: number };
+  team: { id: string; points: number };
+  total: number;
+};
 
 /**
  * JSON plano de los valores (columna `raw` y auditoría).
@@ -1301,4 +1375,447 @@ export class ResultsService {
       }))
       .sort((a, b) => b.lastAt.getTime() - a.lastAt.getTime());
   }
+
+  // ── US-18 (ADR-0020): definitivo + primer recálculo + estados de evento ──
+
+  /**
+   * Marcar el GP como definitivo (US-18, ADR-0020).
+   *
+   * En UNA transacción (lock `FOR UPDATE` del GP):
+   * 1. Gates: el GP existe (NOT_FOUND); no está `cancelled`
+   *    (PRECONDITION_FAILED); tiene al menos una fila `Result` (BAD_REQUEST).
+   * 2. Volteo: `provisional → definitive` y `corrected → definitive`
+   *    (reconfirmar). Si no hay filas `provisional`/`corrected` → **no-op**
+   *    (sin auditoría; el GP ya era definitivo).
+   * 3. Primer recálculo (rv-1): puntuar el fin de semana de cada piloto con
+   *    el motor puro (tablas de `season_rules`) y escribir una `Score` por
+   *    lineup; asignar `resultsVersion = rv-1` a las filas `Result` y
+   *    `ResultsEvent` del GP (ADR-0018: "el primer definitivo, US-18").
+   * 4. Auditoría `results.marked_definitive` (misma transacción, T-09).
+   */
+  async markDefinitive(gpId: string, meta: ResultsMeta): Promise<MarkDefinitiveResult> {
+    return this.prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw<Array<{ id: string; status: GpDbStatus; seasonId: string }>>`
+        SELECT id, status, "season_id" AS "seasonId"
+        FROM gps
+        WHERE id = ${gpId}::uuid
+        FOR UPDATE
+      `;
+      const gp = rows[0];
+      if (!gp) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "El GP no existe." });
+      }
+      if (gp.status === "cancelled") {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "El GP está cancelado: no se puede marcar como definitivo.",
+        });
+      }
+
+      const allRows = await tx.result.findMany({ where: { gpId } });
+      if (allRows.length === 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "El GP no tiene resultados: importa los resultados antes de marcarlo definitivo.",
+        });
+      }
+
+      const provisional = allRows.filter((r) => r.status === "provisional");
+      const corrected = allRows.filter((r) => r.status === "corrected");
+      const alreadyDefinitive = allRows.length - provisional.length - corrected.length;
+
+      // No-op: el GP ya era definitivo (sin filas provisional/corrected).
+      if (provisional.length === 0 && corrected.length === 0) {
+        const resultsVersion = allRows[0]?.resultsVersion ?? null;
+        return {
+          madeDefinitive: 0,
+          reconfirmed: 0,
+          alreadyDefinitive,
+          lineupsScored: 0,
+          resultsVersion,
+          noop: true,
+        };
+      }
+
+      // Volteo de filas: provisional/corrected → definitive.
+      await tx.result.updateMany({
+        where: { gpId, status: { in: ["provisional", "corrected"] } },
+        data: { status: "definitive" },
+      });
+
+      // Primer recálculo (rv-1) + asignación de resultsVersion.
+      const resultsVersion = "rv-1";
+      const lineupsScored = await this.recalculateGp(tx, gpId, gp.seasonId, resultsVersion);
+      await tx.result.updateMany({
+        where: { gpId, resultsVersion: null },
+        data: { resultsVersion },
+      });
+      await tx.resultsEvent.updateMany({
+        where: { gpId, resultsVersion: null },
+        data: { resultsVersion },
+      });
+
+      // Auditoría (misma transacción, T-09).
+      await appendAudit(tx, {
+        actorId: meta.actorId,
+        action: "results.marked_definitive",
+        entity: "results",
+        entityId: gpId,
+        afterData: {
+          gpId,
+          madeDefinitive: provisional.length,
+          reconfirmed: corrected.length,
+          alreadyDefinitive,
+          lineupsScored,
+          resultsVersion,
+        },
+        ip: meta.ip,
+      });
+
+      return {
+        madeDefinitive: provisional.length,
+        reconfirmed: corrected.length,
+        alreadyDefinitive,
+        lineupsScored,
+        resultsVersion,
+        noop: false,
+      };
+    });
+  }
+
+  /**
+   * Cancelar un evento de resultados del GP (US-18, ADR-0020): el evento no
+   * puntúa (0 para todos; scoring.md §6). Flag `ResultsEvent.cancelled`;
+   * irreversibles en US-18 (para corregir, se re-importa — invariante 6).
+   * No-op (sin auditoría) si el evento ya estaba cancelado.
+   */
+  async cancelEvent(gpId: string, eventId: string, meta: ResultsMeta): Promise<EventFlagResult> {
+    return this.setEventFlag(gpId, eventId, { cancelled: true }, "results.event_cancelled", meta);
+  }
+
+  /**
+   * Neutralizar un evento de resultados del GP (US-18, ADR-0020): se puntúa
+   * con el resultado oficial declarado (scoring.md §6); flag de metadatos
+   * `ResultsEvent.neutralized` que no altera la puntuación pero se versiona
+   * y se audita. No-op (sin auditoría) si ya estaba neutralizado.
+   */
+  async neutralizeEvent(
+    gpId: string,
+    eventId: string,
+    meta: ResultsMeta,
+  ): Promise<EventFlagResult> {
+    return this.setEventFlag(
+      gpId,
+      eventId,
+      { neutralized: true },
+      "results.event_neutralized",
+      meta,
+    );
+  }
+
+  /**
+   * Estado de definitivo de un GP (US-18, ADR-0020): derivado de las filas
+   * `Result` (definitivo = sin filas `provisional`) + `resultsVersion` +
+   * conteos. Lo usa la UI para mostrar "provisional" hasta el definitivo.
+   */
+  async gpState(gpId: string): Promise<GpStateView> {
+    const gp = await this.prisma.gp.findUnique({
+      where: { id: gpId },
+      include: { season: { select: { name: true } } },
+    });
+    if (!gp) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "El GP no existe." });
+    }
+    const [rows, lineups] = await Promise.all([
+      this.prisma.result.findMany({ where: { gpId }, select: { status: true, resultsVersion: true } }),
+      this.prisma.lineup.count({ where: { gpId } }),
+    ]);
+    const counts = { provisional: 0, definitive: 0, corrected: 0 };
+    let resultsVersion: string | null = null;
+    for (const row of rows) {
+      counts[row.status] += 1;
+      if (row.resultsVersion) resultsVersion = row.resultsVersion;
+    }
+    return {
+      gpId: gp.id,
+      gpName: gp.name,
+      round: gp.round,
+      seasonName: gp.season.name,
+      // Definitivo = hay resultados y ninguno `provisional` ni `corrected`
+      // (las `corrected` aún requieren reconfirmar; un GP sin filas aún no es
+      // definitivo: `markDefinitive` lo rechaza).
+      definitive: rows.length > 0 && counts.provisional === 0 && counts.corrected === 0,
+      resultsVersion,
+      counts,
+      totalResults: rows.length,
+      lineups,
+    };
+  }
+
+  /**
+   * Establece un flag de evento (`cancelled` o `neutralized`) en
+   * `results_events` (US-18, ADR-0020). Transacción con `FOR UPDATE` del GP;
+   * no-op (sin auditoría) si el flag ya estaba puesto.
+   */
+  private async setEventFlag(
+    gpId: string,
+    eventId: string,
+    flag: { cancelled?: boolean; neutralized?: boolean },
+    action: string,
+    meta: ResultsMeta,
+  ): Promise<EventFlagResult> {
+    return this.prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM gps WHERE id = ${gpId}::uuid FOR UPDATE
+      `;
+      if (rows.length === 0) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "El GP no existe." });
+      }
+      const event = await tx.weekendEvent.findFirst({
+        where: { id: eventId, gpId },
+      });
+      if (!event) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "El evento no existe en este GP.",
+        });
+      }
+      if (event.type === "q1") {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Q1 no es un evento de resultados.",
+        });
+      }
+
+      const current = await tx.resultsEvent.findUnique({
+        where: { gpId_eventId: { gpId, eventId } },
+      });
+      const isCancelled = flag.cancelled === true;
+      const target = isCancelled ? current?.cancelled : current?.neutralized;
+      if (target) {
+        return { cancelled: isCancelled, neutralized: !isCancelled, noop: true };
+      }
+
+      await tx.resultsEvent.upsert({
+        where: { gpId_eventId: { gpId, eventId } },
+        update: flag,
+        create: { gpId, eventId, status: "scheduled", ...flag },
+      });
+
+      await appendAudit(tx, {
+        actorId: meta.actorId,
+        action,
+        entity: "results",
+        entityId: eventId,
+        afterData: { gpId, eventId, ...flag },
+        ip: meta.ip,
+      });
+
+      return { cancelled: isCancelled, neutralized: !isCancelled, noop: false };
+    });
+  }
+
+  /**
+   * Primer recálculo de un GP (US-18, ADR-0020): puntuar el fin de semana de
+   * cada piloto con el motor puro (tablas de `season_rules` vigentes) y
+   * escribir una `Score` por lineup del GP.
+   *
+   * Datos que carga el servicio (no puro) y pasa al motor: resultados por
+   * evento, parrilla de Q2 (posiciones ganadas), afiliaciones (equipo/
+   * constructor) y precios (bono extraordinario). Si la carrera principal
+   * está cancelada, el GP puntúa 0 para todos (scoring.md §6).
+   *
+   * @returns nº de lineups puntuados (filas `Score` escritas).
+   */
+  private async recalculateGp(
+    tx: Prisma.TransactionClient,
+    gpId: string,
+    seasonId: string,
+    resultsVersion: string,
+  ): Promise<number> {
+    // 1. Reglas de la temporada (la versión más reciente).
+    const rule = await tx.seasonRule.findFirst({
+      where: { seasonId },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!rule) {
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "La temporada no tiene reglas publicadas.",
+      });
+    }
+    const rules: SeasonRules = seasonRulesSchema.parse(rule.rules);
+    const scoringRules = rules.scoring as ScoringRules;
+
+    // 2. Eventos del GP (tipo + estado) y filas de resultado.
+    const [weekendEvents, resultsEvents, results, affiliations] = await Promise.all([
+      tx.weekendEvent.findMany({ where: { gpId, type: { in: ["q2", "sprint", "race"] } } }),
+      tx.resultsEvent.findMany({ where: { gpId } }),
+      tx.result.findMany({ where: { gpId } }),
+      tx.riderAffiliation.findMany({ where: { gpId } }),
+    ]);
+    const kindByEvent = new Map(
+      weekendEvents.map((e) => [e.id, e.type as ResultEventKind]),
+    );
+    const cancelledEvents = new Set(
+      resultsEvents.filter((r) => r.cancelled).map((r) => r.eventId),
+    );
+    const raceEvent = weekendEvents.find((e) => e.type === "race");
+    const raceCancelled = raceEvent ? cancelledEvents.has(raceEvent.id) : false;
+
+    // 3. Afiliaciones (rider → equipo/constructor) y precios (extraordinario).
+    const teamOf = new Map<string, string>();
+    const constructorOf = new Map<string, string>();
+    for (const a of affiliations) {
+      teamOf.set(a.riderId, a.teamId);
+      constructorOf.set(a.riderId, a.constructorId);
+    }
+    // Bono extraordinario = top-3 race + el más barato de SU EQUIPO (roster
+    // afiliado al GP, scoring.md §2.4): se cargan los precios de todos los
+    // pilotos afiliados, no solo los con resultado (ADR-0020).
+    const riderIds = [...new Set([...results.map((r) => r.riderId), ...teamOf.keys()])];
+    const priceOf = new Map<string, number>();
+    if (riderIds.length > 0) {
+      const prices = await tx.price.findMany({
+        where: {
+          assetType: "rider",
+          assetId: { in: riderIds },
+          OR: [{ gpId }, { gpId: null }],
+        },
+      });
+      for (const p of prices) {
+        const value = Number(p.price);
+        if (p.gpId === gpId) priceOf.set(p.assetId, value);
+        else if (!priceOf.has(p.assetId)) priceOf.set(p.assetId, value);
+      }
+    }
+
+    // 4. Resultados por piloto por evento + parrilla de Q2.
+    const q2Grid = new Map<string, number>();
+    const riders = new Map<string, RiderWeekend>();
+    if (!raceCancelled) {
+      for (const row of results) {
+        const kind = kindByEvent.get(row.eventId);
+        if (!kind || cancelledEvents.has(row.eventId)) continue; // 0 puntos
+        const entry = entryFromRow(row);
+        const outcome: EventOutcome = {
+          position: entry.position,
+          started: entry.started,
+          finished: entry.finished,
+          bonuses: entry.bonuses,
+          penalties: entry.penalties,
+        };
+        let weekend = riders.get(row.riderId);
+        if (!weekend) {
+          weekend = { q2: null, sprint: null, race: null };
+          riders.set(row.riderId, weekend);
+        }
+        if (kind === "q2") {
+          weekend.q2 = outcome;
+          if (entry.position !== null) q2Grid.set(row.riderId, entry.position);
+        } else if (kind === "sprint") {
+          weekend.sprint = outcome;
+        } else {
+          weekend.race = outcome;
+        }
+      }
+    }
+
+    // 5. Puntos de cada piloto (motor puro) + media top-2 de grupo (campo completo).
+    const ctx = { q2Grid, teamOf, priceOf };
+    const riderPoints = new Map<string, number>();
+    const riderBreakdowns = new Map<string, RiderPointsBreakdown>();
+    for (const [riderId, weekend] of riders) {
+      const breakdown = scoreRiderWeekend(riderId, weekend, scoringRules, ctx);
+      riderPoints.set(riderId, breakdown.total);
+      riderBreakdowns.set(riderId, breakdown);
+    }
+    const fieldRiders = [...new Set([...teamOf.keys(), ...riderPoints.keys()])];
+    const fieldPoints = fieldRiders.map((riderId) => ({
+      riderId,
+      points: riderPoints.get(riderId) ?? 0,
+    }));
+    const ctorPoints = groupTopTwoAverage(
+      fieldPoints,
+      (riderId) => constructorOf.get(riderId) ?? "",
+    );
+    const teamPoints = groupTopTwoAverage(
+      fieldPoints,
+      (riderId) => teamOf.get(riderId) ?? "",
+    );
+
+    // 6. Lineups del GP → una `Score` por lineup (desglose incluido).
+    const lineups = await tx.lineup.findMany({ where: { gpId }, include: { slots: true } });
+    let lineupsScored = 0;
+    for (const lineup of lineups) {
+      const gold = lineup.slots
+        .filter((s) => s.slotType === "gold" && s.assetType === "rider")
+        .map((s) => s.assetId);
+      const silver = lineup.slots
+        .filter((s) => s.slotType === "silver" && s.assetType === "rider")
+        .map((s) => s.assetId);
+      const constructorSlot = lineup.slots.find((s) => s.slotType === "constructor");
+      const teamSlot = lineup.slots.find((s) => s.slotType === "team");
+      const [goldA, goldB] = gold;
+      const [silverA, silverB] = silver;
+      if (!goldA || !goldB || !silverA || !silverB || !constructorSlot || !teamSlot) {
+        continue; // Inalcanzable: invariante 1 (2+2+1+1) lo garantiza en BD.
+      }
+      const total = lineupWeekendPoints(
+        {
+          gold: [goldA, goldB],
+          silver: [silverA, silverB],
+          constructor: constructorSlot.assetId,
+          team: teamSlot.assetId,
+        },
+        riderPoints,
+        ctorPoints,
+        teamPoints,
+        { gold: scoringRules.goldWeight, silver: scoringRules.silverWeight },
+      );
+      const breakdown: ScoreBreakdownJson = {
+        rulesVersion: rule.version,
+        gold: gold.map((riderId) => ({
+          riderId,
+          weight: scoringRules.goldWeight,
+          points: (riderPoints.get(riderId) ?? 0) * scoringRules.goldWeight,
+          breakdown: riderBreakdowns.get(riderId) ?? emptyBreakdown(),
+        })),
+        silver: silver.map((riderId) => ({
+          riderId,
+          weight: scoringRules.silverWeight,
+          points: (riderPoints.get(riderId) ?? 0) * scoringRules.silverWeight,
+          breakdown: riderBreakdowns.get(riderId) ?? emptyBreakdown(),
+        })),
+        constructor: { id: constructorSlot.assetId, points: ctorPoints.get(constructorSlot.assetId) ?? 0 },
+        team: { id: teamSlot.assetId, points: teamPoints.get(teamSlot.assetId) ?? 0 },
+        total,
+      };
+      await tx.score.upsert({
+        where: { lineupId_resultsVersion: { lineupId: lineup.id, resultsVersion } },
+        update: {
+          pointsTotal: total,
+          breakdown,
+          rulesVersion: rule.version,
+        },
+        create: {
+          lineupId: lineup.id,
+          userId: lineup.userId,
+          gpId,
+          pointsTotal: total,
+          breakdown,
+          rulesVersion: rule.version,
+          resultsVersion,
+        },
+      });
+      lineupsScored += 1;
+    }
+
+    return lineupsScored;
+  }
+}
+
+/** Desglose vacío (piloto sin resultados en el GP). */
+function emptyBreakdown(): RiderPointsBreakdown {
+  return { q2: 0, sprint: 0, mainRace: 0, bonuses: [], penalties: [], total: 0 };
 }

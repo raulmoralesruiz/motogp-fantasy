@@ -12,10 +12,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
+  EventFlagResult,
   EventResultView,
   GpEventView,
   ImportEventFromSourceResult,
   ImportEventResult,
+  MarkDefinitiveResult,
 } from "../../modules/results";
 import type { RiderView } from "../../modules/market";
 import type { CircuitView, GpView, SeasonWithRules } from "../../modules/seasons";
@@ -195,6 +197,53 @@ function mockRiderMappings(result: Record<string, unknown> = {}) {
   });
 }
 
+/** US-18: estado de definitivo del GP (por defecto: cargado, sin resultados). */
+function mockGpState(result: Record<string, unknown> = {}) {
+  mockResult(trpc.results.gpState.useQuery, {
+    data: {
+      gpId,
+      gpName: "GP de España",
+      round: 1,
+      seasonName: "Temporada 2026",
+      definitive: false,
+      resultsVersion: null,
+      counts: { provisional: 0, definitive: 0, corrected: 0 },
+      totalResults: 0,
+      lineups: 1,
+    },
+    isPending: false,
+    isError: false,
+    isSuccess: true,
+    error: undefined,
+    refetch: vi.fn(),
+    ...result,
+  });
+}
+
+/** US-18: mutations de definitivo/estados de evento en reposo. */
+function mockDefinitiveMutations() {
+  const markDefinitive = vi.fn();
+  const cancelEvent = vi.fn();
+  const neutralizeEvent = vi.fn();
+  const idle = {
+    isPending: false,
+    isError: false,
+    isSuccess: false,
+    error: undefined,
+    data: undefined,
+  };
+  mockResult(trpc.results.markDefinitive.useMutation, {
+    mutate: markDefinitive,
+    ...idle,
+  });
+  mockResult(trpc.results.cancelEvent.useMutation, { mutate: cancelEvent, ...idle });
+  mockResult(trpc.results.neutralizeEvent.useMutation, {
+    mutate: neutralizeEvent,
+    ...idle,
+  });
+  return { markDefinitive, cancelEvent, neutralizeEvent };
+}
+
 /** US-17: mutations de la fuente en reposo. */
 function mockSourceMutations() {
   const importFromSource = vi.fn();
@@ -237,6 +286,8 @@ function mockLoaded(eventResultsData: EventResultView[] = []): MockFn {
   mockGpEvents({ isPending: false, isError: false, isSuccess: true, data: [event] });
   mockRiders({ isPending: false, isError: false, isSuccess: true, data: riders });
   mockEventResults({ isPending: false, isError: false, isSuccess: true, data: eventResultsData });
+  mockGpState();
+  mockDefinitiveMutations();
   mockSourceState();
   mockSourceEvents();
   mockRiderMappings();
@@ -261,7 +312,10 @@ async function markFinished(user: ReturnType<typeof userEvent.setup>, name: stri
 }
 
 describe("ResultsSection", () => {
-  beforeEach(() => resetTrpcMocks());
+  beforeEach(() => {
+    resetTrpcMocks();
+    vi.restoreAllMocks();
+  });
 
   it("pide elegir una temporada cuando no hay ninguna seleccionada", () => {
     render(<ResultsSection seasons={[season]} />);
@@ -302,6 +356,7 @@ describe("ResultsSection", () => {
       isSuccess: true,
       data: [finishedEvent, cancelledEvent],
     });
+    mockGpState();
     render(<ResultsSection seasons={[season]} />);
     const user = userEvent.setup();
     await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
@@ -571,6 +626,7 @@ describe("ResultsSection", () => {
     mockGpEvents({ isPending: false, isError: false, isSuccess: true, data: [event] });
     mockRiders({ isPending: false, isError: true, error: new Error("sin conexión") });
     mockEventResults({ isPending: false, isError: false, isSuccess: true, data: [] });
+    mockGpState();
     render(<ResultsSection seasons={[season]} />);
     await selectEvent();
 
@@ -582,6 +638,7 @@ describe("ResultsSection", () => {
     mockGpEvents({ isPending: false, isError: false, isSuccess: true, data: [event] });
     mockRiders({ isPending: false, isError: false, isSuccess: true, data: riders });
     mockEventResults({ isPending: false, isError: true, error: new Error("fallo de BD") });
+    mockGpState();
     render(<ResultsSection seasons={[season]} />);
     await selectEvent();
 
@@ -593,6 +650,7 @@ describe("ResultsSection", () => {
     mockGpEvents({ isPending: false, isError: false, isSuccess: true, data: [event] });
     mockRiders({ isPending: false, isError: false, isSuccess: true, data: [] });
     mockEventResults({ isPending: false, isError: false, isSuccess: true, data: [] });
+    mockGpState();
     render(<ResultsSection seasons={[season]} />);
     await selectEvent();
 
@@ -629,6 +687,7 @@ describe("ResultsSection", () => {
   it("muestra 'Consultando…' mientras carga los eventos del GP", async () => {
     mockGps({ isPending: false, isError: false, isSuccess: true, data: [gp] });
     mockGpEvents({ isPending: true });
+    mockGpState();
     mockSourceState();
     mockSourceEvents();
     mockRiderMappings();
@@ -643,6 +702,7 @@ describe("ResultsSection", () => {
   it("muestra el error al cargar los eventos del GP", async () => {
     mockGps({ isPending: false, isError: false, isSuccess: true, data: [gp] });
     mockGpEvents({ isPending: false, isError: true, error: new Error("fallo de eventos") });
+    mockGpState();
     render(<ResultsSection seasons={[season]} />);
     const user = userEvent.setup();
     await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
@@ -654,6 +714,7 @@ describe("ResultsSection", () => {
   it("muestra el estado vacío cuando el GP no tiene eventos", async () => {
     mockGps({ isPending: false, isError: false, isSuccess: true, data: [gp] });
     mockGpEvents({ isPending: false, isError: false, isSuccess: true, data: [] });
+    mockGpState();
     render(<ResultsSection seasons={[season]} />);
     const user = userEvent.setup();
     await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
@@ -667,6 +728,7 @@ describe("ResultsSection", () => {
     mockGpEvents({ isPending: false, isError: false, isSuccess: true, data: [event] });
     mockRiders({ isPending: true });
     mockEventResults({ isPending: true });
+    mockGpState();
     mockSourceState();
     mockSourceEvents();
     mockRiderMappings();
@@ -691,6 +753,7 @@ describe("ResultsSection", () => {
     mockGpEvents({ isPending: false, isError: false, isSuccess: true, data: [sprintEvent] });
     mockRiders({ isPending: false, isError: false, isSuccess: true, data: riders });
     mockEventResults({ isPending: false, isError: false, isSuccess: true, data: [] });
+    mockGpState();
     mockImport();
     render(<ResultsSection seasons={[season]} />);
     const user = userEvent.setup();
@@ -758,6 +821,7 @@ describe("ResultsSection", () => {
       mockGpEvents({ isPending: false, isError: false, isSuccess: true, data: [event] });
       mockRiders({ isPending: false, isError: false, isSuccess: true, data: riders });
       mockEventResults({ isPending: false, isError: false, isSuccess: true, data: [] });
+      mockGpState();
       mockSourceState();
       mockRiderMappings();
       const { unlink } = mockSourceMutations();
@@ -798,6 +862,7 @@ describe("ResultsSection", () => {
       mockGpEvents({ isPending: false, isError: false, isSuccess: true, data: [q2, sprint, race] });
       mockRiders({ isPending: false, isError: false, isSuccess: true, data: riders });
       mockEventResults({ isPending: false, isError: false, isSuccess: true, data: [] });
+      mockGpState();
       mockSourceState();
       mockRiderMappings();
       const { importFromSource } = mockSourceMutations();
@@ -818,6 +883,7 @@ describe("ResultsSection", () => {
       mockGpEvents({ isPending: false, isError: false, isSuccess: true, data: [event] });
       mockRiders({ isPending: false, isError: false, isSuccess: true, data: riders });
       mockEventResults({ isPending: false, isError: false, isSuccess: true, data: [] });
+      mockGpState();
       mockSourceState();
       mockRiderMappings();
       mockSourceMutations();
@@ -1109,6 +1175,7 @@ describe("ResultsSection", () => {
       mockGpEvents({ isPending: false, isError: false, isSuccess: true, data: [event] });
       mockRiders({ isPending: false, isError: false, isSuccess: true, data: riders });
       mockEventResults({ isPending: false, isError: false, isSuccess: true, data: [] });
+      mockGpState();
       mockSourceState();
       mockRiderMappings();
       mockSourceMutations();
@@ -1159,6 +1226,478 @@ describe("ResultsSection", () => {
 
       const alert = screen.getByRole("alert");
       expect(alert).toHaveTextContent("El evento de la fuente no existe en el catálogo");
+      expect(alert).not.toHaveTextContent("Invalid input");
+    });
+  });
+
+  describe("US-18: definitivo + estados de evento (ADR-0020)", () => {
+    /** gpState con 12 resultados provisionales (botón 'Marcar definitivo' visible). */
+    function withResults() {
+      mockGpState({
+        data: {
+          gpId,
+          gpName: "GP de España",
+          round: 1,
+          seasonName: "Temporada 2026",
+          definitive: false,
+          resultsVersion: null,
+          counts: { provisional: 12, definitive: 0, corrected: 0 },
+          totalResults: 12,
+          lineups: 1,
+        },
+      });
+    }
+
+    it("muestra el estado provisional y el botón 'Marcar definitivo' cuando hay resultados", async () => {
+      mockLoaded();
+      withResults();
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      expect(screen.getByRole("heading", { name: "Definitivo" })).toBeInTheDocument();
+      expect(screen.getByText("provisional")).toBeInTheDocument();
+      expect(
+        screen.getByText(/12 provisional\(es\), 0 definitivo\(s\), 0 corregido\(s\)/),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Marcar definitivo" })).toBeInTheDocument();
+    });
+
+    it("oculta el botón y avisa cuando el GP no tiene resultados", async () => {
+      mockLoaded(); // gpState por defecto: 0 resultados
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      expect(
+        screen.getByText("Importa los resultados antes de marcar el GP definitivo."),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Marcar definitivo" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("muestra el estado definitivo con su versión y sin botón", async () => {
+      mockLoaded();
+      mockGpState({
+        data: {
+          gpId,
+          gpName: "GP de España",
+          round: 1,
+          seasonName: "Temporada 2026",
+          definitive: true,
+          resultsVersion: "rv-1",
+          counts: { provisional: 0, definitive: 12, corrected: 0 },
+          totalResults: 12,
+          lineups: 1,
+        },
+      });
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      expect(screen.getByText("definitivo (rv-1)")).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Marcar definitivo" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("muestra el error si no se pudo cargar el estado", async () => {
+      mockLoaded();
+      mockGpState({
+        data: undefined,
+        isPending: false,
+        isError: true,
+        isSuccess: false,
+        error: new Error("fallo de BD"),
+      });
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      expect(screen.getByText("No se pudo cargar el estado: fallo de BD")).toBeInTheDocument();
+    });
+
+    it("pide confirmación y muta con el gpId al marcar definitivo", async () => {
+      mockLoaded();
+      withResults();
+      const { markDefinitive } = mockDefinitiveMutations();
+      vi.spyOn(window, "confirm").mockReturnValue(true);
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      await user.click(screen.getByRole("button", { name: "Marcar definitivo" }));
+
+      expect(window.confirm).toHaveBeenCalled();
+      expect(markDefinitive).toHaveBeenCalledWith({ gpId });
+    });
+
+    it("no muta si se cancela la confirmación de marcar definitivo", async () => {
+      mockLoaded();
+      withResults();
+      const { markDefinitive } = mockDefinitiveMutations();
+      vi.spyOn(window, "confirm").mockReturnValue(false);
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      await user.click(screen.getByRole("button", { name: "Marcar definitivo" }));
+
+      expect(markDefinitive).not.toHaveBeenCalled();
+    });
+
+    it("muestra el resumen de éxito al marcar definitivo", async () => {
+      mockLoaded();
+      withResults();
+      mockDefinitiveMutations();
+      vi.spyOn(window, "confirm").mockReturnValue(true);
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      await user.click(screen.getByRole("button", { name: "Marcar definitivo" }));
+
+      const options = asMockFn(trpc.results.markDefinitive.useMutation).mock
+        .calls[0]?.[0] as { onSuccess: (data: MarkDefinitiveResult) => void };
+      act(() => {
+        options.onSuccess({
+          madeDefinitive: 12,
+          reconfirmed: 0,
+          alreadyDefinitive: 0,
+          lineupsScored: 1,
+          resultsVersion: "rv-1",
+          noop: false,
+        });
+      });
+
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "GP definitivo: 12 fila(s) a definitivo, 0 reconfirmadas y 1 lineups puntuados (rv-1).",
+      );
+    });
+
+    it("muestra el resumen de no-op si el GP ya era definitivo", async () => {
+      mockLoaded();
+      withResults();
+      mockDefinitiveMutations();
+      vi.spyOn(window, "confirm").mockReturnValue(true);
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      await user.click(screen.getByRole("button", { name: "Marcar definitivo" }));
+
+      const options = asMockFn(trpc.results.markDefinitive.useMutation).mock
+        .calls[0]?.[0] as { onSuccess: (data: MarkDefinitiveResult) => void };
+      act(() => {
+        options.onSuccess({
+          madeDefinitive: 0,
+          reconfirmed: 0,
+          alreadyDefinitive: 12,
+          lineupsScored: 0,
+          resultsVersion: "rv-1",
+          noop: true,
+        });
+      });
+
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "El GP ya era definitivo (sin cambios).",
+      );
+    });
+
+    it("muestra el error del servidor al marcar definitivo", async () => {
+      mockLoaded();
+      withResults();
+      mockResult(trpc.results.markDefinitive.useMutation, {
+        mutate: vi.fn(),
+        isPending: false,
+        isError: true,
+        isSuccess: false,
+        error: new Error(
+          "El GP no tiene resultados: importa los resultados antes de marcarlo definitivo.",
+        ),
+        data: undefined,
+      });
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "El GP no tiene resultados: importa los resultados antes de marcarlo definitivo.",
+      );
+    });
+
+    it("cancela un evento con confirmación y muta", async () => {
+      mockLoaded();
+      const { cancelEvent } = mockDefinitiveMutations();
+      vi.spyOn(window, "confirm").mockReturnValue(true);
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
+      expect(window.confirm).toHaveBeenCalled();
+      expect(cancelEvent).toHaveBeenCalledWith({ gpId, eventId });
+    });
+
+    it("no muta si se cancela la confirmación de cancelar un evento", async () => {
+      mockLoaded();
+      const { cancelEvent } = mockDefinitiveMutations();
+      vi.spyOn(window, "confirm").mockReturnValue(false);
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
+      expect(cancelEvent).not.toHaveBeenCalled();
+    });
+
+    it("muestra el éxito al cancelar un evento", async () => {
+      mockLoaded();
+      mockDefinitiveMutations();
+      vi.spyOn(window, "confirm").mockReturnValue(true);
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
+      const options = asMockFn(trpc.results.cancelEvent.useMutation).mock
+        .calls[0]?.[0] as { onSuccess: (data: EventFlagResult) => void };
+      act(() => {
+        options.onSuccess({ cancelled: true, neutralized: false, noop: false });
+      });
+
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Evento cancelado: no puntuará (0 para todos).",
+      );
+    });
+
+    it("muestra el no-op si el evento ya estaba cancelado", async () => {
+      mockLoaded();
+      mockDefinitiveMutations();
+      vi.spyOn(window, "confirm").mockReturnValue(true);
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
+      const options = asMockFn(trpc.results.cancelEvent.useMutation).mock
+        .calls[0]?.[0] as { onSuccess: (data: EventFlagResult) => void };
+      act(() => {
+        options.onSuccess({ cancelled: true, neutralized: false, noop: true });
+      });
+
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "El evento ya estaba cancelado (sin cambios).",
+      );
+    });
+
+    it("neutraliza un evento con confirmación y muta", async () => {
+      mockLoaded();
+      const { neutralizeEvent } = mockDefinitiveMutations();
+      vi.spyOn(window, "confirm").mockReturnValue(true);
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      await user.click(screen.getByRole("button", { name: "Neutralizar" }));
+
+      expect(window.confirm).toHaveBeenCalled();
+      expect(neutralizeEvent).toHaveBeenCalledWith({ gpId, eventId });
+    });
+
+    it("muestra el éxito al neutralizar un evento", async () => {
+      mockLoaded();
+      mockDefinitiveMutations();
+      vi.spyOn(window, "confirm").mockReturnValue(true);
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      await user.click(screen.getByRole("button", { name: "Neutralizar" }));
+
+      const options = asMockFn(trpc.results.neutralizeEvent.useMutation).mock
+        .calls[0]?.[0] as { onSuccess: (data: EventFlagResult) => void };
+      act(() => {
+        options.onSuccess({ cancelled: false, neutralized: true, noop: false });
+      });
+
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Evento neutralizado: se puntuará con el resultado oficial declarado.",
+      );
+    });
+
+    it("muestra el no-op si el evento ya estaba neutralizado", async () => {
+      mockLoaded();
+      mockDefinitiveMutations();
+      vi.spyOn(window, "confirm").mockReturnValue(true);
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      await user.click(screen.getByRole("button", { name: "Neutralizar" }));
+
+      const options = asMockFn(trpc.results.neutralizeEvent.useMutation).mock
+        .calls[0]?.[0] as { onSuccess: (data: EventFlagResult) => void };
+      act(() => {
+        options.onSuccess({ cancelled: false, neutralized: true, noop: true });
+      });
+
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "El evento ya estaba neutralizado (sin cambios).",
+      );
+    });
+
+    it("muestra el error del servidor al cancelar un evento", async () => {
+      mockLoaded();
+      mockResult(trpc.results.cancelEvent.useMutation, {
+        mutate: vi.fn(),
+        isPending: false,
+        isError: true,
+        isSuccess: false,
+        error: new Error("El evento no existe en este GP."),
+        data: undefined,
+      });
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      expect(screen.getByRole("alert")).toHaveTextContent("El evento no existe en este GP.");
+    });
+
+    it("muestra 'Consultando…' mientras carga el estado del GP", async () => {
+      mockLoaded();
+      mockGpState({
+        data: undefined,
+        isPending: true,
+        isError: false,
+        isSuccess: false,
+        error: undefined,
+      });
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      expect(screen.getByText("Consultando…")).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Marcar definitivo" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("rechaza localmente marcar definitivo con un gpId inválido", async () => {
+      const badGpId = "gp-invalido";
+      mockLoaded();
+      mockGps({ isPending: false, isError: false, isSuccess: true, data: [{ ...gp, id: badGpId }] });
+      withResults();
+      const { markDefinitive } = mockDefinitiveMutations();
+      vi.spyOn(window, "confirm").mockReturnValue(true);
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), badGpId);
+
+      await user.click(screen.getByRole("button", { name: "Marcar definitivo" }));
+
+      expect(screen.getByRole("alert")).toHaveTextContent("El identificador de GP no es válido");
+      expect(markDefinitive).not.toHaveBeenCalled();
+    });
+
+    it("rechaza localmente cancelar un evento con un eventId inválido", async () => {
+      const badEventId = "evento-invalido";
+      mockLoaded();
+      mockGpEvents({
+        isPending: false,
+        isError: false,
+        isSuccess: true,
+        data: [{ ...event, id: badEventId }],
+      });
+      const { cancelEvent } = mockDefinitiveMutations();
+      vi.spyOn(window, "confirm").mockReturnValue(true);
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "El identificador de evento no es válido",
+      );
+      expect(cancelEvent).not.toHaveBeenCalled();
+    });
+
+    it("muestra los issues Zod del error de marcar definitivo", async () => {
+      mockLoaded();
+      withResults();
+      mockResult(trpc.results.markDefinitive.useMutation, {
+        mutate: vi.fn(),
+        isPending: false,
+        isError: true,
+        isSuccess: false,
+        error: clientError("Invalid input", {
+          zod: {
+            issues: [{ path: ["gpId"], message: "El identificador de GP no es válido" }],
+          },
+          code: "BAD_REQUEST",
+          message: "Invalid input",
+        }),
+        data: undefined,
+      });
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      const alert = screen.getByRole("alert");
+      expect(alert).toHaveTextContent("El identificador de GP no es válido");
+      expect(alert).not.toHaveTextContent("Invalid input");
+    });
+
+    it("muestra los issues Zod del error de cancelar un evento", async () => {
+      mockLoaded();
+      mockResult(trpc.results.cancelEvent.useMutation, {
+        mutate: vi.fn(),
+        isPending: false,
+        isError: true,
+        isSuccess: false,
+        error: clientError("Invalid input", {
+          zod: {
+            issues: [{ path: ["eventId"], message: "El identificador de evento no es válido" }],
+          },
+          code: "BAD_REQUEST",
+          message: "Invalid input",
+        }),
+        data: undefined,
+      });
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      const alert = screen.getByRole("alert");
+      expect(alert).toHaveTextContent("El identificador de evento no es válido");
       expect(alert).not.toHaveTextContent("Invalid input");
     });
   });

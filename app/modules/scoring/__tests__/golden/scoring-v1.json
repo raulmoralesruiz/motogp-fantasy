@@ -19,6 +19,27 @@
       "expected": 170.5
     },
     {
+      "id": "fin-de-semana-piloto-A-scoring-md-5",
+      "fn": "scoreRiderWeekend",
+      "args": {
+        "riderId": "A",
+        "weekend": {
+          "q2": { "position": 1, "started": true, "finished": true, "bonuses": ["pole"], "penalties": [] },
+          "sprint": { "position": 1, "started": true, "finished": true, "bonuses": [], "penalties": [] },
+          "race": { "position": 1, "started": true, "finished": true, "bonuses": [], "penalties": [] }
+        },
+        "ctx": { "q2Grid": {}, "teamOf": {}, "priceOf": {} }
+      },
+      "expected": {
+        "q2": 12,
+        "sprint": 12,
+        "mainRace": 25,
+        "bonuses": [ { "code": "pole", "points": 2 }, { "code": "winner", "points": 5 } ],
+        "penalties": [],
+        "total": 56
+      }
+    },
+    {
       "id": "tabla-carrera-principal-1-15-y-16",
       "fn": "mainRacePositionPoints",
       "args": {

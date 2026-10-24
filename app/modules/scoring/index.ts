@@ -4,3 +4,4 @@
  */
 export * from "./tables";
 export * from "./engine";
+export * from "./weekend";

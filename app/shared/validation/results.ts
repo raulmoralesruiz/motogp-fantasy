@@ -165,6 +165,19 @@ export const sourceEventsInputSchema = z.object({
   gpId: z.string().uuid("El identificador de GP no es válido"),
 });
 
+// ── US-18 (ADR-0020): definitivo + estados de evento ────────────────────────
+
+/** Marcar el GP como definitivo (primer recálculo, US-18). */
+export const markDefinitiveInputSchema = z.object({
+  gpId: z.string().uuid("El identificador de GP no es válido"),
+});
+
+/** Estado de evento (cancelar / neutralizar, US-18). */
+export const eventFlagInputSchema = z.object({
+  gpId: z.string().uuid("El identificador de GP no es válido"),
+  eventId: z.string().uuid("El identificador de evento no es válido"),
+});
+
 export type ResultEntryInput = z.infer<typeof resultEntrySchema>;
 export type ImportEventInput = z.infer<typeof importEventInputSchema>;
 export type GpEventsInput = z.infer<typeof gpEventsInputSchema>;
@@ -176,3 +189,5 @@ export type SetRiderMappingInput = z.infer<typeof setRiderMappingInputSchema>;
 export type DeleteRiderMappingInput = z.infer<typeof deleteRiderMappingInputSchema>;
 export type SourceStateInput = z.infer<typeof sourceStateInputSchema>;
 export type SourceEventsInput = z.infer<typeof sourceEventsInputSchema>;
+export type MarkDefinitiveInput = z.infer<typeof markDefinitiveInputSchema>;
+export type EventFlagInput = z.infer<typeof eventFlagInputSchema>;

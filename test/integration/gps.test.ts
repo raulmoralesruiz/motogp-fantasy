@@ -431,6 +431,7 @@ describe("US-05 · Circuitos, GPs y calendario (PostgreSQL real)", () => {
 
     const audit = await prisma.auditLog.findMany({
       where: { action: "gp.status_changed", entityId: gpId },
+      orderBy: { createdAt: "asc" },
     });
     expect(audit).toHaveLength(2);
     expect(audit[0]).toMatchObject({
