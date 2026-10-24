@@ -46,6 +46,9 @@ import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import type { PrismaClient } from "@prisma/client";
+
+import { PROVISIONAL_SEASON_RULES } from "../../app/shared/config/season-rules";
 import type {
   ResultBonusCode,
   ResultPenaltyCode,
@@ -787,6 +790,9 @@ describe("US-17 · Importación automática de resultados desde la fuente (Postg
       unchanged: 0,
       kept: 0,
       unmapped: [{ riderRef: "rid-9", name: "Sin Mapear" }],
+      recalculated: false,
+      resultsVersion: null,
+      lineupsScored: 0,
     });
 
     // Filas: source auto, sourceName nombre:versión, payload original en raw.
@@ -895,6 +901,9 @@ describe("US-17 · Importación automática de resultados desde la fuente (Postg
       unchanged: 3,
       kept: 0,
       unmapped: [{ riderRef: "rid-9", name: "Sin Mapear" }],
+      recalculated: false,
+      resultsVersion: null,
+      lineupsScored: 0,
     });
     const audit = await prisma.auditLog.findMany({
       where: { action: "results.import", entityId: q2 },
@@ -932,7 +941,7 @@ describe("US-17 · Importación automática de resultados desde la fuente (Postg
       entries: [manualEntry(r3, { position: 5, finished: true, rawPoints: 10 })],
       reason: "corrección manual de prueba",
     });
-    expect(summary).toEqual({ created: 0, corrected: 1, unchanged: 0, kept: 2 });
+    expect(summary).toEqual({ created: 0, corrected: 1, unchanged: 0, kept: 2, recalculated: false, resultsVersion: null, lineupsScored: 0 });
 
     // La fila pasa a manual (raw sin sourcePayload: no hay payload fuente).
     const rowR3 = await prisma.result.findUnique({
@@ -1048,6 +1057,9 @@ describe("US-17 · Importación automática de resultados desde la fuente (Postg
       unchanged: 2,
       kept: 1,
       unmapped: [{ riderRef: "rid-9", name: "Sin Mapear" }],
+      recalculated: false,
+      resultsVersion: null,
+      lineupsScored: 0,
     });
     const rowR3After = await prisma.result.findUnique({
       where: {
@@ -1089,6 +1101,9 @@ describe("US-17 · Importación automática de resultados desde la fuente (Postg
       unchanged: 1,
       kept: 1,
       unmapped: [{ riderRef: "rid-9", name: "Sin Mapear" }],
+      recalculated: false,
+      resultsVersion: null,
+      lineupsScored: 0,
     });
 
     // La fila r1 sigue siendo auto, con el nuevo valor y el payload fuente.
@@ -1196,6 +1211,9 @@ describe("US-17 · Importación automática de resultados desde la fuente (Postg
       unchanged: 2,
       kept: 1,
       unmapped: [],
+      recalculated: false,
+      resultsVersion: null,
+      lineupsScored: 0,
     });
 
     // Fila nueva auto con el payload fuente en `raw`.
@@ -1272,6 +1290,9 @@ describe("US-17 · Importación automática de resultados desde la fuente (Postg
       unchanged: 0,
       kept: 0,
       unmapped: [],
+      recalculated: false,
+      resultsVersion: null,
+      lineupsScored: 0,
     });
     // Auditoría del auto-import (entity = evento sprint).
     expect(
@@ -1468,6 +1489,9 @@ describe("US-17 · Importación automática de resultados desde la fuente (Postg
       unchanged: 0,
       kept: 0,
       unmapped: [],
+      recalculated: false,
+      resultsVersion: null,
+      lineupsScored: 0,
     });
 
     // Una sola fila por piloto; gana la PRIMERA entrada (posición 1), no la
@@ -1572,6 +1596,9 @@ describe("US-17 · Importación automática de resultados desde la fuente (Postg
       unchanged: 0,
       kept: 4, // r1..r4 en BD y no en el payload: se conservan (diffResults).
       unmapped: [{ riderRef: "rid-sin-nombre", name: null }],
+      recalculated: false,
+      resultsVersion: null,
+      lineupsScored: 0,
     });
 
     // Persistido en `source_state` (lo muestra la UI de admin).
@@ -1583,5 +1610,122 @@ describe("US-17 · Importación automática de resultados desde la fuente (Postg
     expect(state?.lastUnmapped).toEqual([
       { riderRef: "rid-sin-nombre", name: null },
     ]);
+  });
+
+  // ── US-19: auto-import sobre GP con scores → recálculo (rv-2) ─────────────
+
+  it("auto-corrección sobre GP definitivo: recalcula inline (rv-2, US-19)", async () => {
+    // Reglas de la temporada (PROVISIONAL) — el recálculo las requiere.
+    const existingRule = await prisma.seasonRule.findFirst({
+      where: { seasonId: world.season.id },
+    });
+    if (!existingRule) {
+      await prisma.seasonRule.create({
+        data: {
+          seasonId: world.season.id,
+          version: "scoring-v1",
+          rules: PROVISIONAL_SEASON_RULES as unknown as Parameters<
+            PrismaClient["seasonRule"]["create"]
+          >[0]["data"]["rules"],
+        },
+      });
+    }
+
+    // GP de US-19 (ronda 8) vinculado a la fuente, con lineup + afiliaciones.
+    const gp = await prisma.gp.create({
+      data: {
+        seasonId: world.season.id,
+        round: 8,
+        name: `GP ${suffix} auto-recalc`,
+        circuitId: world.gp.circuitId,
+        date: new Date("2099-09-15T12:00:00Z"),
+        sourceRef: "ev-auto-recalc",
+      },
+    });
+    const race = await prisma.weekendEvent.create({
+      data: { gpId: gp.id, type: "race", orderNum: 1 },
+    });
+    for (const rider of [r1, r2, r3, r4]) {
+      await prisma.riderAffiliation.create({
+        data: { riderId: rider, teamId: world.team.id, constructorId: world.ctor.id, gpId: gp.id },
+      });
+    }
+    const lineup = await prisma.lineup.create({
+      data: { userId: world.user.id, gpId: gp.id },
+    });
+    await prisma.lineupSlot.createMany({
+      data: [
+        { lineupId: lineup.id, slotType: "gold", assetType: "rider", assetId: r1 },
+        { lineupId: lineup.id, slotType: "gold", assetType: "rider", assetId: r2 },
+        { lineupId: lineup.id, slotType: "silver", assetType: "rider", assetId: r3 },
+        { lineupId: lineup.id, slotType: "silver", assetType: "rider", assetId: r4 },
+        { lineupId: lineup.id, slotType: "constructor", assetType: "constructor", assetId: world.ctor.id },
+        { lineupId: lineup.id, slotType: "team", assetType: "team", assetId: world.team.id },
+      ],
+    });
+
+    const { results } = await callerFor(ADMIN_IP, adminToken);
+
+    // 1. Auto-import inicial (filas auto, provisional).
+    fixture.setResults(
+      gp.id,
+      "race",
+      sourceResults("race", [
+        sourceEntry("rid-1", { position: 1, finished: true, rawPoints: 25 }),
+        sourceEntry("rid-2", { position: 2, finished: true, rawPoints: 20 }),
+      ]),
+    );
+    const first = await results.importFromSource({ gpId: gp.id, event: "race" });
+    expect(first).toMatchObject({ created: 2, corrected: 0, recalculated: false });
+
+    // 2. Definitivo (rv-1) → scores.
+    const definitive = await results.markDefinitive({ gpId: gp.id });
+    expect(definitive).toMatchObject({ madeDefinitive: 2, resultsVersion: "rv-1", noop: false });
+    expect(
+      await prisma.score.count({ where: { gpId: gp.id, resultsVersion: "rv-1" } }),
+    ).toBe(1);
+
+    // 3. La fuente corrige (rid-1: 1º → 3º) y el auto-import recalcula (US-19).
+    fixture.setResults(
+      gp.id,
+      "race",
+      sourceResults("race", [
+        sourceEntry("rid-1", { position: 3, finished: true, rawPoints: 16 }),
+        sourceEntry("rid-2", { position: 2, finished: true, rawPoints: 20 }),
+      ]),
+    );
+    const second = await results.importFromSource({ gpId: gp.id, event: "race" });
+    expect(second).toMatchObject({
+      created: 0,
+      corrected: 1,
+      recalculated: true,
+      resultsVersion: "rv-2",
+      lineupsScored: 1,
+    });
+
+    // La fila se reconfirma a definitive con rv-2.
+    const rowR1 = await prisma.result.findUniqueOrThrow({
+      where: { gpId_eventId_riderId: { gpId: gp.id, eventId: race.id, riderId: r1 } },
+    });
+    expect(rowR1).toMatchObject({ status: "definitive", resultsVersion: "rv-2", position: 3 });
+
+    // Score rv-2 escrito; rv-1 permanece para histórico (invariante 7).
+    expect(await prisma.score.count({ where: { gpId: gp.id, resultsVersion: "rv-2" } })).toBe(1);
+    expect(await prisma.score.count({ where: { gpId: gp.id, resultsVersion: "rv-1" } })).toBe(1);
+
+    // Auditoría del recálculo del auto (sin actor).
+    const audit = await prisma.auditLog.findMany({
+      where: { action: "results.recalculated", entityId: gp.id },
+    });
+    expect(audit).toHaveLength(1);
+    expect(audit[0]).toMatchObject({ actorId: null, ip: null });
+    expect(audit[0]?.afterData).toMatchObject({ gpId: gp.id, resultsVersion: "rv-2", lineupsScored: 1 });
+
+    // Histórico de la corrección auto (motivo estándar, sin actor, rv-1 en vigor).
+    const history = await prisma.resultsHistory.findMany({ where: { resultId: rowR1.id } });
+    expect(history).toHaveLength(1);
+    expect(history[0]).toMatchObject({ userId: null, resultsVersion: "rv-1" });
+    expect(history[0]?.beforeData).toMatchObject({ position: 1 });
+    expect(history[0]?.afterData).toMatchObject({ position: 3 });
   });
 });

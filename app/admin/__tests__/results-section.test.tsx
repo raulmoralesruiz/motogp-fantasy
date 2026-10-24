@@ -602,7 +602,15 @@ describe("ResultsSection", () => {
       onSuccess: (data: ImportEventResult) => void;
     };
     act(() => {
-      options.onSuccess({ created: 2, corrected: 1, unchanged: 3, kept: 5 });
+      options.onSuccess({
+        created: 2,
+        corrected: 1,
+        unchanged: 3,
+        kept: 5,
+        recalculated: false,
+        resultsVersion: null,
+        lineupsScored: 0,
+      });
     });
 
     expect(screen.getByRole("status")).toHaveTextContent(
@@ -905,6 +913,9 @@ describe("ResultsSection", () => {
           unchanged: 2,
           kept: 0,
           unmapped: [{ riderRef: "rider-9", name: null }],
+          recalculated: false,
+          resultsVersion: null,
+          lineupsScored: 0,
         });
       });
 
@@ -1191,7 +1202,16 @@ describe("ResultsSection", () => {
         onSuccess: (data: ImportEventFromSourceResult) => void;
       };
       act(() => {
-        options.onSuccess({ created: 2, corrected: 1, unchanged: 0, kept: 1, unmapped: [] });
+        options.onSuccess({
+          created: 2,
+          corrected: 1,
+          unchanged: 0,
+          kept: 1,
+          unmapped: [],
+          recalculated: false,
+          resultsVersion: null,
+          lineupsScored: 0,
+        });
       });
 
       const status = screen.getByRole("status");

@@ -31,6 +31,9 @@ const OK_RESULT: ImportEventFromSourceResult = {
   unchanged: 2,
   kept: 0,
   unmapped: [],
+  recalculated: false,
+  resultsVersion: null,
+  lineupsScored: 0,
 };
 
 /** GP falso tal como lo devuelve la consulta del job (con sus eventos). */

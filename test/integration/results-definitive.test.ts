@@ -698,48 +698,55 @@ describe("US-18 · Definitivo + primer recálculo (PostgreSQL real)", () => {
     });
   });
 
-  it("corrección + reconfirmar: corrected → definitive, Score re-upserted (rv-1)", async () => {
+  it("corrección: recalcula inline (rv-2) y reconfirma (US-19)", async () => {
     const { results } = await callerFor(ADMIN_IP, adminToken);
     // Corrección: r1 pasa de 1º a 2º en la carrera (motivo obligatorio).
+    // US-19: el GP ya tiene scores (rv-1), así que la corrección dispara el
+    // recálculo inline: nueva results_version (rv-2) + reconfirmación.
     const corrected = await results.importEvent({
       gpId: world.gp.id,
       eventId: world.event.id,
       entries: [entry(r1, { position: 2, finished: true, bonuses: ["fastest-lap"] })],
       reason: "corrección de la clasificación oficial",
     });
-    expect(corrected).toMatchObject({ corrected: 1 });
+    expect(corrected).toMatchObject({
+      corrected: 1,
+      recalculated: true,
+      resultsVersion: "rv-2",
+      lineupsScored: 1,
+    });
 
+    // La fila se reconfirma a definitive (con la nueva versión).
     const r1Row = (await prisma.result.findMany({ where: { gpId: world.gp.id, riderId: r1 } }))
       .find((row) => row.eventId === world.event.id);
-    expect(r1Row?.status).toBe("corrected");
+    expect(r1Row?.status).toBe("definitive");
+    expect(r1Row?.resultsVersion).toBe("rv-2");
 
-    // gpState: 1 corrected, no definitivo.
+    // gpState: 0 corrected, definitivo, rv-2.
     const state = await results.gpState({ gpId: world.gp.id });
     expect(state).toMatchObject({
-      definitive: false,
-      counts: { provisional: 0, definitive: 11, corrected: 1 },
+      definitive: true,
+      resultsVersion: "rv-2",
+      counts: { provisional: 0, definitive: 12, corrected: 0 },
     });
 
-    // Reconfirmar: re-upsert del Score rv-1 con los nuevos puntos.
-    const res = await results.markDefinitive({ gpId: world.gp.id });
-    expect(res).toEqual({
-      madeDefinitive: 0,
-      reconfirmed: 1,
-      alreadyDefinitive: 11,
-      lineupsScored: 1,
-      resultsVersion: "rv-1",
-      noop: false,
-    });
+    // Auditoría: results.correct + results.recalculated.
     expect(
       await prisma.auditLog.count({
-        where: { action: "results.marked_definitive", entityId: world.gp.id },
+        where: { action: "results.correct", entityId: world.event.id },
       }),
-    ).toBe(2);
+    ).toBe(1);
+    expect(
+      await prisma.auditLog.count({
+        where: { action: "results.recalculated", entityId: world.gp.id },
+      }),
+    ).toBe(1);
 
     // r1: Q2 14 · sprint 0 (cancelado) · carrera 20 + vuelta rápida 3 = 37 →
     // ctor/team (media top-2 de 37 y 28) = 32.5 → lineup 127.
+    // El Score rv-2 tiene los mismos puntos (misma rules_version).
     const score = await prisma.score.findUniqueOrThrow({
-      where: { lineupId_resultsVersion: { lineupId, resultsVersion: "rv-1" } },
+      where: { lineupId_resultsVersion: { lineupId, resultsVersion: "rv-2" } },
     });
     expect(Number(score.pointsTotal)).toBeCloseTo(127, 6);
     const breakdown = score.breakdown as unknown as {
@@ -753,10 +760,15 @@ describe("US-18 · Definitivo + primer recálculo (PostgreSQL real)", () => {
     expect(breakdown.constructor.points).toBeCloseTo(32.5, 6);
     expect(breakdown.team.points).toBeCloseTo(32.5, 6);
 
-    // La fila vuelve a definitive.
-    expect((await prisma.result.findFirst({ where: { gpId: world.gp.id, riderId: r1, eventId: world.event.id } }))?.status).toBe(
-      "definitive",
-    );
+    // El Score rv-1 permanece para histórico (invariante 7).
+    const scoreRv1 = await prisma.score.findUniqueOrThrow({
+      where: { lineupId_resultsVersion: { lineupId, resultsVersion: "rv-1" } },
+    });
+    expect(Number(scoreRv1.pointsTotal)).toBeCloseTo(147, 6);
+
+    // markDefinitive es no-op (el GP ya es definitivo).
+    const res = await results.markDefinitive({ gpId: world.gp.id });
+    expect(res).toMatchObject({ noop: true, resultsVersion: "rv-2" });
   });
 
   // ── Concurrencia (FOR UPDATE del GP) ──────────────────────────────────────
@@ -984,5 +996,150 @@ describe("US-18 · Definitivo + primer recálculo (PostgreSQL real)", () => {
     const r2Slot = breakdown.gold.find((slot) => slot.riderId === r2);
     expect(r2Slot?.points).toBeCloseTo(37, 6);
     expect(r2Slot?.breakdown).toMatchObject({ q2: 8, sprint: 9, mainRace: 20, total: 37 });
+  });
+
+  // ── US-19: Recálculo auditable y versionado ────────────────────────────────
+
+  it("corrección: results_history conserva antes→nuevo (CA US-19)", async () => {
+    // GP de US-19 (ronda 6) con resultados + lineup.
+    const gp = await prisma.gp.create({
+      data: {
+        seasonId: world.season.id,
+        round: 6,
+        name: `GP ${suffix} US-19`,
+        circuitId: world.gp.circuitId,
+        date: new Date("2099-07-15T12:00:00Z"),
+      },
+    });
+    const q2 = await prisma.weekendEvent.create({
+      data: { gpId: gp.id, type: "q2", orderNum: 1 },
+    });
+    const race = await prisma.weekendEvent.create({
+      data: { gpId: gp.id, type: "race", orderNum: 3 },
+    });
+    await seedAffiliationsFor(gp.id);
+    const gpLineupId = await createLineupFor(gp.id);
+
+    const { results } = await callerFor(ADMIN_IP, adminToken);
+    // Importar resultados iniciales.
+    await results.importEvent({
+      gpId: gp.id,
+      eventId: q2.id,
+      entries: [entry(r1, { position: 1, finished: true })],
+    });
+    await results.importEvent({
+      gpId: gp.id,
+      eventId: race.id,
+      entries: [entry(r1, { position: 1, finished: true })],
+    });
+
+    // Marcar definitivo (rv-1).
+    await results.markDefinitive({ gpId: gp.id });
+
+    // Corrección: r1 pasa de 1º a 3º en la carrera (penalización posterior).
+    const corrected = await results.importEvent({
+      gpId: gp.id,
+      eventId: race.id,
+      entries: [entry(r1, { position: 3, finished: true })],
+      reason: "penalización posterior (US-19)",
+    });
+    expect(corrected).toMatchObject({
+      corrected: 1,
+      recalculated: true,
+      resultsVersion: "rv-2",
+    });
+
+    // results_history conserva antes→nuevo.
+    const r1Row = await prisma.result.findUniqueOrThrow({
+      where: { gpId_eventId_riderId: { gpId: gp.id, eventId: race.id, riderId: r1 } },
+    });
+    const history = await prisma.resultsHistory.findMany({
+      where: { resultId: r1Row.id },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(history).toHaveLength(1);
+    expect(history[0]).toMatchObject({
+      reason: "penalización posterior (US-19)",
+      userId: adminId,
+      resultsVersion: "rv-1", // versión en vigor al momento de la corrección.
+    });
+    expect(history[0]?.beforeData).toMatchObject({ position: 1 });
+    expect(history[0]?.afterData).toMatchObject({ position: 3 });
+
+    // La fila se reconfirma a definitive (con la nueva versión).
+    expect(r1Row.status).toBe("definitive");
+    expect(r1Row.resultsVersion).toBe("rv-2");
+
+    // El Score rv-2 existe (recalculado).
+    const score = await prisma.score.findUniqueOrThrow({
+      where: { lineupId_resultsVersion: { lineupId: gpLineupId, resultsVersion: "rv-2" } },
+    });
+    expect(score).toBeDefined();
+
+    // El Score rv-1 permanece para histórico (invariante 7).
+    const scoreRv1 = await prisma.score.findUniqueOrThrow({
+      where: { lineupId_resultsVersion: { lineupId: gpLineupId, resultsVersion: "rv-1" } },
+    });
+    expect(scoreRv1).toBeDefined();
+  });
+
+  it("re-importar el mismo resultado no duplica puntos (CA US-19)", async () => {
+    // GP de US-19 (ronda 7) con resultados + lineup.
+    const gp = await prisma.gp.create({
+      data: {
+        seasonId: world.season.id,
+        round: 7,
+        name: `GP ${suffix} US-19 idempotencia`,
+        circuitId: world.gp.circuitId,
+        date: new Date("2099-08-15T12:00:00Z"),
+      },
+    });
+    const race = await prisma.weekendEvent.create({
+      data: { gpId: gp.id, type: "race", orderNum: 3 },
+    });
+    await seedAffiliationsFor(gp.id);
+    const gpLineupId = await createLineupFor(gp.id);
+
+    const { results } = await callerFor(ADMIN_IP, adminToken);
+    // Importar resultados.
+    await results.importEvent({
+      gpId: gp.id,
+      eventId: race.id,
+      entries: [entry(r1, { position: 1, finished: true })],
+    });
+
+    // Marcar definitivo (rv-1).
+    await results.markDefinitive({ gpId: gp.id });
+
+    // Re-importar el mismo resultado (no-op).
+    const reImport = await results.importEvent({
+      gpId: gp.id,
+      eventId: race.id,
+      entries: [entry(r1, { position: 1, finished: true })],
+      reason: "re-importación (no-op)",
+    });
+    expect(reImport).toMatchObject({
+      created: 0,
+      corrected: 0,
+      recalculated: false,
+      resultsVersion: null,
+      lineupsScored: 0,
+    });
+
+    // Una sola fila por piloto (no duplicada).
+    const rowCount = await prisma.result.count({
+      where: { gpId: gp.id, eventId: race.id, riderId: r1 },
+    });
+    expect(rowCount).toBe(1);
+
+    // El Score rv-1 es el único (no se generó rv-2).
+    const scoreCount = await prisma.score.count({
+      where: { gpId: gp.id, lineupId: gpLineupId },
+    });
+    expect(scoreCount).toBe(1);
+    const score = await prisma.score.findUniqueOrThrow({
+      where: { lineupId_resultsVersion: { lineupId: gpLineupId, resultsVersion: "rv-1" } },
+    });
+    expect(score).toBeDefined();
   });
 });

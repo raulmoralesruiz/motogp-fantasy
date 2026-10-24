@@ -275,7 +275,7 @@ describe("US-16 · Importación manual de resultados (PostgreSQL real)", () => {
       ],
     };
     const summary = await results.importEvent(payload);
-    expect(summary).toEqual({ created: 2, corrected: 0, unchanged: 0, kept: 0 });
+    expect(summary).toEqual({ created: 2, corrected: 0, unchanged: 0, kept: 0, recalculated: false, resultsVersion: null, lineupsScored: 0 });
 
     // Filas: provisional, sin versión, fuente manual, valores en `raw` +
     // desnormalización de `position`/`rawPoints`.
@@ -412,7 +412,7 @@ describe("US-16 · Importación manual de resultados (PostgreSQL real)", () => {
         entry(r2),
       ],
     });
-    expect(summary).toEqual({ created: 0, corrected: 0, unchanged: 2, kept: 0 });
+    expect(summary).toEqual({ created: 0, corrected: 0, unchanged: 2, kept: 0, recalculated: false, resultsVersion: null, lineupsScored: 0 });
     // Una sola fila por piloto (sin duplicados) y sin nuevas entradas de
     // auditoría ni histórico (el no-op no audita).
     expect(
@@ -442,7 +442,7 @@ describe("US-16 · Importación manual de resultados (PostgreSQL real)", () => {
       ],
       reason: "corrección de parrilla",
     });
-    expect(summary).toEqual({ created: 0, corrected: 1, unchanged: 1, kept: 0 });
+    expect(summary).toEqual({ created: 0, corrected: 1, unchanged: 1, kept: 0, recalculated: false, resultsVersion: null, lineupsScored: 0 });
 
     // Fila actualizada; provisional se mantiene (no es definitive).
     const r1Row = await prisma.result.findUniqueOrThrow({
@@ -556,7 +556,7 @@ describe("US-16 · Importación manual de resultados (PostgreSQL real)", () => {
       reason: "resultados finales de la carrera",
     });
     // r1 está en BD pero no en el payload → se conserva (kept).
-    expect(summary).toEqual({ created: 1, corrected: 1, unchanged: 0, kept: 1 });
+    expect(summary).toEqual({ created: 1, corrected: 1, unchanged: 0, kept: 1, recalculated: false, resultsVersion: null, lineupsScored: 0 });
 
     const r2Row = await prisma.result.findUniqueOrThrow({
       where: { gpId_eventId_riderId: { gpId: world.gp.id, eventId: raceId(), riderId: r2 } },
@@ -594,7 +594,7 @@ describe("US-16 · Importación manual de resultados (PostgreSQL real)", () => {
       eventId: raceId(),
       entries: [entry(r1, { position: 2, finished: true, bonuses: ["fastest-lap"], rawPoints: 25.5 })],
     });
-    expect(summary).toEqual({ created: 0, corrected: 0, unchanged: 1, kept: 2 });
+    expect(summary).toEqual({ created: 0, corrected: 0, unchanged: 1, kept: 2, recalculated: false, resultsVersion: null, lineupsScored: 0 });
 
     // Las filas conservadas no se tocan.
     const kept = await prisma.result.findMany({
@@ -630,7 +630,7 @@ describe("US-16 · Importación manual de resultados (PostgreSQL real)", () => {
       entries: [entry(r1, { position: 1, finished: true, bonuses: ["fastest-lap"], rawPoints: 25.5 })],
       reason: "error de transcripción",
     });
-    expect(summary).toEqual({ created: 0, corrected: 1, unchanged: 0, kept: 2 });
+    expect(summary).toEqual({ created: 0, corrected: 1, unchanged: 0, kept: 2, recalculated: false, resultsVersion: null, lineupsScored: 0 });
 
     const after = await prisma.result.findUniqueOrThrow({ where: { id: r1Row.id } });
     expect(after).toMatchObject({ position: 1, status: "corrected", resultsVersion: "rv-1" });
@@ -661,7 +661,7 @@ describe("US-16 · Importación manual de resultados (PostgreSQL real)", () => {
         entry(r4), // DNF
       ],
     });
-    expect(summary).toEqual({ created: 3, corrected: 0, unchanged: 0, kept: 0 });
+    expect(summary).toEqual({ created: 3, corrected: 0, unchanged: 0, kept: 0, recalculated: false, resultsVersion: null, lineupsScored: 0 });
 
     // Efectos en el evento Q2.
     const resultsEvent = await prisma.resultsEvent.findUniqueOrThrow({

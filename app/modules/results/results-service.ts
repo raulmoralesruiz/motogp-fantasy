@@ -78,6 +78,7 @@ import type {
 import {
   deriveStatus,
   diffResults,
+  nextResultsVersion,
   resultEventLabel,
   validateEntryForEvent,
   type ResultEntry,
@@ -114,12 +115,22 @@ export interface ResultsMeta {
   ip?: string | null;
 }
 
-/** Resumen de la importación (ADR-0018). */
+/** Resumen de la importación (ADR-0018; US-19: recálculo). */
 export interface ImportEventResult {
   created: number;
   corrected: number;
   unchanged: number;
   kept: number;
+  /**
+   * Si el GP se recalculó (US-19, ADR-0021): el GP ya tenía `scores`
+   * (había sido recalculado antes) y la importación cambió algo
+   * (creó o corrigió filas). Se generó una nueva `results_version`.
+   */
+  recalculated: boolean;
+  /** Nueva `results_version` si se recalculó (US-19); `null` si no. */
+  resultsVersion: string | null;
+  /** Nº de lineups puntuados si se recalculó (US-19); 0 si no. */
+  lineupsScored: number;
 }
 
 /**
@@ -134,7 +145,7 @@ export type UnmappedRider = {
   name: string | null;
 };
 
-/** Resumen del auto-import desde la fuente (US-17, ADR-0019). */
+/** Resumen del auto-import desde la fuente (US-17, ADR-0019; US-19: recálculo). */
 export interface ImportEventFromSourceResult {
   created: number;
   corrected: number;
@@ -143,6 +154,16 @@ export interface ImportEventFromSourceResult {
   kept: number;
   /** Pilotos sin mapeo (se saltan y se reportan). */
   unmapped: UnmappedRider[];
+  /**
+   * Si el GP se recalculó (US-19, ADR-0021): el GP ya tenía `scores`
+   * (había sido recalculado antes) y el auto-import cambió algo
+   * (creó o corrigió filas). Se generó una nueva `results_version`.
+   */
+  recalculated: boolean;
+  /** Nueva `results_version` si se recalculó (US-19); `null` si no. */
+  resultsVersion: string | null;
+  /** Nº de lineups puntuados si se recalculó (US-19); 0 si no. */
+  lineupsScored: number;
 }
 
 /** Estado operativo del auto-import por (GP, evento, fuente) (UI de admin). */
@@ -436,8 +457,10 @@ export class ResultsService {
   ): Promise<ImportEventResult> {
     return this.prisma.$transaction(async (tx) => {
       // 1. Bloqueo de la fila del GP (ADR-0018).
-      const rows = await tx.$queryRaw<Array<{ id: string; status: GpDbStatus }>>`
-        SELECT id, status
+      const rows = await tx.$queryRaw<
+        Array<{ id: string; status: GpDbStatus; seasonId: string }>
+      >`
+        SELECT id, status, "season_id" AS "seasonId"
         FROM gps
         WHERE id = ${input.gpId}::uuid
         FOR UPDATE
@@ -530,6 +553,9 @@ export class ResultsService {
           corrected: 0,
           unchanged: diff.unchanged.length,
           kept: diff.kept.length,
+          recalculated: false,
+          resultsVersion: null,
+          lineupsScored: 0,
         };
       }
 
@@ -597,7 +623,25 @@ export class ResultsService {
         data: { status: "finished" },
       });
 
-      // 11. Auditoría en la misma transacción (T-09): una entrada por acción.
+      // 11. Recálculo (US-19, ADR-0021): si el GP ya tiene `scores` (había
+      //     sido recalculado antes) y la importación cambió algo (creó o
+      //     corrigió filas), se recalcula el GP completo con la misma
+      //     `rules_version` y se genera una nueva `results_version`
+      //     (rv-2, rv-3…). Las filas se reconfirman a `definitive`.
+      //     (ADR-0018: "cada corrección, US-19"; scoring.md §7.)
+      let recalculated = false;
+      let newResultsVersion: string | null = null;
+      let lineupsScored = 0;
+      if (diff.created.length > 0 || diff.changed.length > 0) {
+        const recalc = await this.maybeRecalculateGp(tx, input.gpId, gp.seasonId, meta);
+        if (recalc) {
+          recalculated = true;
+          newResultsVersion = recalc.resultsVersion;
+          lineupsScored = recalc.lineupsScored;
+        }
+      }
+
+      // 12. Auditoría en la misma transacción (T-09): una entrada por acción.
       if (diff.changed.length > 0) {
         await appendAudit(tx, {
           actorId: meta.actorId,
@@ -645,6 +689,9 @@ export class ResultsService {
         corrected: diff.changed.length,
         unchanged: diff.unchanged.length,
         kept: diff.kept.length,
+        recalculated,
+        resultsVersion: newResultsVersion,
+        lineupsScored,
       };
     });
   }
@@ -784,8 +831,10 @@ export class ResultsService {
 
     return this.prisma.$transaction(async (tx) => {
       // 1. Bloqueo de la fila del GP (igual que la importación manual).
-      const rows = await tx.$queryRaw<Array<{ id: string; status: GpDbStatus }>>`
-        SELECT id, status
+      const rows = await tx.$queryRaw<
+        Array<{ id: string; status: GpDbStatus; seasonId: string }>
+      >`
+        SELECT id, status, "season_id" AS "seasonId"
         FROM gps
         WHERE id = ${gpId}::uuid
         FOR UPDATE
@@ -848,6 +897,12 @@ export class ResultsService {
       const corrected = diff.changed.filter((c) => autoRiderIds.has(c.riderId));
       const keptManual = diff.changed.length - corrected.length;
       const hasWrites = diff.created.length > 0 || corrected.length > 0;
+
+      // US-19: variables de recálculo (se inicializan aquí para el
+      // alcance del `return` al final de la transacción).
+      let recalculated = false;
+      let newResultsVersion: string | null = null;
+      let lineupsScored = 0;
 
       // 5. Creación de filas (`source: "auto"`, `raw` con el payload fuente).
       for (const entry of diff.created) {
@@ -955,6 +1010,21 @@ export class ResultsService {
             },
           });
         }
+
+        // 7.5. Recálculo (US-19, ADR-0021): si el GP ya tiene `scores`
+        //      (había sido recalculado antes) y el auto-import cambió algo,
+        //      se recalcula el GP completo con la misma `rules_version` y se
+        //      genera una nueva `results_version`. Las filas se reconfirman
+        //      a `definitive`. (ADR-0018; scoring.md §7.)
+        const recalc = await this.maybeRecalculateGp(tx, gpId, gp.seasonId, {
+          actorId: null,
+          ip: null,
+        });
+        if (recalc) {
+          recalculated = true;
+          newResultsVersion = recalc.resultsVersion;
+          lineupsScored = recalc.lineupsScored;
+        }
       }
 
       // 8. `source_state`: siempre se actualiza en éxito (también no-op).
@@ -986,6 +1056,9 @@ export class ResultsService {
         unchanged: diff.unchanged.length,
         kept: diff.kept.length + keptManual,
         unmapped,
+        recalculated,
+        resultsVersion: newResultsVersion,
+        lineupsScored,
       };
     });
   }
@@ -1443,8 +1516,11 @@ export class ResultsService {
         data: { status: "definitive" },
       });
 
-      // Primer recálculo (rv-1) + asignación de resultsVersion.
-      const resultsVersion = "rv-1";
+      // Recálculo (rv-1 si es el primer definitivo; rv-N si es una
+      // reconfirmación tras una corrección que no auto-recalcó — US-19).
+      // Asignación de resultsVersion a las filas sin versión.
+      const currentVersion = allRows.find((r) => r.resultsVersion)?.resultsVersion ?? null;
+      const resultsVersion = nextResultsVersion(currentVersion);
       const lineupsScored = await this.recalculateGp(tx, gpId, gp.seasonId, resultsVersion);
       await tx.result.updateMany({
         where: { gpId, resultsVersion: null },
@@ -1613,6 +1689,64 @@ export class ResultsService {
 
       return { cancelled: isCancelled, neutralized: !isCancelled, noop: false };
     });
+  }
+
+  /**
+   * Recálculo condicional (US-19, ADR-0021): si el GP ya tiene `scores`
+   * (había sido recalculado antes), se recalcula el GP completo con la misma
+   * `rules_version` y se genera una nueva `results_version` (rv-2, rv-3…).
+   * Las filas se reconfirman a `definitive`.
+   *
+   * (ADR-0018: "cada corrección, US-19"; scoring.md §7: "al corregir un
+   * resultado, se recalcula el GP completo con la misma rules_version y se
+   * genera una nueva results_version".)
+   *
+   * @returns info del recálculo (versión + lineups puntuados) o `null` si no
+   *          se recalculó (el GP no tenía `scores`).
+   */
+  private async maybeRecalculateGp(
+    tx: Prisma.TransactionClient,
+    gpId: string,
+    seasonId: string,
+    meta: ResultsMeta,
+  ): Promise<{ resultsVersion: string; lineupsScored: number } | null> {
+    const scoreCount = await tx.score.count({ where: { gpId } });
+    if (scoreCount === 0) {
+      return null;
+    }
+
+    const currentVersion = await tx.result.findFirst({
+      where: { gpId, resultsVersion: { not: null } },
+      select: { resultsVersion: true },
+    });
+    const resultsVersion = nextResultsVersion(currentVersion?.resultsVersion ?? null);
+    const lineupsScored = await this.recalculateGp(tx, gpId, seasonId, resultsVersion);
+
+    // Asignar la nueva versión a todas las filas y reconfirmar.
+    await tx.result.updateMany({
+      where: { gpId },
+      data: { resultsVersion, status: "definitive" },
+    });
+    await tx.resultsEvent.updateMany({
+      where: { gpId },
+      data: { resultsVersion },
+    });
+
+    // Auditoría del recálculo (US-19): una entrada por recálculo.
+    await appendAudit(tx, {
+      actorId: meta.actorId,
+      action: "results.recalculated",
+      entity: "results",
+      entityId: gpId,
+      afterData: {
+        gpId,
+        resultsVersion,
+        lineupsScored,
+      },
+      ip: meta.ip,
+    });
+
+    return { resultsVersion, lineupsScored };
   }
 
   /**
