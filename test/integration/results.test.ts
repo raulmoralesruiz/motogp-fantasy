@@ -325,8 +325,13 @@ describe("US-16 · Importación manual de resultados (PostgreSQL real)", () => {
       resultsStatus: "finished",
     });
 
-    // Sin histórico todavía.
-    expect(await prisma.resultsHistory.count()).toBe(0);
+    // Sin histórico todavía (acotado al mundo de este test: la BD es
+    // compartida entre archivos y los tests corren en paralelo).
+    expect(
+      await prisma.resultsHistory.count({
+        where: { result: { gpId: world.gp.id, eventId: raceId() } },
+      }),
+    ).toBe(0);
 
     // Auditoría results.import: quién, cuándo (IP) y valores completos; el
     // motivo por defecto es "importación manual".
@@ -417,7 +422,11 @@ describe("US-16 · Importación manual de resultados (PostgreSQL real)", () => {
       await prisma.auditLog.count({ where: { action: "results.import", entityId: raceId() } }),
     ).toBe(1);
     expect(await prisma.auditLog.count({ where: { action: "results.correct" } })).toBe(0);
-    expect(await prisma.resultsHistory.count()).toBe(0);
+    expect(
+      await prisma.resultsHistory.count({
+        where: { result: { gpId: world.gp.id, eventId: raceId() } },
+      }),
+    ).toBe(0);
   });
 
   // ── Corrección ─────────────────────────────────────────────────────────────
@@ -596,7 +605,11 @@ describe("US-16 · Importación manual de resultados (PostgreSQL real)", () => {
     expect(
       await prisma.auditLog.count({ where: { action: "results.correct", entityId: raceId() } }),
     ).toBe(2);
-    expect(await prisma.resultsHistory.count()).toBe(2);
+    expect(
+      await prisma.resultsHistory.count({
+        where: { result: { gpId: world.gp.id, eventId: raceId() } },
+      }),
+    ).toBe(2);
   });
 
   it("una corrección sobre una fila definitive la pasa a corrected (conserva la versión en vigor)", async () => {
