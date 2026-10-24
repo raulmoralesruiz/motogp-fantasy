@@ -255,6 +255,9 @@ export default function HomePage() {
             <Link href="/mercado">Mercado</Link>
           </p>
           <p>
+            <Link href="/puntuacion">Mi puntuación</Link>
+          </p>
+          <p>
             <Link href="/perfil">Perfil</Link>
           </p>
           <Button

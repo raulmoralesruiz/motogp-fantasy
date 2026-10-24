@@ -295,6 +295,38 @@ type ScoreBreakdownJson = {
 };
 
 /**
+ * Puntuación de un piloto en el desglose de un lineup (US-20): identidad +
+ * peso oro/plata + puntos ponderados + desglose del fin de semana (motor puro).
+ */
+export type RiderScoreView = {
+  riderId: string;
+  riderName: string;
+  weight: number;
+  points: number;
+  breakdown: RiderPointsBreakdown;
+};
+
+/**
+ * Vista de la puntuación del usuario en un GP (US-20): el desglose de
+ * `Score.breakdown` con los nombres resueltos (pilotos/constructor/equipo).
+ */
+export type MyScoreView = {
+  gpId: string;
+  gpName: string;
+  round: number;
+  seasonName: string;
+  pointsTotal: number;
+  rulesVersion: string;
+  resultsVersion: string;
+  computedAt: Date;
+  gold: RiderScoreView[];
+  silver: RiderScoreView[];
+  constructor: { id: string; name: string; points: number };
+  team: { id: string; name: string; points: number };
+  total: number;
+};
+
+/**
  * JSON plano de los valores (columna `raw` y auditoría).
  *
  * `type` (no `interface`): Prisma exige un index signature en
@@ -1447,6 +1479,113 @@ export class ResultsService {
         lastAt: e.lastAt,
       }))
       .sort((a, b) => b.lastAt.getTime() - a.lastAt.getTime());
+  }
+
+  // ── US-20: mi puntuación con desglose ──────────────────────────────────────
+
+  /**
+   * Puntuación del usuario en un GP con el desglose (US-20).
+   *
+   * Solo lectura: lee la `Score` más reciente del usuario para el GP (la de
+   * la `results_version` vigente) y devuelve el desglose de `Score.breakdown`
+   * con los nombres resueltos (pilotos/constructor/equipo). El total y el
+   * desglose son los que escribió el recálculo (US-18/US-19) con el motor
+   * puro `scoring` — el usuario ve exactamente lo que puntúa.
+   *
+   * Errores:
+   * - GP no existe → NOT_FOUND.
+   * - El usuario no tiene lineup en el GP → NOT_FOUND.
+   * - El GP aún no tiene resultados definitivos (sin `Score`) →
+   *   PRECONDITION_FAILED (el admin debe marcarlo definitivo, US-18).
+   */
+  async myScore(gpId: string, userId: string): Promise<MyScoreView> {
+    const gp = await this.prisma.gp.findUnique({
+      where: { id: gpId },
+      include: { season: { select: { name: true } } },
+    });
+    if (!gp) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "El GP no existe." });
+    }
+
+    const lineup = await this.prisma.lineup.findUnique({
+      where: { userId_gpId: { userId, gpId } },
+    });
+    if (!lineup) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "No tienes lineup para este GP.",
+      });
+    }
+
+    // La `Score` más reciente (la de la `results_version` vigente).
+    const score = await this.prisma.score.findFirst({
+      where: { lineupId: lineup.id },
+      orderBy: { computedAt: "desc" },
+    });
+    if (!score) {
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message:
+          "Este GP aún no tiene resultados definitivos; tu puntuación aparecerá cuando se marquen definitivos.",
+      });
+    }
+
+    const breakdown = score.breakdown as unknown as ScoreBreakdownJson;
+
+    // Nombres: pilotos (oro + plata), constructor y equipo.
+    const riderIds = [
+      ...breakdown.gold.map((r) => r.riderId),
+      ...breakdown.silver.map((r) => r.riderId),
+    ];
+    const db = this.prisma;
+    const [riders, ctorRow, teamRow] = await Promise.all([
+      db.rider.findMany({
+        where: { id: { in: riderIds } },
+        select: { id: true, name: true },
+      }),
+      db.constructor.findUnique({
+        where: { id: breakdown.constructor.id },
+      }),
+      db.team.findUnique({
+        where: { id: breakdown.team.id },
+      }),
+    ]);
+    const riderName = new Map(riders.map((r) => [r.id, r.name]));
+    const nameOf = (id: string) => riderName.get(id) ?? id;
+
+    const toRiderView = (
+      r: { riderId: string; weight: number; points: number; breakdown: RiderPointsBreakdown },
+    ): RiderScoreView => ({
+      riderId: r.riderId,
+      riderName: nameOf(r.riderId),
+      weight: r.weight,
+      points: r.points,
+      breakdown: r.breakdown,
+    });
+
+    return {
+      gpId: gp.id,
+      gpName: gp.name,
+      round: gp.round,
+      seasonName: gp.season.name,
+      pointsTotal: Number(score.pointsTotal),
+      rulesVersion: score.rulesVersion,
+      resultsVersion: score.resultsVersion,
+      computedAt: score.computedAt,
+      gold: breakdown.gold.map(toRiderView),
+      silver: breakdown.silver.map(toRiderView),
+      constructor: {
+        id: breakdown.constructor.id,
+        name: ctorRow?.name ?? breakdown.constructor.id,
+        points: breakdown.constructor.points,
+      },
+      team: {
+        id: breakdown.team.id,
+        name: teamRow?.name ?? breakdown.team.id,
+        points: breakdown.team.points,
+      },
+      total: breakdown.total,
+    };
   }
 
   // ── US-18 (ADR-0020): definitivo + primer recálculo + estados de evento ──

@@ -178,6 +178,13 @@ export const eventFlagInputSchema = z.object({
   eventId: z.string().uuid("El identificador de evento no es válido"),
 });
 
+// ── US-20: mi puntuación con desglose ────────────────────────────────────────
+
+/** Mi puntuación en un GP (desglose por piloto/constructor/equipo, US-20). */
+export const myScoreInputSchema = z.object({
+  gpId: z.string().uuid("El identificador de GP no es válido"),
+});
+
 export type ResultEntryInput = z.infer<typeof resultEntrySchema>;
 export type ImportEventInput = z.infer<typeof importEventInputSchema>;
 export type GpEventsInput = z.infer<typeof gpEventsInputSchema>;
@@ -191,3 +198,4 @@ export type SourceStateInput = z.infer<typeof sourceStateInputSchema>;
 export type SourceEventsInput = z.infer<typeof sourceEventsInputSchema>;
 export type MarkDefinitiveInput = z.infer<typeof markDefinitiveInputSchema>;
 export type EventFlagInput = z.infer<typeof eventFlagInputSchema>;
+export type MyScoreInput = z.infer<typeof myScoreInputSchema>;

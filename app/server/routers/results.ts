@@ -4,13 +4,15 @@
  * fuente (PulseLive) + link/unlink de GP, mapeo de pilotos y consultas de
  * solo lectura para la UI de admin.
  *
- * Autorización (T-08, security.md §1.5): todos los procedimientos son
- * `adminProcedure` — importar o corregir resultados es una acción sensible
- * (auditoría en la misma transacción, T-09).
+ * Autorización (T-08, security.md §1.5): los procedimientos de importación
+ * y gestión son `adminProcedure` — importar o corregir resultados es una
+ * acción sensible (auditoría en la misma transacción, T-09). `myScore`
+ * (US-20) es `protectedProcedure`: el usuario ve su propia puntuación.
  *
  * US-18 (ADR-0020): marcar definitivo (primer recálculo rv-1 inline),
- * cancelar/neutralizar evento y estado derivado del GP. El recálculo por
- * corrección (nueva `results_version`) llega con US-19.
+ * cancelar/neutralizar evento y estado derivado del GP. US-19 (ADR-0021):
+ * recálculo auditable por corrección (nueva `results_version`). US-20:
+ * `myScore` (mi puntuación con desglose).
  *
  * El auto-import (botón admin) usa la misma semántica que el job:
  * `source: "auto"`, `actorId = null` en la auditoría (los valores vienen de
@@ -36,6 +38,7 @@ import {
   importFromSourceInputSchema,
   linkSourceInputSchema,
   markDefinitiveInputSchema,
+  myScoreInputSchema,
   setRiderMappingInputSchema,
   sourceEventsInputSchema,
   sourceStateInputSchema,
@@ -43,7 +46,7 @@ import {
 } from "@/shared/validation/results";
 
 import { prisma } from "../prisma";
-import { adminProcedure, router } from "../trpc";
+import { adminProcedure, protectedProcedure, router } from "../trpc";
 
 export interface ResultsRouterDeps {
   prisma: PrismaClient;
@@ -241,6 +244,15 @@ export function createResultsRouter(deps: ResultsRouterDeps) {
     gpState: adminProcedure
       .input(gpEventsInputSchema)
       .query(({ input }) => service.gpState(input.gpId)),
+
+    /**
+     * Mi puntuación en un GP con el desglose (US-20): por piloto (Q2/sprint/
+     * GP/bonos/penalizaciones), constructor y equipo, con pesos oro/plata.
+     * Solo lectura; el usuario ve su propia puntuación (ctx.user.id).
+     */
+    myScore: protectedProcedure
+      .input(myScoreInputSchema)
+      .query(({ ctx, input }) => service.myScore(input.gpId, ctx.user.id)),
   });
 }
 
