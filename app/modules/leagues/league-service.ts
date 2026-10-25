@@ -37,9 +37,43 @@ import type {
 
 import { appendAudit } from "@/modules/admin";
 import { PROVISIONAL_SEASON_RULES } from "@/shared/config";
-import { createLeagueInputSchema } from "@/shared/validation/leagues";
+import {
+  createLeagueInputSchema,
+  joinLeagueInputSchema,
+} from "@/shared/validation/leagues";
 
-import { canViewLeague, generateLeagueCode, sortRanking } from "./core";
+import {
+  canViewLeague,
+  evaluateLeagueJoin,
+  generateLeagueCode,
+  shouldLockLeagueJoin,
+  sortRanking,
+  type LeagueJoinReason,
+} from "./core";
+
+/**
+ * Motivos de RECHAZO de la unión (US-25): todo `LeagueJoinReason` salvo
+ * "ok". `joinRejection` es exhaustivo sobre esta unión (sin `default`
+ * muerto): si el núcleo añade un motivo, el typecheck obliga a tratarlo.
+ */
+type LeagueJoinRejectionReason = Exclude<LeagueJoinReason, "ok">;
+
+/** Rate limit de unión a ligas (US-25, security.md §1.6; frontera de I/O). */
+export interface LeagueJoinRateLimit {
+  /** Ventana fija por IP: todos los intentos de unión. */
+  recordLeagueJoinAttempt(
+    ip: string,
+    windowSec: number,
+  ): Promise<{ count: number; remainingSec: number }>;
+  /** Fallo de código (contador consecutivo por IP). */
+  recordLeagueJoinFailure(ip: string): Promise<number>;
+  /** Borra los fallos de la IP (unión correcta). */
+  resetLeagueJoinFailures(ip: string): Promise<void>;
+  /** Bloquea la IP tras N fallos de código. */
+  lockLeagueJoin(ip: string, lockoutSec: number): Promise<void>;
+  /** Segundos restantes del bloqueo de la IP (0 si no está bloqueada). */
+  leagueJoinLockRemainingSec(ip: string): Promise<number>;
+}
 
 export interface LeagueServiceDeps {
   prisma: PrismaClient;
@@ -55,6 +89,19 @@ export interface LeagueServiceDeps {
   };
   /** Configuración del rate limit de creación (US-23). */
   rateLimitCfg?: { maxPerWindow: number; windowSec: number };
+  /**
+   * Rate limit de unión a ligas (security.md §1.6, US-25/ADR-0025):
+   * ventana por IP + bloqueo por fallos de código. Opcional: sin store no
+   * se aplica el límite (tests de servicio sin Redis).
+   */
+  joinRateLimit?: LeagueJoinRateLimit;
+  /** Configuración del rate limit de unión (US-25; parámetros operativos). */
+  joinRateLimitCfg?: {
+    maxPerWindow: number;
+    windowSec: number;
+    lockoutThreshold: number;
+    lockoutSec: number;
+  };
   /**
    * Límites PROVISIONAL de miembros por liga (leagues.md §3: 2–50). Por
    * defecto `PROVISIONAL_SEASON_RULES.league` (shared/config, AGENTS.md
@@ -95,6 +142,8 @@ export interface LeagueView {
    * nombre de usuario, nunca PII). Admins primero, luego por antigüedad.
    */
   members: LeagueMemberView[];
+  /** El actor es miembro activo de la liga (US-25: la UI oculta el botón de unión). */
+  isMember: boolean;
   /** El actor es admin de la liga (miembro activo con rol admin). */
   isAdmin: boolean;
   /**
@@ -309,6 +358,209 @@ export class LeagueService {
       });
     });
     return newCode;
+  }
+
+  // ── US-25 · Unirse a una liga por código o entrada abierta (ADR-0025) ──
+
+  /**
+   * Se une el actor a una liga (US-25, leagues.md §2/§4/§6/§10, ADR-0025):
+   * - **Pública:** entrada abierta por `leagueId` (ADR-0024, sin código).
+   * - **Privada:** por `code` (el código resuelve la liga) o `leagueId` +
+   *   `code`; el código debe ser una invitación ACTIVA de la liga.
+   * - Validaciones server-side con motivo explícito (leagues.md §6):
+   *   "La liga no acepta entradas." (status ≠ active; privada
+   *   `entryMode=invite` — la invitación directa se difiere, US-26; privada
+   *   sin código activo), "El código no es válido.", "Ya eres miembro de
+   *   esta liga." (leagues.md §4: no se puede unirse dos veces) y "La liga
+   *   está llena." (leagues.md §2: "abierta con límite").
+   * - Anti fuerza bruta (leagues.md §4/§10, espejo del login US-01):
+   *   ventana por IP en todos los intentos + bloqueo por IP tras N fallos
+   *   de código consecutivos (solo "código no válido" cuenta como fallo;
+   *   el contador se resetea con la unión correcta).
+   * - Transaccional (CA): lock `FOR UPDATE` de la fila de la liga →
+   *   recontar miembros activos → insertar membresía → auditoría
+   *   `league.joined`. Dos uniones concurrentes por la última plaza: solo
+   *   una entra (el unique `(leagueId, userId)` es el backstop).
+   * - El código NO se registra en auditoría (secreto, ADR-0023).
+   *
+   * @throws {TRPCError} BAD_REQUEST con el motivo explícito; NOT_FOUND si la
+   *   liga no existe.
+   */
+  async joinLeague(input: unknown, meta: AuditMeta): Promise<LeagueView> {
+    const result = joinLeagueInputSchema.safeParse(input);
+    if (!result.success) {
+      const issues = result.error.issues
+        .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+        .join("; ");
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: `Unión inválida: ${issues}`,
+      });
+    }
+    // `.nullish()` admite `null` (cliente que envía campos explícitos): se
+    // normaliza a "no indicado" (AGENTS.md §8: el servidor manda).
+    const leagueId = result.data.leagueId ?? undefined;
+    const code = result.data.code ?? undefined;
+    const actorId = meta.actorId;
+    const ip = meta.ip;
+
+    const joinRL = this.deps.joinRateLimit;
+    const cfg =
+      this.deps.joinRateLimitCfg ??
+      ({
+        maxPerWindow: 10,
+        windowSec: 60,
+        lockoutThreshold: 5,
+        lockoutSec: 900,
+      } as const);
+
+    // 1) Ventana por IP (todos los intentos; el store incrementa antes de
+    //    decidir, patrón US-01). Sin store inyectado: sin límite.
+    let ipWindowCount = 0;
+    let ipWindowRemainingSec = 0;
+    if (joinRL) {
+      const w = await joinRL.recordLeagueJoinAttempt(ip, cfg.windowSec);
+      ipWindowCount = w.count;
+      ipWindowRemainingSec = w.remainingSec;
+    }
+
+    // 2) Resolver la liga: por el código (invite activa) o por leagueId.
+    let resolvedLeagueId: string;
+    let codeValid = false;
+    if (code !== undefined) {
+      const invite = await this.deps.prisma.leagueInvite.findUnique({
+        where: { code },
+      });
+      if (!invite || invite.status !== "active") {
+        await this.registerJoinFailure(ip, cfg);
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "El código no es válido.",
+        });
+      }
+      codeValid = true;
+      resolvedLeagueId = invite.leagueId;
+      // Código de OTRA liga que no coincide con la indicada: mismo motivo
+      // (no revelar cuál de los dos es el error).
+      if (leagueId !== undefined && leagueId !== invite.leagueId) {
+        await this.registerJoinFailure(ip, cfg);
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "El código no es válido.",
+        });
+      }
+    } else {
+      // El schema (`joinLeagueInputSchema`) garantiza al menos uno de
+      // leagueId/código; aquí el código es undefined, así que leagueId está
+      // definido (la revalidación la hace el schema, AGENTS.md §8).
+      resolvedLeagueId = leagueId as string;
+    }
+
+    const league = await this.deps.prisma.league.findUnique({
+      where: { id: resolvedLeagueId },
+    });
+    if (!league) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "La liga no existe." });
+    }
+
+    // 3) Estado para la regla pura (leagues/core/join, ADR-0025).
+    let ipLockRemainingSec = 0;
+    if (joinRL) {
+      ipLockRemainingSec = await joinRL.leagueJoinLockRemainingSec(ip);
+    }
+    const [membership, activeMembers, activeInvite] = await Promise.all([
+      this.deps.prisma.leagueMember.findUnique({
+        where: { leagueId_userId: { leagueId: resolvedLeagueId, userId: actorId } },
+      }),
+      this.deps.prisma.leagueMember.count({
+        where: { leagueId: resolvedLeagueId, status: "active" },
+      }),
+      this.deps.prisma.leagueInvite.findFirst({
+        where: { leagueId: resolvedLeagueId, status: "active" },
+        select: { id: true },
+      }),
+    ]);
+
+    const decision = evaluateLeagueJoin(
+      {
+        ipWindowCount,
+        ipWindowRemainingSec,
+        ipLockRemainingSec,
+        status: league.status,
+        type: league.type,
+        entryMode: league.entryMode,
+        hasActiveCode: activeInvite !== null,
+        codeProvided: code !== undefined,
+        codeValid,
+        isActiveMember: membership !== null && membership.status === "active",
+        activeMembers,
+        maxMembers: league.maxMembers,
+      },
+      { maxPerWindow: cfg.maxPerWindow },
+    );
+    if (!decision.allowed) {
+      // Solo el fallo de código cuenta para el bloqueo (leagues.md §4).
+      if (decision.reason === "invalid_code") {
+        await this.registerJoinFailure(ip, cfg);
+      }
+      // `!allowed` ⇒ el motivo es de rechazo (nunca "ok"; el núcleo solo
+      // devuelve "ok" con `allowed: true`).
+      throw this.joinRejection({
+        reason: decision.reason as LeagueJoinRejectionReason,
+        retryAfterSec: decision.retryAfterSec,
+      });
+    }
+
+    // 4) Transacción (CA: "unirse es transaccional"): lock FOR UPDATE de la
+    //    fila de la liga (patrón results US-18/US-19) → recontar miembros
+    //    (última plaza) → membresía → auditoría.
+    const maxMembers = league.maxMembers;
+    await this.deps.prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM leagues WHERE id = ${resolvedLeagueId}::uuid FOR UPDATE
+      `;
+      if (rows.length === 0) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "La liga no existe." });
+      }
+      // Recontar bajo lock: dos uniones concurrentes por la última plaza,
+      // la segunda ve al miembro de la primera (Read Committed) y se rechaza.
+      const count = await tx.leagueMember.count({
+        where: { leagueId: resolvedLeagueId, status: "active" },
+      });
+      if (count >= maxMembers) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "La liga está llena.",
+        });
+      }
+      await tx.leagueMember.create({
+        data: {
+          leagueId: resolvedLeagueId,
+          userId: actorId,
+          role: "member",
+          status: "active",
+        },
+      });
+      await appendAudit(tx, {
+        actorId: meta.actorId,
+        action: "league.joined",
+        entity: "league",
+        entityId: resolvedLeagueId,
+        afterData: {
+          userId: actorId,
+          // El código NO se registra (secreto, ADR-0023): solo el canal.
+          via: code !== undefined ? "code" : "open",
+        },
+        ip: meta.ip,
+      });
+    });
+
+    // 5) Éxito: resetear el contador de fallos de la IP (patrón US-01).
+    if (joinRL) {
+      await joinRL.resetLeagueJoinFailures(ip);
+    }
+
+    return this.toLeagueView(resolvedLeagueId, actorId);
   }
 
   /**
@@ -818,6 +1070,67 @@ export class LeagueService {
   }
 
   /**
+   * Registra un fallo de código de la IP y, al alcanzar el umbral, la
+   * bloquea temporalmente (US-25/ADR-0025, espejo del bloqueo de cuenta
+   * del login US-01). Sin store inyectado: sin efecto.
+   */
+  private async registerJoinFailure(
+    ip: string,
+    cfg: { lockoutThreshold: number; lockoutSec: number },
+  ): Promise<void> {
+    const joinRL = this.deps.joinRateLimit;
+    if (!joinRL) return;
+    const count = await joinRL.recordLeagueJoinFailure(ip);
+    if (shouldLockLeagueJoin(count, { lockoutThreshold: cfg.lockoutThreshold })) {
+      await joinRL.lockLeagueJoin(ip, cfg.lockoutSec);
+    }
+  }
+
+  /**
+   * Traduce un rechazo de la regla pura (US-25) en el error server-side con
+   * motivo explícito en español (leagues.md §6, CA de US-25). El switch es
+   * exhaustivo sobre `LeagueJoinRejectionReason` (sin `default` muerto): si
+   * el núcleo añade un motivo, el typecheck obliga a tratarlo aquí.
+   */
+  private joinRejection(decision: {
+    reason: LeagueJoinRejectionReason;
+    retryAfterSec: number;
+  }): TRPCError {
+    switch (decision.reason) {
+      case "locked":
+        return new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Demasiados intentos fallidos. Inténtalo de nuevo en ${decision.retryAfterSec} s.`,
+        });
+      case "rate_limited":
+        return new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Estás enviando demasiadas peticiones. Inténtalo de nuevo en ${decision.retryAfterSec} s.`,
+        });
+      case "not_accepting_entries":
+        return new TRPCError({
+          code: "BAD_REQUEST",
+          message: "La liga no acepta entradas.",
+        });
+      case "invalid_code":
+        return new TRPCError({
+          code: "BAD_REQUEST",
+          message: "El código no es válido.",
+        });
+      case "already_member":
+        return new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Ya eres miembro de esta liga.",
+        });
+      case "league_full":
+        return new TRPCError({
+          code: "BAD_REQUEST",
+          message: "La liga está llena.",
+        });
+    }
+  }
+
+  /**
    * Regla de visibilidad (US-24, ADR-0024, `core/visibility`): pública ⇒
    * cualquiera; privada ⇒ solo miembro activo. Un extraño (autenticado o no)
    * recibe NOT_FOUND idéntico al de una liga inexistente: no se revela la
@@ -881,10 +1194,8 @@ export class LeagueService {
           where: { leagueId_userId: { leagueId, userId: actorId } },
         })
       : null;
-    const isAdmin =
-      membership !== null &&
-      membership.status === "active" &&
-      membership.role === "admin";
+    const isMember = membership !== null && membership.status === "active";
+    const isAdmin = isMember && membership.role === "admin";
     return {
       id: league.id,
       name: league.name,
@@ -901,6 +1212,7 @@ export class LeagueService {
         username: m.user.profile?.displayName ?? m.user.username,
         role: m.role,
       })),
+      isMember,
       isAdmin,
       code: isAdmin ? (activeInvite?.code ?? null) : null,
     };

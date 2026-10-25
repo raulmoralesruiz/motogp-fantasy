@@ -10,9 +10,11 @@ import { Alert, Button } from "@/shared/components";
 import { trpc } from "@/trpc/client";
 
 /**
- * Detalle de una liga (US-24, leagues.md §8/§9; pantalla 10 de user-flows):
- * info de la liga, miembros (seudónimos, admin marcado), ranking general y
- * panel de admin (código + rotación) si el actor es admin.
+ * Detalle de una liga (US-24, leagues.md §8/§9; US-25, leagues.md §6;
+ * pantalla 10 de user-flows): info de la liga, miembros (seudónimos, admin
+ * marcado), ranking general, panel de admin (código + rotación) si el actor
+ * es admin, y botón de unión a la liga **pública** (entrada abierta,
+ * ADR-0024/ADR-0025) si el actor está autenticado y no es miembro.
  *
  * Visibilidad (ADR-0024): pública ⇒ cualquiera la ve; privada ⇒ solo miembros
  * activos (un extraño recibe NOT_FOUND → "La liga no existe."). El código solo
@@ -36,6 +38,7 @@ export default function LeagueDetailPage() {
 
   const league = trpc.leagues.get.useQuery({ leagueId });
   const ranking = trpc.leagues.ranking.useQuery({ leagueId });
+  const me = trpc.auth.me.useQuery();
 
   const [rotated, setRotated] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +54,20 @@ export default function LeagueDetailPage() {
     onError: (err) => {
       setError(err instanceof Error ? err.message : "No se pudo rotar el código.");
       setRotated(null);
+    },
+  });
+
+  // Unión a la liga pública (US-25, entrada abierta ADR-0024): solo si el
+  // actor está autenticado y no es miembro. El servidor revalida todo.
+  const join = trpc.leagues.join.useMutation({
+    onSuccess: () => {
+      setError(null);
+      queryClient.invalidateQueries({
+        queryKey: getQueryKey(trpc.leagues.get),
+      });
+    },
+    onError: (err) => {
+      setError(err instanceof Error ? err.message : "No se pudo unirse a la liga.");
     },
   });
 
@@ -107,6 +124,29 @@ export default function LeagueDetailPage() {
             </li>
           ))}
         </ul>
+      )}
+
+      {l.type === "public" && !l.isMember && (
+        <div>
+          <h3>Unirse</h3>
+          {me.isPending ? (
+            <p className="muted">Consultando…</p>
+          ) : me.isError ? (
+            <Alert variant="info">
+              Para unirte a la liga necesitas una cuenta.{" "}
+              <Link href="/login">Inicia sesión</Link> o{" "}
+              <Link href="/registro">crea una cuenta</Link>.
+            </Alert>
+          ) : (
+            <Button
+              type="button"
+              onClick={() => join.mutate({ leagueId: l.id })}
+              disabled={join.isPending}
+            >
+              {join.isPending ? "Uniéndose…" : "Unirme a la liga"}
+            </Button>
+          )}
+        </div>
       )}
 
       <h3>Ranking general</h3>

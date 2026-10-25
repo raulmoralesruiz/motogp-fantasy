@@ -141,4 +141,60 @@ describe("redisRateLimitStore", () => {
       expect(result).toEqual({ count: 4, remainingSec: 3590 });
     });
   });
+
+  describe("unión a ligas (US-25, prefijo rl:league:join:)", () => {
+    it("recordLeagueJoinAttempt usa la clave de ventana POR IP", async () => {
+      mocks.redis.eval.mockResolvedValue(4);
+      mocks.redis.ttl.mockResolvedValue(55);
+
+      const result = await redisRateLimitStore.recordLeagueJoinAttempt("1.2.3.4", 60);
+
+      expect(mocks.redis.eval).toHaveBeenCalledTimes(1);
+      const [script, numKeys, key, windowSec] = mocks.redis.eval.mock.calls[0] ?? [];
+      expect(script).toContain('redis.call("INCR", KEYS[1])');
+      expect(numKeys).toBe(1);
+      expect(key).toBe("rl:league:join:ip:1.2.3.4");
+      expect(windowSec).toBe("60");
+      expect(mocks.redis.ttl).toHaveBeenCalledWith("rl:league:join:ip:1.2.3.4");
+      expect(result).toEqual({ count: 4, remainingSec: 55 });
+    });
+
+    it("recordLeagueJoinFailure incrementa el contador de fallos de la IP", async () => {
+      mocks.redis.incr.mockResolvedValue(2);
+
+      const count = await redisRateLimitStore.recordLeagueJoinFailure("1.2.3.4");
+
+      expect(mocks.redis.incr).toHaveBeenCalledWith("rl:league:join:fail:1.2.3.4");
+      expect(count).toBe(2);
+    });
+
+    it("resetLeagueJoinFailures borra el contador de fallos de la IP", async () => {
+      mocks.redis.del.mockResolvedValue(1);
+
+      await redisRateLimitStore.resetLeagueJoinFailures("1.2.3.4");
+
+      expect(mocks.redis.del).toHaveBeenCalledWith("rl:league:join:fail:1.2.3.4");
+    });
+
+    it("lockLeagueJoin fija la clave de bloqueo de la IP con TTL", async () => {
+      mocks.redis.set.mockResolvedValue("OK");
+
+      await redisRateLimitStore.lockLeagueJoin("1.2.3.4", 900);
+
+      expect(mocks.redis.set).toHaveBeenCalledWith(
+        "rl:league:join:lock:1.2.3.4",
+        "1",
+        "EX",
+        900,
+      );
+    });
+
+    it("leagueJoinLockRemainingSec devuelve el TTL (0 si ya expiró)", async () => {
+      mocks.redis.ttl.mockResolvedValueOnce(800);
+      expect(await redisRateLimitStore.leagueJoinLockRemainingSec("1.2.3.4")).toBe(800);
+
+      mocks.redis.ttl.mockResolvedValueOnce(-1);
+      expect(await redisRateLimitStore.leagueJoinLockRemainingSec("1.2.3.4")).toBe(0);
+    });
+  });
 });

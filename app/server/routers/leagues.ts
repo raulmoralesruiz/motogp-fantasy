@@ -1,6 +1,7 @@
 /**
- * Router de ligas (US-23, ADR-0023; US-24, ADR-0024): creación de liga
- * privada con código + liga pública y directorio.
+ * Router de ligas (US-23, ADR-0023; US-24, ADR-0024; US-25, ADR-0025):
+ * creación de liga privada con código + liga pública y directorio + unión
+ * por código o entrada abierta.
  *
  * Autorización (T-08, security.md §1.5):
  * - `create`: cualquier usuario autenticado (el actor es el creador y
@@ -8,6 +9,9 @@
  *   input — AGENTS.md §8).
  * - `rotateCode`: solo el admin de la liga (revalida el servicio por
  *   recurso; un miembro recibe 403 FORBIDDEN).
+ * - `join`: cualquier usuario autenticado (US-25) — el actor sale del
+ *   contexto; la elegibilidad (estado, modo de entrada, código, membresía,
+ *   plaza) la revalida el servicio (AGENTS.md §8).
  * - `get`: **pública** (US-24) — pública ⇒ cualquiera (autenticado o no);
  *   privada ⇒ solo miembros activos (extraños → NOT_FOUND, leagues.md §9);
  *   el código solo lo devuelve el admin (leagues.md §5).
@@ -18,13 +22,15 @@
  * - `myLeagues`: ligas activas del usuario.
  *
  * Rate limit de creación (security.md §1.6: "creación de ligas"): por
- * usuario, store inyectado (Redis en producción).
+ * usuario; de unión (leagues.md §4/§10): ventana + bloqueo por IP. Store
+ * inyectado (Redis en producción).
  */
 import type { PrismaClient } from "@prisma/client";
 
-import { LeagueService } from "@/modules/leagues";
+import { LeagueJoinRateLimit, LeagueService } from "@/modules/leagues";
 import {
   createLeagueInputSchema,
+  joinLeagueInputSchema,
   leagueIdInputSchema,
   leagueRankingInputSchema,
 } from "@/shared/validation/leagues";
@@ -45,6 +51,15 @@ export interface LeaguesRouterDeps {
   };
   /** Configuración del rate limit de creación (US-23). */
   rateLimitCfg?: { maxPerWindow: number; windowSec: number };
+  /** Rate limit de unión a ligas (US-25); opcional en tests. */
+  joinRateLimit?: LeagueJoinRateLimit;
+  /** Configuración del rate limit de unión (US-25). */
+  joinRateLimitCfg?: {
+    maxPerWindow: number;
+    windowSec: number;
+    lockoutThreshold: number;
+    lockoutSec: number;
+  };
 }
 
 /** Router inyectable: los tests de integración lo montan con su propia BD. */
@@ -53,6 +68,8 @@ export function createLeaguesRouter(deps: LeaguesRouterDeps) {
     prisma: deps.prisma,
     rateLimit: deps.rateLimit,
     rateLimitCfg: deps.rateLimitCfg,
+    joinRateLimit: deps.joinRateLimit,
+    joinRateLimitCfg: deps.joinRateLimitCfg,
   });
 
   return router({
@@ -78,6 +95,19 @@ export function createLeaguesRouter(deps: LeaguesRouterDeps) {
           actorId: ctx.user.id,
           ip: ctx.ip,
         }),
+      ),
+
+    /**
+     * Se une el actor a una liga (US-25, leagues.md §4/§6, ADR-0025):
+     * pública ⇒ entrada abierta por `leagueId`; privada ⇒ por `code` (el
+     * código resuelve la liga). Validaciones server-side con motivo
+     * explícito; rate-limit + bloqueo por IP (anti fuerza bruta);
+     * transaccional (última plaza: solo uno entra).
+     */
+    join: protectedProcedure
+      .input(joinLeagueInputSchema)
+      .mutation(({ ctx, input }) =>
+        service.joinLeague(input, { actorId: ctx.user.id, ip: ctx.ip }),
       ),
 
     /**
@@ -133,6 +163,13 @@ export function getDefaultLeaguesRouter() {
       rateLimitCfg: {
         maxPerWindow: env.LEAGUE_CREATE_RATE_LIMIT_MAX,
         windowSec: env.LEAGUE_CREATE_RATE_LIMIT_WINDOW_SEC,
+      },
+      joinRateLimit: redisRateLimitStore,
+      joinRateLimitCfg: {
+        maxPerWindow: env.LEAGUE_JOIN_RATE_LIMIT_MAX,
+        windowSec: env.LEAGUE_JOIN_RATE_LIMIT_WINDOW_SEC,
+        lockoutThreshold: env.LEAGUE_JOIN_LOCKOUT_THRESHOLD,
+        lockoutSec: env.LEAGUE_JOIN_LOCKOUT_SEC,
       },
     });
   })();

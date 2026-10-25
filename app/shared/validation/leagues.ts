@@ -77,9 +77,36 @@ export const leagueRankingInputSchema = z.object({
   gpId: z.string().uuid("El identificador de GP no es válido").nullish(),
 });
 
+/**
+ * Unión a una liga (US-25, leagues.md §4/§6, ADR-0025):
+ * - **Pública:** entrada abierta — se une por `leagueId` (sin código,
+ *   ADR-0024).
+ * - **Privada:** por `code` (el código resuelve la liga) o `leagueId` +
+ *   `code`.
+ *
+ * Al menos uno de los dos. Aquí se valida el formato; la elegibilidad
+ * (estado, modo de entrada, código activo, membresía, plaza) y el
+ * anti-fuerza-bruta los revalida el servicio (AGENTS.md §8).
+ */
+export const joinLeagueInputSchema = z
+  .object({
+    leagueId: z.string().uuid("El identificador de liga no es válido").nullish(),
+    code: z
+      .string()
+      .trim()
+      .min(1, "Introduce el código de invitación")
+      .max(64, "El código de invitación no es válido")
+      .nullish(),
+  })
+  .refine((v) => v.leagueId !== undefined || v.code !== undefined, {
+    message: "Indica la liga o el código de invitación",
+    path: ["leagueId"],
+  });
+
 export type LeagueType = z.infer<typeof leagueTypeSchema>;
 export type LeagueVisibility = z.infer<typeof leagueVisibilitySchema>;
 export type LeagueEntryMode = z.infer<typeof leagueEntryModeSchema>;
 export type CreateLeagueInput = z.infer<typeof createLeagueInputSchema>;
 export type LeagueIdInput = z.infer<typeof leagueIdInputSchema>;
 export type LeagueRankingInput = z.infer<typeof leagueRankingInputSchema>;
+export type JoinLeagueInput = z.infer<typeof joinLeagueInputSchema>;

@@ -183,6 +183,14 @@ describe("LigasPage (US-23/US-24)", () => {
     expect(link).toHaveAttribute("href", "/ligas/pub-1");
   });
 
+  it("enlaza a la unión por código (/unirse, US-25)", () => {
+    mockMyLeagues([]);
+    renderLigas(<LigasPage />);
+
+    const link = screen.getByRole("link", { name: "Únete a una liga" });
+    expect(link).toHaveAttribute("href", "/unirse");
+  });
+
   it("muestra el modo de entrada legible de cada liga del directorio", () => {
     mockMyLeagues([]);
     renderLigas(<LigasPage />);

@@ -9,8 +9,9 @@ import { Alert, Button, Field } from "@/shared/components";
 import { trpc } from "@/trpc/client";
 
 /**
- * Ligas (US-23, leagues.md §3; US-24, leagues.md §2): mis ligas, directorio
- * de ligas públicas y creación de una liga.
+ * Ligas (US-23, leagues.md §3; US-24, leagues.md §2; US-25, leagues.md §6):
+ * mis ligas, directorio de ligas públicas, enlace a la unión por código
+ * (`/unirse`) y creación de una liga.
  *
  * El cliente solo envía los campos del formulario: validación, límites de
  * miembros, código de alta entropía y auditoría los hace el servidor
@@ -144,6 +145,9 @@ export default function LigasPage() {
       )}
 
       <h2>Directorio de ligas públicas</h2>
+      <p className="muted">
+        ¿Tienes un código de invitación? <Link href="/unirse">Únete a una liga</Link>.
+      </p>
       {publicLeagues.isPending && <p className="muted">Consultando…</p>}
       {publicLeagues.isError && (
         <Alert variant="error">No se pudo cargar el directorio de ligas.</Alert>

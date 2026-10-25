@@ -937,6 +937,480 @@ describe("US-24 · Liga pública y directorio (PostgreSQL real)", () => {
 });
 
 /**
+ * US-25 · Me uno a una liga por código o invitación (PostgreSQL real,
+ * ADR-0025).
+ *
+ * CA: "validaciones server-side con motivo explícito: 'código no válido',
+ * 'la liga está llena', 'ya eres miembro', 'la liga no acepta entradas';
+ * rate-limiting por IP/usuario en el intento de unión (test de fuerza
+ * bruta: N intentos fallidos → bloqueo temporal); unirse es transaccional
+ * (plaza + membresía, test de concurrencia: dos usuarios por la última
+ * plaza → solo uno entra)".
+ *
+ * Cubre:
+ * - **Unión pública** (entrada abierta, ADR-0024): membresía activa rol
+ *   member + auditoría `league.joined` (`via: open`) + `isMember` en la vista.
+ * - **Unión privada por código**: código activo válido → OK (`via: code`).
+ * - **Motivos de rechazo** (leagues.md §6): "El código no es válido."
+ *   (sin código / código inexistente / revocado / de otra liga), "Ya eres
+ *   miembro de esta liga.", "La liga está llena.", "La liga no acepta
+ *   entradas." (status ≠ active; privada `entryMode=invite`).
+ * - **Anti fuerza bruta** (leagues.md §4/§10, espejo US-01): ventana por IP
+ *   (N+1 → rate-limit); N fallos de código → bloqueo (el código correcto
+ *   también se rechaza hasta que expira); reset del contador con éxito.
+ * - **Concurrencia** (CA): dos usuarios por la última plaza → solo uno entra.
+ */
+describe("US-25 · Unirse a una liga por código o entrada abierta (PostgreSQL real)", () => {
+  let prisma: PrismaClient;
+  let service: LeagueService;
+  const suffix = randomUUID().slice(0, 8);
+
+  beforeAll(() => {
+    prisma = createPrisma();
+    service = new LeagueService({ prisma });
+  });
+
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  /** Crea un usuario aislado y devuelve su id. */
+  async function makeUser(tag: string): Promise<string> {
+    return (
+      await prisma.user.create({
+        data: {
+          email: `j25-${tag}-${suffix}@test.local`,
+          passwordHash: "h",
+          username: `j25_${tag}_${suffix}`,
+        },
+      })
+    ).id;
+  }
+
+  /** Crea una liga pública activa (entrada abierta) y devuelve la vista. */
+  async function makePublic(creatorId: string, name: string, maxMembers = 50) {
+    return service.createLeague(
+      validInput({
+        name,
+        type: "public",
+        visibility: "public",
+        entryMode: "code",
+        maxMembers,
+      }),
+      { ...META, actorId: creatorId },
+    );
+  }
+
+  /** Crea una liga privada por código y devuelve {vista, código}. */
+  async function makePrivate(creatorId: string, name: string) {
+    const view = await service.createLeague(
+      validInput({ name }),
+      { ...META, actorId: creatorId },
+    );
+    return { view, code: view.code as string };
+  }
+
+  it("pública: se une por leagueId (entrada abierta) y queda miembro activo", async () => {
+    const creator = await makeUser("pub-c");
+    const joiner = await makeUser("pub-j");
+    const league = await makePublic(creator, `Pública join ${suffix}`);
+
+    const view = await service.joinLeague(
+      { leagueId: league.id },
+      { ...META, actorId: joiner },
+    );
+
+    expect(view.id).toBe(league.id);
+    expect(view.isMember).toBe(true);
+    expect(view.activeMembers).toBe(2);
+
+    const membership = await prisma.leagueMember.findUniqueOrThrow({
+      where: { leagueId_userId: { leagueId: league.id, userId: joiner } },
+    });
+    expect(membership.status).toBe("active");
+    expect(membership.role).toBe("member");
+  });
+
+  it("pública: auditoría league.joined con via=open (sin el código)", async () => {
+    const creator = await makeUser("pub-a");
+    const joiner = await makeUser("pub-b");
+    const league = await makePublic(creator, `Pública audit ${suffix}`);
+    await service.joinLeague({ leagueId: league.id }, { ...META, actorId: joiner });
+
+    const audit = await prisma.auditLog.findFirst({
+      where: { action: "league.joined", entityId: league.id },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(audit).not.toBeNull();
+    expect(audit!.actorId).toBe(joiner);
+    expect(audit!.entity).toBe("league");
+    const after = audit!.afterData as { userId?: string; via?: string };
+    expect(after.userId).toBe(joiner);
+    expect(after.via).toBe("open");
+    // El código nunca se registra (secreto, ADR-0023).
+    expect(JSON.stringify(audit!.afterData)).not.toContain("code");
+  });
+
+  it("privada: se une con el código activo (via=code)", async () => {
+    const creator = await makeUser("priv-c");
+    const joiner = await makeUser("priv-j");
+    const { view, code } = await makePrivate(creator, `Privada join ${suffix}`);
+
+    const result = await service.joinLeague(
+      { code },
+      { ...META, actorId: joiner },
+    );
+
+    expect(result.id).toBe(view.id);
+    expect(result.isMember).toBe(true);
+    const audit = await prisma.auditLog.findFirst({
+      where: { action: "league.joined", entityId: view.id },
+      orderBy: { createdAt: "desc" },
+    });
+    expect((audit!.afterData as { via?: string }).via).toBe("code");
+  });
+
+  it("privada: leagueId + código de la misma liga → OK", async () => {
+    const creator = await makeUser("priv-both-c");
+    const joiner = await makeUser("priv-both-j");
+    const { view, code } = await makePrivate(creator, `Privada both ${suffix}`);
+
+    const result = await service.joinLeague(
+      { leagueId: view.id, code },
+      { ...META, actorId: joiner },
+    );
+    expect(result.isMember).toBe(true);
+  });
+
+  it("privada: sin código → 'El código no es válido.'", async () => {
+    const creator = await makeUser("nc-c");
+    const joiner = await makeUser("nc-j");
+    const { view } = await makePrivate(creator, `Privada noc ${suffix}`);
+
+    await expect(
+      service.joinLeague({ leagueId: view.id }, { ...META, actorId: joiner }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "El código no es válido.",
+    });
+  });
+
+  it("privada: código inexistente → 'El código no es válido.'", async () => {
+    const creator = await makeUser("nc2-c");
+    const joiner = await makeUser("nc2-j");
+    await makePrivate(creator, `Privada noc2 ${suffix}`);
+
+    await expect(
+      service.joinLeague(
+        { code: "NOEXISTE99" },
+        { ...META, actorId: joiner },
+      ),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "El código no es válido.",
+    });
+  });
+
+  it("privada: código revocado → 'El código no es válido.'", async () => {
+    const creator = await makeUser("rev-c");
+    const joiner = await makeUser("rev-j");
+    const { view, code } = await makePrivate(creator, `Privada rev ${suffix}`);
+    // Rotar revoca el código anterior.
+    await service.rotateCode(view.id, creator, { ...META, actorId: creator });
+
+    await expect(
+      service.joinLeague({ code }, { ...META, actorId: joiner }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "El código no es válido.",
+    });
+  });
+
+  it("privada: código de OTRA liga → 'El código no es válido.'", async () => {
+    const creator = await makeUser("cross-c");
+    const joiner = await makeUser("cross-j");
+    const a = await makePrivate(creator, `Privada cross A ${suffix}`);
+    const b = await makePrivate(creator, `Privada cross B ${suffix}`);
+
+    await expect(
+      service.joinLeague(
+        { leagueId: a.view.id, code: b.code },
+        { ...META, actorId: joiner },
+      ),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "El código no es válido.",
+    });
+  });
+
+  it("ya es miembro → 'Ya eres miembro de esta liga.'", async () => {
+    const creator = await makeUser("dup-c");
+    const joiner = await makeUser("dup-j");
+    const league = await makePublic(creator, `Pública dup ${suffix}`);
+    await service.joinLeague({ leagueId: league.id }, { ...META, actorId: joiner });
+
+    await expect(
+      service.joinLeague({ leagueId: league.id }, { ...META, actorId: joiner }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Ya eres miembro de esta liga.",
+    });
+    // La membresía sigue siendo una sola (no se duplica).
+    const count = await prisma.leagueMember.count({
+      where: { leagueId: league.id, userId: joiner },
+    });
+    expect(count).toBe(1);
+  });
+
+  it("llena → 'La liga está llena.'", async () => {
+    const creator = await makeUser("full-c");
+    const m1 = await makeUser("full-m1");
+    const m2 = await makeUser("full-m2");
+    const league = await makePublic(creator, `Pública full ${suffix}`, 3);
+    await prisma.leagueMember.create({
+      data: { leagueId: league.id, userId: m1, role: "member" },
+    });
+    await prisma.leagueMember.create({
+      data: { leagueId: league.id, userId: m2, role: "member" },
+    });
+
+    await expect(
+      service.joinLeague(
+        { leagueId: league.id },
+        { ...META, actorId: await makeUser("full-x") },
+      ),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "La liga está llena.",
+    });
+  });
+
+  it("status ≠ active → 'La liga no acepta entradas.'", async () => {
+    const creator = await makeUser("st-c");
+    const joiner = await makeUser("st-j");
+    const league = await makePublic(creator, `Pública st ${suffix}`);
+    await prisma.league.update({
+      where: { id: league.id },
+      data: { status: "finished" },
+    });
+
+    await expect(
+      service.joinLeague({ leagueId: league.id }, { ...META, actorId: joiner }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "La liga no acepta entradas.",
+    });
+  });
+
+  it("privada entryMode=invite → 'La liga no acepta entradas.' (se difiere, US-26)", async () => {
+    const creator = await makeUser("inv-c");
+    const joiner = await makeUser("inv-j");
+    const view = await service.createLeague(
+      validInput({ name: `Privada invite ${suffix}`, entryMode: "invite" }),
+      { ...META, actorId: creator },
+    );
+    // Aun así se genera un código (createLeague lo hace para code/mixed;
+    // para invite no). Forzamos un código activo para aislar la regla.
+    await prisma.leagueInvite.create({
+      data: { leagueId: view.id, code: `INVITE${suffix}`, createdBy: creator },
+    });
+
+    await expect(
+      service.joinLeague(
+        { code: `INVITE${suffix}` },
+        { ...META, actorId: joiner },
+      ),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "La liga no acepta entradas.",
+    });
+  });
+
+  it("sin leagueId ni código → 'Indica la liga o el código de invitación'", async () => {
+    await expect(
+      service.joinLeague({}, { ...META, actorId: await makeUser("empty") }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message:
+        "Unión inválida: leagueId: Indica la liga o el código de invitación",
+    });
+  });
+
+  it("liga inexistente → NOT_FOUND", async () => {
+    await expect(
+      service.joinLeague(
+        { leagueId: "00000000-0000-4000-8000-000000000000" },
+        { ...META, actorId: await makeUser("nf") },
+      ),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("concurrencia: dos usuarios por la última plaza → solo uno entra (CA)", async () => {
+    const creator = await makeUser("conc-c");
+    const filler = await makeUser("conc-f");
+    const u1 = await makeUser("conc-1");
+    const u2 = await makeUser("conc-2");
+    // 1 plaza libre (creador + filler = 2 de 3).
+    const league = await makePublic(creator, `Pública conc ${suffix}`, 3);
+    await prisma.leagueMember.create({
+      data: { leagueId: league.id, userId: filler, role: "member" },
+    });
+
+    // u1 y u2 (ambos nuevos) compiten por la última plaza a la vez.
+    const [r1, r2] = await Promise.allSettled([
+      service.joinLeague({ leagueId: league.id }, { ...META, actorId: u1 }),
+      service.joinLeague({ leagueId: league.id }, { ...META, actorId: u2 }),
+    ]);
+
+    const outcomes = [r1, r2].map((r) =>
+      r.status === "fulfilled" ? "ok" : "full",
+    );
+    expect(outcomes).toContain("ok");
+    expect(outcomes).toContain("full");
+    // El perdedor recibe "La liga está llena."
+    const failed = [r1, r2].find((r) => r.status === "rejected");
+    expect(failed).toMatchObject({
+      reason: expect.objectContaining({ message: "La liga está llena." }),
+    });
+    // La liga queda con exactamente 3 miembros (no 4).
+    const count = await prisma.leagueMember.count({
+      where: { leagueId: league.id, status: "active" },
+    });
+    expect(count).toBe(3);
+  });
+
+  describe("anti fuerza bruta (leagues.md §4/§10, espejo US-01)", () => {
+    it("ventana por IP: N+1 intentos → rate-limit", async () => {
+      const store = new InMemoryRateLimitStore();
+      const svc = new LeagueService({
+        prisma,
+        joinRateLimit: store,
+        joinRateLimitCfg: {
+          maxPerWindow: 3,
+          windowSec: 60,
+          lockoutThreshold: 10,
+          lockoutSec: 900,
+        },
+      });
+      const creator = await makeUser("rl-c");
+      const joiner = await makeUser("rl-j");
+      const league = await makePublic(creator, `Pública rl ${suffix}`);
+
+      // 3 intentos permitidos (ya es miembro en el 1º; los siguientes
+      // fallan con "ya eres miembro" pero cuentan en la ventana).
+      for (let i = 1; i <= 3; i++) {
+        await svc
+          .joinLeague({ leagueId: league.id }, { ...META, actorId: joiner })
+          .catch(() => {});
+      }
+      // El 4º se rechaza por ventana (aunque el motivo sea "ya eres miembro").
+      await expect(
+        svc.joinLeague({ leagueId: league.id }, { ...META, actorId: joiner }),
+      ).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+        message: expect.stringContaining("demasiadas peticiones"),
+      });
+    });
+
+    it("N fallos de código → bloqueo (el código correcto también se rechaza)", async () => {
+      const store = new InMemoryRateLimitStore();
+      const svc = new LeagueService({
+        prisma,
+        joinRateLimit: store,
+        joinRateLimitCfg: {
+          maxPerWindow: 100,
+          windowSec: 60,
+          lockoutThreshold: 3,
+          lockoutSec: 900,
+        },
+      });
+      const creator = await makeUser("bf-c");
+      const attacker = await makeUser("bf-a");
+      const { code } = await makePrivate(creator, `Privada bf ${suffix}`);
+
+      // 3 fallos de código (umbral = 3) → bloqueo.
+      for (let i = 1; i <= 3; i++) {
+        await expect(
+          svc.joinLeague({ code: `MAL${i}${suffix}` }, { ...META, actorId: attacker }),
+        ).rejects.toMatchObject({ message: "El código no es válido." });
+      }
+      // Ahora hasta el código CORRECTO se rechaza (bloqueo por IP).
+      await expect(
+        svc.joinLeague({ code }, { ...META, actorId: attacker }),
+      ).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+        message: expect.stringContaining("Demasiados intentos fallidos"),
+      });
+      // La IP sigue bloqueada (el contador de fallos no se reseteó solo).
+      expect(await store.leagueJoinLockRemainingSec(META.ip)).toBeGreaterThan(0);
+    });
+
+    it("el bloqueo expira (setNow) y se puede unir de nuevo", async () => {
+      const store = new InMemoryRateLimitStore();
+      const svc = new LeagueService({
+        prisma,
+        joinRateLimit: store,
+        joinRateLimitCfg: {
+          maxPerWindow: 100,
+          windowSec: 60,
+          lockoutThreshold: 1,
+          lockoutSec: 900,
+        },
+      });
+      const creator = await makeUser("exp-c");
+      const joiner = await makeUser("exp-j");
+      const { code } = await makePrivate(creator, `Privada exp ${suffix}`);
+
+      // 1 fallo (umbral = 1) → bloqueo de 900 s.
+      await expect(
+        svc.joinLeague({ code: "MAL1" }, { ...META, actorId: joiner }),
+      ).rejects.toMatchObject({ message: "El código no es válido." });
+      await expect(
+        svc.joinLeague({ code }, { ...META, actorId: joiner }),
+      ).rejects.toMatchObject({ message: expect.stringContaining("Demasiados intentos fallidos") });
+
+      // Avanza el reloj más allá del bloqueo → se permite.
+      store.setNow(901_000);
+      const result = await svc.joinLeague({ code }, { ...META, actorId: joiner });
+      expect(result.isMember).toBe(true);
+    });
+
+    it("unión correcta resetea el contador de fallos (no acumula)", async () => {
+      const store = new InMemoryRateLimitStore();
+      const svc = new LeagueService({
+        prisma,
+        joinRateLimit: store,
+        joinRateLimitCfg: {
+          maxPerWindow: 100,
+          windowSec: 60,
+          lockoutThreshold: 5,
+          lockoutSec: 900,
+        },
+      });
+      const creator = await makeUser("rst-c");
+      const joiner = await makeUser("rst-j");
+      const { code } = await makePrivate(creator, `Privada rst ${suffix}`);
+
+      // 2 fallos (umbral = 5)…
+      for (let i = 1; i <= 2; i++) {
+        await expect(
+          svc.joinLeague({ code: `MAL${i}` }, { ...META, actorId: joiner }),
+        ).rejects.toMatchObject({ message: "El código no es válido." });
+      }
+      // …unión correcta → el contador se resetea…
+      await svc.joinLeague({ code }, { ...META, actorId: joiner });
+      // …y 3 fallos más NO bloquean (2+3=5 lo bloquearía si no se reseteó).
+      for (let i = 1; i <= 3; i++) {
+        await expect(
+          svc.joinLeague({ code: `MALR${i}` }, { ...META, actorId: joiner }),
+        ).rejects.toMatchObject({ message: "El código no es válido." });
+      }
+      expect(await store.leagueJoinLockRemainingSec(META.ip)).toBe(0);
+    });
+  });
+});
+
+/**
  * US-23 · Router `leagues` (glue BFF, ADR-0023) — el actor sale del
  * contexto (nunca del input) y los procedimientos delegan en el servicio.
  *
@@ -1170,6 +1644,125 @@ describe("US-23 · Router leagues (glue BFF)", () => {
     const caller = leaguesRouter.createCaller(await ctxAnon());
     await expect(caller.ranking({ leagueId: created.id })).rejects.toMatchObject({
       code: "NOT_FOUND",
+    });
+  });
+
+  // ── US-25 · join (glue BFF, ADR-0025) ──────────────────────────────────
+
+  let user2Token: string;
+
+  /** Contexto autenticado con la sesión del usuario 2 del test. */
+  async function ctxUser2() {
+    const req = new Request("http://localhost/api/trpc/leagues", {
+      method: "POST",
+      headers: {
+        "x-forwarded-for": "198.51.100.73",
+        cookie: `session=${user2Token}`,
+      },
+    });
+    return createContext(req, prisma);
+  }
+
+  it("join (router, sin sesión) → UNAUTHORIZED (unirse exige cuenta)", async () => {
+    const callerAuth = leaguesRouter.createCaller(await ctxAuth());
+    const created = await callerAuth.create(
+      validInput({
+        name: `Pública join ${rsuffix}`,
+        type: "public",
+        visibility: "public",
+      }),
+    );
+
+    const caller = leaguesRouter.createCaller(await ctxAnon());
+    await expect(
+      caller.join({ leagueId: created.id }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("join (router, con sesión): pública → OK (entrada abierta, ADR-0024)", async () => {
+    // Usuario 2 con sesión real (registro vía router auth).
+    const ctxReg = await createContext(
+      new Request("http://localhost/api/trpc/leagues", {
+        method: "POST",
+        headers: { "x-forwarded-for": "198.51.100.74" },
+      }),
+      prisma,
+    );
+    await authRouter.createCaller(ctxReg).register({
+      email: `router2-${rsuffix}@test.local`,
+      username: `router2_${rsuffix}`,
+      password: "contraseña-segura-1",
+      termsAccepted: true,
+    });
+    const cookie = ctxReg.pendingCookies[0] ?? "";
+    user2Token = /^session=([0-9a-f]{64});/.exec(cookie)?.[1] ?? "";
+    if (!user2Token) throw new Error(`Cookie de sesión inesperada: ${cookie}`);
+
+    const created = await leaguesRouter
+      .createCaller(await ctxAuth())
+      .create(
+        validInput({
+          name: `Pública join2 ${rsuffix}`,
+          type: "public",
+          visibility: "public",
+        }),
+      );
+
+    const view = await leaguesRouter
+      .createCaller(await ctxUser2())
+      .join({ leagueId: created.id });
+    expect(view.id).toBe(created.id);
+    expect(view.isMember).toBe(true);
+    expect(view.activeMembers).toBe(2);
+
+    // El actor sale del contexto: la membresía es del usuario 2.
+    const membership = await prisma.leagueMember.findUniqueOrThrow({
+      where: {
+        leagueId_userId: {
+          leagueId: created.id,
+          userId: (
+            await prisma.user.findFirst({
+              where: { username: `router2_${rsuffix}` },
+            })
+          )!.id,
+        },
+      },
+    });
+    expect(membership.status).toBe("active");
+    expect(membership.role).toBe("member");
+  });
+
+  it("join (router, con sesión): privada por código → OK (el código resuelve la liga)", async () => {
+    const created = await leaguesRouter
+      .createCaller(await ctxAuth())
+      .create(validInput({ name: `Privada join ${rsuffix}` }));
+    const code = created.code as string;
+
+    const view = await leaguesRouter
+      .createCaller(await ctxUser2())
+      .join({ code });
+    expect(view.id).toBe(created.id);
+    expect(view.isMember).toBe(true);
+  });
+
+  it("join (router, con sesión): ya miembro → 'Ya eres miembro de esta liga.'", async () => {
+    const created = await leaguesRouter
+      .createCaller(await ctxAuth())
+      .create(
+        validInput({
+          name: `Pública dup ${rsuffix}`,
+          type: "public",
+          visibility: "public",
+        }),
+      );
+    const caller2 = leaguesRouter.createCaller(await ctxUser2());
+    await caller2.join({ leagueId: created.id });
+
+    await expect(
+      caller2.join({ leagueId: created.id }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Ya eres miembro de esta liga.",
     });
   });
 });

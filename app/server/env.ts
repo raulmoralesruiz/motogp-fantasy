@@ -34,6 +34,16 @@ const serverEnvSchema = z.object({
     .int()
     .positive()
     .default(3600),
+  // US-25 · Unión a ligas (security.md §1.6, ADR-0025): rate limit POR IP
+  // (ventana) + bloqueo temporal tras N fallos de código (anti fuerza
+  // bruta, leagues.md §4/§10). Parámetros operativos, no reglas de juego.
+  LEAGUE_JOIN_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+  LEAGUE_JOIN_RATE_LIMIT_WINDOW_SEC: z.coerce.number()
+    .int()
+    .positive()
+    .default(60),
+  LEAGUE_JOIN_LOCKOUT_THRESHOLD: z.coerce.number().int().positive().default(5),
+  LEAGUE_JOIN_LOCKOUT_SEC: z.coerce.number().int().positive().default(900),
   // URL pública de la app: monta el link de recuperación (US-02). En
   // producción la fija el build (build-arg) y el contenedor.
   NEXT_PUBLIC_APP_URL: z.string().min(1).default("http://localhost:3000"),

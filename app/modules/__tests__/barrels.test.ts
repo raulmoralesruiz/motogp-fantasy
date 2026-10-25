@@ -3,8 +3,9 @@
  * ADR-0017 + US-15; Fase 3, ADR-0018/ADR-0019/US-21; Fase 4, US-23/US-24):
  * `leagues` exporta `LeagueService` (US-15, dashboard: ligas activas +
  * rankings), la fórmula pura de ranking/desempates (US-21, leagues.md §8),
- * la generación del código de invitación (US-23, leagues.md §4) y la regla
- * de visibilidad (US-24, leagues.md §9).
+ * la generación del código de invitación (US-23, leagues.md §4), la regla
+ * de visibilidad (US-24, leagues.md §9) y la regla de unión (US-25,
+ * leagues.md §6).
  * `lineups` implementa el núcleo puro (Fase 2, unidad 1) y exporta sus
  * fórmulas (valores; el resto son tipos). `jobs` implementa los jobs de
  * precios (US-08, ADR-0015) y de resultados (US-17, ADR-0019), `market`
@@ -24,14 +25,16 @@ import * as market from "../market/index.js";
 import * as results from "../results/index.js";
 
 describe("barrels de módulos (Fase 0, T-03)", () => {
-  it("leagues exporta LeagueService, la fórmula pura de ranking, el código de invitación y la visibilidad (US-15/US-21/US-23/US-24)", () => {
+  it("leagues exporta LeagueService, la fórmula pura de ranking, el código de invitación, la visibilidad y la regla de unión (US-15/US-21/US-23/US-24/US-25)", () => {
     expect(Object.keys(leagues).sort()).toEqual([
       "INVITE_CODE_ALPHABET",
       "INVITE_CODE_DEFAULT_LENGTH",
       "INVITE_CODE_MIN_LENGTH",
       "LeagueService",
       "canViewLeague",
+      "evaluateLeagueJoin",
       "generateLeagueCode",
+      "shouldLockLeagueJoin",
       "sortRanking",
     ]);
   });

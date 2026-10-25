@@ -293,4 +293,143 @@ describe("LeagueDetailPage (US-24)", () => {
       screen.getByText("Solo el admin de la liga puede hacer esta acción."),
     ).toBeInTheDocument();
   });
+
+  describe("unión a la liga pública (US-25, ADR-0025)", () => {
+    const PUBLIC_LEAGUE = {
+      ...LEAGUE,
+      id: "pub-1",
+      type: "public",
+      visibility: "public",
+      isAdmin: false,
+      isMember: false,
+      code: null,
+      members: [{ username: "fundador", role: "admin" }],
+    };
+
+    function mockMe(isError = false) {
+      mockResult(trpc.auth.me.useQuery, {
+        data: isError ? undefined : { username: "yo", email: "yo@liga.com", roles: [] },
+        isPending: false,
+        isError,
+        error: isError ? new Error("No estás autenticado") : undefined,
+      });
+    }
+
+    it("pública + autenticado + no miembro: muestra el botón de unión", () => {
+      mockLeague(PUBLIC_LEAGUE);
+      mockRanking(RANKING);
+      mockMe();
+      renderDetail(<LeagueDetailPage />);
+
+      expect(
+        screen.getByRole("button", { name: "Unirme a la liga" }),
+      ).toBeInTheDocument();
+    });
+
+    it("pública + sin sesión: ofrece iniciar sesión (unirse exige cuenta)", () => {
+      mockLeague(PUBLIC_LEAGUE);
+      mockRanking(RANKING);
+      mockMe(true);
+      renderDetail(<LeagueDetailPage />);
+
+      expect(screen.getByText(/Para unirte a la liga necesitas una cuenta/)).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Inicia sesión" })).toHaveAttribute(
+        "href",
+        "/login",
+      );
+      expect(
+        screen.queryByRole("button", { name: "Unirme a la liga" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("pública + ya miembro: no muestra el botón de unión", () => {
+      mockLeague({ ...PUBLIC_LEAGUE, isMember: true });
+      mockRanking(RANKING);
+      mockMe();
+      renderDetail(<LeagueDetailPage />);
+
+      expect(
+        screen.queryByRole("button", { name: "Unirme a la liga" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("privada: no muestra el botón de unión (se une por código en /unirse)", () => {
+      mockLeague(LEAGUE);
+      mockRanking(RANKING);
+      mockMe();
+      renderDetail(<LeagueDetailPage />);
+
+      expect(
+        screen.queryByRole("button", { name: "Unirme a la liga" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("clic en unirse: envía la leagueId (entrada abierta)", async () => {
+      mockLeague(PUBLIC_LEAGUE);
+      mockRanking(RANKING);
+      mockMe();
+      const mutate = mockMutation(trpc.leagues.join.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: "Unirme a la liga" }));
+
+      expect(mutate.mock.calls[0]?.[0]).toEqual({ leagueId: "pub-1" });
+    });
+
+    it("si la unión falla muestra el motivo del servidor", async () => {
+      mockLeague(PUBLIC_LEAGUE);
+      mockRanking(RANKING);
+      mockMe();
+      mockMutation(trpc.leagues.join.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: "Unirme a la liga" }));
+
+      await act(async () => {
+        mutationOptions(trpc.leagues.join.useMutation).onError?.(
+          new Error("La liga está llena."),
+        );
+      });
+
+      expect(screen.getByText("La liga está llena.")).toBeInTheDocument();
+    });
+
+    it("si la unión tiene éxito no muestra error (invalida la vista de la liga)", async () => {
+      mockLeague(PUBLIC_LEAGUE);
+      mockRanking(RANKING);
+      mockMe();
+      mockMutation(trpc.leagues.join.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: "Unirme a la liga" }));
+
+      await act(async () => {
+        mutationOptions(trpc.leagues.join.useMutation).onSuccess?.(
+          { ...PUBLIC_LEAGUE, isMember: true },
+        );
+      });
+
+      expect(screen.queryByText("La liga está llena.")).not.toBeInTheDocument();
+    });
+
+    it("pública + sesión pendiente: muestra 'Consultando…' en la sección de unión", () => {
+      mockLeague(PUBLIC_LEAGUE);
+      mockRanking(RANKING);
+      mockResult(trpc.auth.me.useQuery, {
+        data: undefined,
+        isPending: true,
+        isError: false,
+      });
+      renderDetail(<LeagueDetailPage />);
+
+      expect(screen.getByRole("heading", { name: "Unirse" })).toBeInTheDocument();
+      expect(screen.getByText("Consultando…")).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Unirme a la liga" }),
+      ).not.toBeInTheDocument();
+    });
+  });
 });

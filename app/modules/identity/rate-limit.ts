@@ -124,6 +124,26 @@ export interface RateLimitStore {
     userId: string,
     windowSec: number,
   ): Promise<{ count: number; remainingSec: number }>;
+  /**
+   * Registra un intento de unión a una liga de la IP (ventana fija,
+   * US-25/security.md §1.6 "rate-limiting en unión por código"; todas las
+   * uniones cuentan — públicas y por código).
+   */
+  recordLeagueJoinAttempt(
+    ip: string,
+    windowSec: number,
+  ): Promise<{ count: number; remainingSec: number }>;
+  /**
+   * Registra un FALLO de código de la IP (contador consecutivo, US-25).
+   * Solo los fallos de código cuentan (leagues.md §4: anti fuerza bruta).
+   */
+  recordLeagueJoinFailure(ip: string): Promise<number>;
+  /** Borra los fallos de código de la IP (unión correcta, US-25). */
+  resetLeagueJoinFailures(ip: string): Promise<void>;
+  /** Bloquea la IP durante `lockoutSec` segundos (US-25). */
+  lockLeagueJoin(ip: string, lockoutSec: number): Promise<void>;
+  /** Segundos restantes del bloqueo de la IP (0 si no está bloqueada, US-25). */
+  leagueJoinLockRemainingSec(ip: string): Promise<number>;
 }
 
 /**
@@ -136,8 +156,11 @@ export class InMemoryRateLimitStore implements RateLimitStore {
   private resetWindows = new Map<string, { count: number; resetAtMs: number }>();
   private deleteWindows = new Map<string, { count: number; resetAtMs: number }>();
   private leagueCreateWindows = new Map<string, { count: number; resetAtMs: number }>();
+  private leagueJoinWindows = new Map<string, { count: number; resetAtMs: number }>();
   private failures = new Map<string, number>();
   private locks = new Map<string, number>();
+  private leagueJoinFailures = new Map<string, number>();
+  private leagueJoinLocks = new Map<string, number>();
 
   /** Avanza el reloj interno (ms). */
   setNow(ms: number): void {
@@ -189,6 +212,33 @@ export class InMemoryRateLimitStore implements RateLimitStore {
     windowSec: number,
   ): Promise<{ count: number; remainingSec: number }> {
     return this.recordWindow(this.leagueCreateWindows, userId, windowSec);
+  }
+
+  async recordLeagueJoinAttempt(
+    ip: string,
+    windowSec: number,
+  ): Promise<{ count: number; remainingSec: number }> {
+    return this.recordWindow(this.leagueJoinWindows, ip, windowSec);
+  }
+
+  async recordLeagueJoinFailure(ip: string): Promise<number> {
+    const count = (this.leagueJoinFailures.get(ip) ?? 0) + 1;
+    this.leagueJoinFailures.set(ip, count);
+    return count;
+  }
+
+  async resetLeagueJoinFailures(ip: string): Promise<void> {
+    this.leagueJoinFailures.delete(ip);
+  }
+
+  async lockLeagueJoin(ip: string, lockoutSec: number): Promise<void> {
+    this.leagueJoinLocks.set(ip, this.nowMs + lockoutSec * 1000);
+  }
+
+  async leagueJoinLockRemainingSec(ip: string): Promise<number> {
+    const unlockAtMs = this.leagueJoinLocks.get(ip);
+    if (unlockAtMs === undefined) return 0;
+    return Math.max(0, Math.ceil((unlockAtMs - this.nowMs) / 1000));
   }
 
   async recordFailure(account: string): Promise<number> {
