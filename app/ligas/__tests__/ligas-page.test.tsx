@@ -1,12 +1,16 @@
 // @vitest-environment jsdom
 /**
- * Tests de `app/ligas/ligas-page.tsx` (US-23, leagues.md §3):
- * - Lista de mis ligas (nombre, tipo, miembros, admin, código).
+ * Tests de `app/ligas/ligas-page.tsx` (US-23, leagues.md §3; US-24,
+ * leagues.md §2):
+ * - Mis ligas (nombre, tipo, miembros, admin) → enlace al detalle.
+ * - Directorio de ligas públicas (US-24): lista, vacío, error, enlaces.
  * - Formulario de creación (nombre/descripción/tipo/visibilidad/min-máx/
  *   modo de entrada/duración) → `leagues.create` con el payload correcto.
- * - Éxito: la liga creada + su código (o aviso de modo sin código).
+ * - Éxito: la liga creada + enlace al detalle.
  * - Error: el mensaje del servidor.
- * - Rotación de código (leagues.md §4): `leagues.rotateCode` + aviso.
+ *
+ * La rotación de código (leagues.md §4) vive en el detalle (US-24) y se
+ * cubre en `__tests__/league-detail-page.test.tsx`.
  *
  * Sobre el `trpc` mockeado (test/trpc-mock): los callbacks de éxito/error
  * de las mutations se invocan manualmente (patrón de los tests de lineups).
@@ -36,8 +40,33 @@ const LEAGUE = {
   startDate: null,
   endDate: null,
   activeMembers: 3,
+  members: [{ username: "piloto1", role: "admin" }],
   isAdmin: true,
   code: "ABC123XYZ9",
+};
+
+const PUBLIC_LEAGUE = {
+  id: "pub-1",
+  name: "Liga pública general",
+  description: "Comunidad abierta",
+  type: "public",
+  minMembers: 2,
+  maxMembers: 50,
+  entryMode: "mixed",
+  activeMembers: 12,
+  createdAt: new Date("2026-10-01T00:00:00Z"),
+};
+
+const PUBLIC_LEAGUE_INVITE = {
+  id: "pub-2",
+  name: "Liga por invitación",
+  description: null,
+  type: "public",
+  minMembers: 2,
+  maxMembers: 10,
+  entryMode: "invite",
+  activeMembers: 3,
+  createdAt: new Date("2026-10-02T00:00:00Z"),
 };
 
 function renderLigas(ui: ReactElement) {
@@ -52,6 +81,15 @@ function mockMyLeagues(data: unknown) {
     data,
     isPending: false,
     isError: false,
+  });
+}
+
+function mockPublicLeagues(data: unknown, isError = false) {
+  mockResult(trpc.leagues.listPublic.useQuery, {
+    data,
+    isPending: false,
+    isError,
+    error: isError ? new Error("fallo") : undefined,
   });
 }
 
@@ -84,14 +122,20 @@ function mutationOptions(hook: unknown): {
   };
 }
 
-describe("LigasPage (US-23)", () => {
+describe("LigasPage (US-23/US-24)", () => {
   beforeEach(() => {
     resetTrpcMocks();
+    mockPublicLeagues([PUBLIC_LEAGUE, PUBLIC_LEAGUE_INVITE]);
   });
 
-  it("muestra el estado pendiente", () => {
+  it("muestra el estado pendiente de mis ligas", () => {
+    mockResult(trpc.leagues.myLeagues.useQuery, {
+      data: undefined,
+      isPending: true,
+      isError: false,
+    });
     renderLigas(<LigasPage />);
-    expect(screen.getByText("Consultando…")).toBeInTheDocument();
+    expect(screen.getAllByText("Consultando…").length).toBeGreaterThan(0);
   });
 
   it("muestra un error si la lista de ligas falla", () => {
@@ -107,23 +151,63 @@ describe("LigasPage (US-23)", () => {
     ).toBeInTheDocument();
   });
 
-  it("muestra el vacío elegante si no hay ligas", () => {
+  it("muestra el vacío elegante si no hay ligas propias", () => {
     mockMyLeagues([]);
     renderLigas(<LigasPage />);
     expect(
-      screen.getByText("Todavía no estás en ninguna liga. Crea una abajo."),
+      screen.getByText(/Todavía no estás en ninguna liga/),
     ).toBeInTheDocument();
   });
 
-  it("muestra mis ligas con tipo, miembros, admin y código", () => {
+  it("muestra mis ligas con tipo, miembros, admin y enlace al detalle", () => {
     mockMyLeagues([LEAGUE]);
     renderLigas(<LigasPage />);
 
     expect(screen.getByText("Liga de los amigos")).toBeInTheDocument();
     expect(screen.getByText(/privada · 3 miembros/)).toBeInTheDocument();
     expect(screen.getByText("· admin")).toBeInTheDocument();
-    expect(screen.getByText("ABC123XYZ9")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Rotar código" })).toBeInTheDocument();
+    // Enlace al detalle (US-24): el código ya no se muestra en la lista.
+    const link = screen.getByRole("link", { name: "Liga de los amigos" });
+    expect(link).toHaveAttribute("href", "/ligas/league-1");
+    expect(screen.queryByText("ABC123XYZ9")).not.toBeInTheDocument();
+  });
+
+  it("muestra el directorio de ligas públicas (US-24) con enlace", () => {
+    mockMyLeagues([]);
+    renderLigas(<LigasPage />);
+
+    expect(screen.getByText("Liga pública general")).toBeInTheDocument();
+    expect(screen.getByText(/Comunidad abierta/)).toBeInTheDocument();
+    expect(screen.getByText(/12\/50 miembros/)).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: "Liga pública general" });
+    expect(link).toHaveAttribute("href", "/ligas/pub-1");
+  });
+
+  it("muestra el modo de entrada legible de cada liga del directorio", () => {
+    mockMyLeagues([]);
+    renderLigas(<LigasPage />);
+
+    // mixed → "código o invitación"; invite → "solo invitación" (leagues.md §3).
+    expect(screen.getByText(/código o invitación/)).toBeInTheDocument();
+    expect(screen.getByText(/solo invitación/)).toBeInTheDocument();
+  });
+
+  it("muestra el vacío del directorio si no hay públicas", () => {
+    mockMyLeagues([]);
+    mockPublicLeagues([]);
+    renderLigas(<LigasPage />);
+    expect(
+      screen.getByText(/Todavía no hay ligas públicas/),
+    ).toBeInTheDocument();
+  });
+
+  it("muestra un error si el directorio falla", () => {
+    mockMyLeagues([]);
+    mockPublicLeagues(undefined, true);
+    renderLigas(<LigasPage />);
+    expect(
+      screen.getByText("No se pudo cargar el directorio de ligas."),
+    ).toBeInTheDocument();
   });
 
   it("muestra el formulario de creación con los campos de leagues.md §3", () => {
@@ -176,7 +260,7 @@ describe("LigasPage (US-23)", () => {
     });
   });
 
-  it("tras el éxito muestra la liga creada con su código", async () => {
+  it("tras el éxito muestra la liga creada con enlace al detalle", async () => {
     mockMyLeagues([]);
     mockMutation(trpc.leagues.create.useMutation);
     renderLigas(<LigasPage />);
@@ -189,36 +273,13 @@ describe("LigasPage (US-23)", () => {
       mutationOptions(trpc.leagues.create.useMutation).onSuccess?.({
         ...LEAGUE,
         name: "Liga nueva",
-        code: "KLM999ABC2",
+        id: "new-1",
       });
     });
 
-    expect(screen.getByText("Liga «Liga nueva» creada.")).toBeInTheDocument();
-    expect(screen.getByText("KLM999ABC2")).toBeInTheDocument();
-  });
-
-  it("tras el éxito sin código (modo invitación) lo avisa", async () => {
-    mockMyLeagues([]);
-    mockMutation(trpc.leagues.create.useMutation);
-    renderLigas(<LigasPage />);
-
-    const user = userEvent.setup();
-    await user.type(screen.getByLabelText("Nombre"), "Liga sin código");
-    await user.selectOptions(screen.getByLabelText("Modo de entrada"), "invite");
-    await user.click(screen.getByRole("button", { name: "Crear liga" }));
-
-    await act(async () => {
-      mutationOptions(trpc.leagues.create.useMutation).onSuccess?.({
-        ...LEAGUE,
-        name: "Liga sin código",
-        entryMode: "invite",
-        code: null,
-      });
-    });
-
-    expect(
-      screen.getByText(/Esta liga no usa código de invitación/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Liga «Liga nueva» creada\./)).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: "Ver detalle" });
+    expect(link).toHaveAttribute("href", "/ligas/new-1");
   });
 
   it("si la creación falla muestra el motivo del servidor", async () => {
@@ -238,46 +299,6 @@ describe("LigasPage (US-23)", () => {
 
     expect(
       screen.getByText("El máximo de miembros no puede superar 50."),
-    ).toBeInTheDocument();
-  });
-
-  it("rota el código de una liga y muestra el nuevo (leagues.md §4)", async () => {
-    mockMyLeagues([LEAGUE]);
-    const mutate = mockMutation(trpc.leagues.rotateCode.useMutation);
-    renderLigas(<LigasPage />);
-
-    const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Rotar código" }));
-
-    expect(mutate.mock.calls[0]?.[0]).toEqual({ leagueId: "league-1" });
-
-    await act(async () => {
-      mutationOptions(trpc.leagues.rotateCode.useMutation).onSuccess?.(
-        "NUEVO456CD7",
-      );
-    });
-
-    expect(
-      screen.getByText(/Código rotado. El código anterior quedó revocado. Nuevo código: NUEVO456CD7/),
-    ).toBeInTheDocument();
-  });
-
-  it("si la rotación falla muestra el motivo del servidor", async () => {
-    mockMyLeagues([LEAGUE]);
-    mockMutation(trpc.leagues.rotateCode.useMutation);
-    renderLigas(<LigasPage />);
-
-    const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Rotar código" }));
-
-    await act(async () => {
-      mutationOptions(trpc.leagues.rotateCode.useMutation).onError?.(
-        new Error("Solo el admin de la liga puede hacer esta acción."),
-      );
-    });
-
-    expect(
-      screen.getByText("Solo el admin de la liga puede hacer esta acción."),
     ).toBeInTheDocument();
   });
 });

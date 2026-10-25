@@ -23,13 +23,15 @@
 import type { ReactNode } from "react";
 import { vi } from "vitest";
 
-/** Estado de navegación controlable (router + query string). */
+/** Estado de navegación controlable (router + query string + params). */
 export const navigation = {
   push: vi.fn(),
   replace: vi.fn(),
   refresh: vi.fn(),
   back: vi.fn(),
   searchParams: new URLSearchParams(),
+  /** Params de ruta (US-24: `/ligas/[id]`); se fija por test. */
+  params: {} as Record<string, string>,
 };
 
 /** Restaura el estado de navegación (llamar en `beforeEach`). */
@@ -39,13 +41,15 @@ export function resetNavigationMocks(): void {
   navigation.refresh.mockReset();
   navigation.back.mockReset();
   navigation.searchParams = new URLSearchParams();
+  navigation.params = {};
 }
 
-/** Mock de `next/navigation`: `useRouter`/`useSearchParams` con estado controlable. */
+/** Mock de `next/navigation`: `useRouter`/`useSearchParams`/`useParams` con estado controlable. */
 export const navigationMock = {
   useRouter: () => navigation,
   useSearchParams: () => navigation.searchParams,
   usePathname: () => "/",
+  useParams: () => navigation.params,
 };
 
 /** Mock de `next/link`: renderiza un ancla plana (sin contexto del app router). */

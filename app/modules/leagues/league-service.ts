@@ -39,7 +39,7 @@ import { appendAudit } from "@/modules/admin";
 import { PROVISIONAL_SEASON_RULES } from "@/shared/config";
 import { createLeagueInputSchema } from "@/shared/validation/leagues";
 
-import { generateLeagueCode, sortRanking } from "./core";
+import { canViewLeague, generateLeagueCode, sortRanking } from "./core";
 
 export interface LeagueServiceDeps {
   prisma: PrismaClient;
@@ -69,7 +69,14 @@ export interface AuditMeta {
   ip: string;
 }
 
-/** Vista de una liga para la UI (US-23). */
+/** Miembro expuesto en la vista (US-24, leagues.md §9): solo seudónimo + rol. */
+export interface LeagueMemberView {
+  /** Seudónimo público (`profiles.displayName ?? users.username`); nunca PII. */
+  username: string;
+  role: "admin" | "member";
+}
+
+/** Vista de una liga para la UI (US-23, extendida por US-24). */
 export interface LeagueView {
   id: string;
   name: string;
@@ -83,13 +90,51 @@ export interface LeagueView {
   endDate: Date | null;
   /** Miembros activos (status = active). */
   activeMembers: number;
+  /**
+   * Miembros activos con seudónimo + rol (US-24, leagues.md §9: solo el
+   * nombre de usuario, nunca PII). Admins primero, luego por antigüedad.
+   */
+  members: LeagueMemberView[];
   /** El actor es admin de la liga (miembro activo con rol admin). */
   isAdmin: boolean;
   /**
    * Código activo: solo lo ve el admin (leagues.md §5); `null` si la liga
-   * no tiene código activo (modo `invite` o sin rotar).
+   * no tiene código activo (modo `invite` o sin rotar) o si el actor no es
+   * admin (US-24: el código sigue siendo secreto también en ligas públicas).
    */
   code: string | null;
+}
+
+/** Resumen de una liga pública para el directorio (US-24, leagues.md §2). */
+export interface PublicLeagueSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  type: LeagueType;
+  minMembers: number;
+  maxMembers: number;
+  entryMode: LeagueEntryMode;
+  /** Miembros activos (status = active). */
+  activeMembers: number;
+  createdAt: Date;
+}
+
+/** Fila del ranking de una liga (US-24, leagues.md §8/§9): posición + seudónimo. */
+export interface LeagueRankingEntry {
+  position: number;
+  /** Seudónimo público (`profiles.displayName ?? users.username`); nunca PII. */
+  username: string;
+  points: number;
+}
+
+/** Ranking de una liga (US-24): la última versión publicada (US-21/ADR-0022). */
+export interface LeagueRankingView {
+  /** Filas ordenadas por posición; `[]` si aún no hay ranking publicado. */
+  entries: LeagueRankingEntry[];
+  /** Momento del cálculo de la versión vigente (null si no hay filas). */
+  computedAt: Date | null;
+  /** Versión de resultados que la originó (null si no hay filas). */
+  resultsVersion: string | null;
 }
 
 /** Posición del usuario en una liga (US-15): por GP y general. */
@@ -267,29 +312,73 @@ export class LeagueService {
   }
 
   /**
-   * Detalle de una liga (US-23): solo los **miembros activos** la ven
-   * (leagues.md §9: las privadas no son visibles para extraños; la
-   * accesibilidad de ligas públicas la añade US-24). El código solo lo
-   * devuelve el admin (leagues.md §5).
+   * Detalle de una liga (US-23, extendido por US-24, ADR-0024):
+   * - **Pública** (`type = public`) ⇒ cualquiera la ve (autenticado o no).
+   * - **Privada** (`type = private`) ⇒ solo miembros activos; un extraño
+   *   (autenticado o no) recibe NOT_FOUND idéntico al de una liga inexistente
+   *   (no se revela la existencia — leagues.md §9, US-24 CA, T-12 IDOR).
    *
-   * Fuera de la liga → NOT_FOUND (no se revela la existencia, US-24 CA).
+   * El código solo lo devuelve el admin (leagues.md §5; US-24: sigue siendo
+   * secreto también en ligas públicas). `userId` es `null` si no hay sesión.
    */
-  async getLeague(leagueId: string, userId: string): Promise<LeagueView> {
-    const league = await this.deps.prisma.league.findUnique({
-      where: { id: leagueId },
+  async getLeague(leagueId: string, userId: string | null): Promise<LeagueView> {
+    await this.assertCanView(leagueId, userId);
+    return this.toLeagueView(leagueId, userId);
+  }
+
+  /**
+   * Ranking de una liga (US-24, leagues.md §8/§9): la **última versión
+   * publicada** (US-21/ADR-0022: la más reciente por `computedAt`) de
+   * `rankings` — general (`gpId = null`) o por GP — con seudónimos (nunca
+   * PII, leagues.md §9). Misma regla de acceso que el detalle: pública ⇒
+   * cualquiera; privada ⇒ solo miembros activos (extraños → NOT_FOUND).
+   *
+   * Los rankings son DERIVADOS versionados (data-model.md §5, invariante 7):
+   * se leen, no se recalculan en la lectura (el recálculo es el job de
+   * US-18/US-19/US-21). Sin filas publicadas → vacío elegante (precedente
+   * US-15).
+   */
+  async leagueRanking(
+    leagueId: string,
+    gpId: string | null,
+    userId: string | null,
+  ): Promise<LeagueRankingView> {
+    await this.assertCanView(leagueId, userId);
+
+    // Ancla de la versión vigente: la fila más reciente de esta (liga, GP).
+    const anchor = await this.deps.prisma.ranking.findFirst({
+      where: { leagueId, gpId },
+      orderBy: [{ computedAt: "desc" }, { createdAt: "desc" }],
+      select: { computedAt: true, resultsVersion: true },
     });
-    if (!league) {
-      throw new TRPCError({ code: "NOT_FOUND", message: "La liga no existe." });
+    if (!anchor) {
+      return { entries: [], computedAt: null, resultsVersion: null };
     }
-    const membership = await this.deps.prisma.leagueMember.findUnique({
-      where: { leagueId_userId: { leagueId, userId } },
+
+    // Toda la versión (mismo `computedAt` + `resultsVersion`), por posición.
+    const rows = await this.deps.prisma.ranking.findMany({
+      where: {
+        leagueId,
+        gpId,
+        computedAt: anchor.computedAt,
+        resultsVersion: anchor.resultsVersion,
+      },
+      select: {
+        position: true,
+        points: true,
+        user: { select: { username: true, profile: { select: { displayName: true } } } },
+      },
+      orderBy: { position: "asc" },
     });
-    if (!membership || membership.status !== "active") {
-      // Mismo error que "no existe": no se revela la existencia de ligas
-      // privadas a extraños (leagues.md §9, US-24 CA).
-      throw new TRPCError({ code: "NOT_FOUND", message: "La liga no existe." });
-    }
-    return this.toLeagueView(league.id, userId);
+    return {
+      entries: rows.map((r) => ({
+        position: r.position,
+        username: r.user.profile?.displayName ?? r.user.username,
+        points: Number(r.points),
+      })),
+      computedAt: anchor.computedAt,
+      resultsVersion: anchor.resultsVersion,
+    };
   }
 
   /** Ligas activas del usuario (US-23): detalle + código si es admin. */
@@ -301,6 +390,42 @@ export class LeagueService {
     });
     if (memberships.length === 0) return [];
     return Promise.all(memberships.map((m) => this.toLeagueView(m.leagueId, userId)));
+  }
+
+  /**
+   * Directorio de ligas públicas (US-24, leagues.md §2/§9): solo las ligas
+   * `type = public` y `status = active` (una pública `finished`/`archived` es
+   * histórico — accesible por ID — pero no descubre ligas). Orden por nombre
+   * (estable y predecible). Sin sesión: es público.
+   *
+   * El resumen no incluye el código (secreto, solo admin) ni la membresía.
+   */
+  async listPublic(): Promise<PublicLeagueSummary[]> {
+    const leagues = await this.deps.prisma.league.findMany({
+      where: { type: "public", status: "active" },
+      orderBy: { name: "asc" },
+    });
+    if (leagues.length === 0) return [];
+
+    const ids = leagues.map((l) => l.id);
+    const counts = await this.deps.prisma.leagueMember.groupBy({
+      by: ["leagueId"],
+      where: { leagueId: { in: ids }, status: "active" },
+      _count: { leagueId: true },
+    });
+    const countByLeague = new Map(counts.map((c) => [c.leagueId, c._count.leagueId]));
+
+    return leagues.map((l) => ({
+      id: l.id,
+      name: l.name,
+      description: l.description,
+      type: l.type,
+      minMembers: l.minMembers,
+      maxMembers: l.maxMembers,
+      entryMode: l.entryMode,
+      activeMembers: countByLeague.get(l.id) ?? 0,
+      createdAt: l.createdAt,
+    }));
   }
 
   // ── US-15 · Dashboard (lecturas de solo lectura) ───────────────────────
@@ -693,22 +818,69 @@ export class LeagueService {
   }
 
   /**
-   * Proyecta la vista de una liga para el actor (US-23): detalle + miembros
-   * activos + código (solo admin; leagues.md §5).
+   * Regla de visibilidad (US-24, ADR-0024, `core/visibility`): pública ⇒
+   * cualquiera; privada ⇒ solo miembro activo. Un extraño (autenticado o no)
+   * recibe NOT_FOUND idéntico al de una liga inexistente: no se revela la
+   * existencia (leagues.md §9, US-24 CA, T-12 IDOR).
    */
-  private async toLeagueView(leagueId: string, actorId: string): Promise<LeagueView> {
+  private async assertCanView(
+    leagueId: string,
+    userId: string | null,
+  ): Promise<void> {
+    const league = await this.deps.prisma.league.findUnique({
+      where: { id: leagueId },
+    });
+    if (!league) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "La liga no existe." });
+    }
+    const membership = userId
+      ? await this.deps.prisma.leagueMember.findUnique({
+          where: { leagueId_userId: { leagueId, userId } },
+        })
+      : null;
+    const isActiveMember =
+      membership !== null && membership.status === "active";
+    if (!canViewLeague(league, { isActiveMember })) {
+      // Mismo error que "no existe": no se revela la existencia de ligas
+      // privadas a extraños (leagues.md §9, US-24 CA).
+      throw new TRPCError({ code: "NOT_FOUND", message: "La liga no existe." });
+    }
+  }
+
+  /**
+   * Proyecta la vista de una liga para el actor (US-23, extendida por US-24):
+   * detalle + miembros activos (seudónimos + rol) + código (solo admin;
+   * leagues.md §5). `actorId` es `null` si no hay sesión (espectador público
+   * de una liga pública): sin membresía, sin rol, sin código.
+   */
+  private async toLeagueView(
+    leagueId: string,
+    actorId: string | null,
+  ): Promise<LeagueView> {
     const prisma = this.deps.prisma;
-    const [league, membership, activeInvite, activeMembers] = await Promise.all([
+    const [league, activeInvite, activeMembers, memberRows] = await Promise.all([
       prisma.league.findUniqueOrThrow({ where: { id: leagueId } }),
-      prisma.leagueMember.findUnique({
-        where: { leagueId_userId: { leagueId, userId: actorId } },
-      }),
       prisma.leagueInvite.findFirst({
         where: { leagueId, status: "active" },
         orderBy: { createdAt: "desc" },
       }),
       prisma.leagueMember.count({ where: { leagueId, status: "active" } }),
+      prisma.leagueMember.findMany({
+        where: { leagueId, status: "active" },
+        select: {
+          role: true,
+          joinedAt: true,
+          user: { select: { username: true, profile: { select: { displayName: true } } } },
+        },
+        // Admins primero, luego por antigüedad (leagues.md §5: el admin gestiona).
+        orderBy: [{ role: "asc" }, { joinedAt: "asc" }],
+      }),
     ]);
+    const membership = actorId
+      ? await prisma.leagueMember.findUnique({
+          where: { leagueId_userId: { leagueId, userId: actorId } },
+        })
+      : null;
     const isAdmin =
       membership !== null &&
       membership.status === "active" &&
@@ -725,6 +897,10 @@ export class LeagueService {
       startDate: league.startDate,
       endDate: league.endDate,
       activeMembers,
+      members: memberRows.map((m) => ({
+        username: m.user.profile?.displayName ?? m.user.username,
+        role: m.role,
+      })),
       isAdmin,
       code: isAdmin ? (activeInvite?.code ?? null) : null,
     };

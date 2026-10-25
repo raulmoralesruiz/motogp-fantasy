@@ -67,8 +67,19 @@ export const leagueIdInputSchema = z.object({
   leagueId: z.string().uuid("El identificador de liga no es válido"),
 });
 
+/**
+ * Ranking de una liga (US-24, leagues.md §8): general (`gpId` ausente) o
+ * por GP. El acceso (pública ⇒ cualquiera; privada ⇒ miembro activo) lo
+ * revalida el servicio (AGENTS.md §8).
+ */
+export const leagueRankingInputSchema = z.object({
+  leagueId: z.string().uuid("El identificador de liga no es válido"),
+  gpId: z.string().uuid("El identificador de GP no es válido").nullish(),
+});
+
 export type LeagueType = z.infer<typeof leagueTypeSchema>;
 export type LeagueVisibility = z.infer<typeof leagueVisibilitySchema>;
 export type LeagueEntryMode = z.infer<typeof leagueEntryModeSchema>;
 export type CreateLeagueInput = z.infer<typeof createLeagueInputSchema>;
 export type LeagueIdInput = z.infer<typeof leagueIdInputSchema>;
+export type LeagueRankingInput = z.infer<typeof leagueRankingInputSchema>;

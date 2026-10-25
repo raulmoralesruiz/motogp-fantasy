@@ -1,5 +1,6 @@
 /**
- * Router de ligas (US-23, ADR-0023): creación de liga privada con código.
+ * Router de ligas (US-23, ADR-0023; US-24, ADR-0024): creación de liga
+ * privada con código + liga pública y directorio.
  *
  * Autorización (T-08, security.md §1.5):
  * - `create`: cualquier usuario autenticado (el actor es el creador y
@@ -7,8 +8,13 @@
  *   input — AGENTS.md §8).
  * - `rotateCode`: solo el admin de la liga (revalida el servicio por
  *   recurso; un miembro recibe 403 FORBIDDEN).
- * - `get`: solo miembros activos (liga privada ⇒ NOT_FOUND para extraños,
- *   leagues.md §9); el código solo lo devuelve el admin.
+ * - `get`: **pública** (US-24) — pública ⇒ cualquiera (autenticado o no);
+ *   privada ⇒ solo miembros activos (extraños → NOT_FOUND, leagues.md §9);
+ *   el código solo lo devuelve el admin (leagues.md §5).
+ * - `ranking`: **pública** (US-24) — última versión publicada (US-21);
+ *   misma regla de acceso que `get`; seudónimos, nunca PII (leagues.md §9).
+ * - `listPublic`: **pública** (US-24) — directorio de ligas públicas
+ *   activas (leagues.md §2).
  * - `myLeagues`: ligas activas del usuario.
  *
  * Rate limit de creación (security.md §1.6: "creación de ligas"): por
@@ -20,12 +26,13 @@ import { LeagueService } from "@/modules/leagues";
 import {
   createLeagueInputSchema,
   leagueIdInputSchema,
+  leagueRankingInputSchema,
 } from "@/shared/validation/leagues";
 
 import { getServerEnv } from "../env";
 import { prisma } from "../prisma";
 import { redisRateLimitStore } from "../rate-limit-redis";
-import { protectedProcedure, router } from "../trpc";
+import { protectedProcedure, publicProcedure, router } from "../trpc";
 
 export interface LeaguesRouterDeps {
   prisma: PrismaClient;
@@ -73,10 +80,37 @@ export function createLeaguesRouter(deps: LeaguesRouterDeps) {
         }),
       ),
 
-    /** Detalle de una liga (US-23): solo miembros activos; código solo admin. */
-    get: protectedProcedure
+    /**
+     * Detalle de una liga (US-23/US-24, ADR-0024): pública ⇒ cualquiera
+     * (autenticado o no); privada ⇒ solo miembros activos (extraños →
+     * NOT_FOUND). El código solo lo devuelve el admin (leagues.md §5).
+     */
+    get: publicProcedure
       .input(leagueIdInputSchema)
-      .query(({ ctx, input }) => service.getLeague(input.leagueId, ctx.user.id)),
+      .query(({ ctx, input }) =>
+        service.getLeague(input.leagueId, ctx.user?.id ?? null),
+      ),
+
+    /**
+     * Ranking de una liga (US-24, leagues.md §8/§9): la última versión
+     * publicada (US-21/ADR-0022), general o por GP. Misma regla de acceso
+     * que el detalle: pública ⇒ cualquiera; privada ⇒ miembro activo.
+     */
+    ranking: publicProcedure
+      .input(leagueRankingInputSchema)
+      .query(({ ctx, input }) =>
+        service.leagueRanking(
+          input.leagueId,
+          input.gpId ?? null,
+          ctx.user?.id ?? null,
+        ),
+      ),
+
+    /**
+     * Directorio de ligas públicas (US-24, leagues.md §2): solo `type=public`
+     * y `status=active`. Sin sesión: es público.
+     */
+    listPublic: publicProcedure.query(() => service.listPublic()),
 
     /** Ligas activas del usuario (US-23). */
     myLeagues: protectedProcedure.query(({ ctx }) => service.myLeagues(ctx.user.id)),

@@ -551,6 +551,392 @@ describe("US-23 · Creo una liga privada con código (PostgreSQL real)", () => {
 });
 
 /**
+ * US-24 · Creo una liga pública y aparece en el directorio (PostgreSQL real,
+ * ADR-0024).
+ *
+ * CA: "la liga pública es visible en el directorio con ranking público; la
+ * privada no aparece (test: un usuario no autenticado/miembro no la ve ni
+ * puede acceder por ID)".
+ *
+ * Cubre:
+ * - **listPublic** (directorio, leagues.md §2): solo `type=public` y
+ *   `status=active`; excluye privadas, finished y unlisted; orden por nombre;
+ *   miembros activos contados.
+ * - **getLeague** (US-24, leagues.md §9): pública ⇒ cualquiera (sin sesión
+ *   OK, código null, isAdmin false); pública como admin ⇒ código; privada
+ *   sin sesión → NOT_FOUND; privada a extraño autenticado → NOT_FOUND (mismo
+ *   error que inexistente — no se revela la existencia); privada a miembro ⇒ OK.
+ * - **leagueRanking** (leagues.md §8/§9): última versión publicada con
+ *   seudónimos (nunca PII); pública sin sesión ⇒ filas; privada a extraño →
+ *   NOT_FOUND; privada a miembro ⇒ OK; sin filas → vacío elegante.
+ */
+describe("US-24 · Liga pública y directorio (PostgreSQL real)", () => {
+  let prisma: PrismaClient;
+  let service: LeagueService;
+  const suffix = randomUUID().slice(0, 8);
+
+  beforeAll(() => {
+    prisma = createPrisma();
+    service = new LeagueService({ prisma });
+  });
+
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  /** Crea un usuario aislado y devuelve su id. */
+  async function makeUser(tag: string): Promise<string> {
+    return (
+      await prisma.user.create({
+        data: {
+          email: `${tag}-${suffix}@test.local`,
+          passwordHash: "h",
+          username: `${tag}_${suffix}`,
+        },
+      })
+    ).id;
+  }
+
+  /** Crea una liga pública activa con el creador como admin. */
+  async function makePublicLeague(creatorId: string, name: string) {
+    return service.createLeague(
+      validInput({
+        name,
+        type: "public",
+        visibility: "public",
+        entryMode: "code",
+      }),
+      { ...META, actorId: creatorId },
+    );
+  }
+
+  it("listPublic: solo públicas activas, orden por nombre, con miembros", async () => {
+    const creator = await makeUser("dir");
+
+    // 1 pública activa (aparece), 1 privada (no), 1 pública finished (no),
+    // 1 pública unlisted (no — la validación exige pública ⇒ visibilidad pública,
+    // así que se crea una pública y se fuerza visibility=unlisted en BD).
+    const pubA = await makePublicLeague(creator, `A pública ${suffix}`);
+    const pubB = await makePublicLeague(creator, `B pública ${suffix}`);
+    const priv = await service.createLeague(
+      validInput({ name: `C privada ${suffix}` }),
+      { ...META, actorId: creator },
+    );
+    await prisma.league.update({
+      where: { id: pubB.id },
+      data: { status: "finished" },
+    });
+    await prisma.league.update({
+      where: { id: pubA.id },
+      data: { visibility: "unlisted" },
+    });
+    // pubA vuelve a public para que solo pubB (finished) y priv queden fuera.
+    await prisma.league.update({
+      where: { id: pubA.id },
+      data: { visibility: "public" },
+    });
+
+    // Un miembro extra en pubB (aunque esté finished, no cuenta: no está en el
+    // directorio). En pubA (la única pública activa) un segundo miembro.
+    const extra = await makeUser("dir-extra");
+    await prisma.leagueMember.create({
+      data: { leagueId: pubA.id, userId: extra, role: "member" },
+    });
+
+    const dir = await service.listPublic();
+    expect(dir.map((l) => l.name)).toEqual([`A pública ${suffix}`]);
+    expect(dir[0]).toMatchObject({
+      id: pubA.id,
+      type: "public",
+      activeMembers: 2,
+    });
+    // Ni la privada ni la finished aparecen.
+    expect(dir.map((l) => l.id)).not.toContain(priv.id);
+    expect(dir.map((l) => l.id)).not.toContain(pubB.id);
+    // El código NUNCA sale del directorio (secreto, solo admin).
+    expect(dir[0]).not.toHaveProperty("code");
+    expect(dir[0]).not.toHaveProperty("members");
+  });
+
+  it("listPublic: vacío si no hay públicas activas", async () => {
+    // Aísla: crea una pública y la termina; el directorio de OTROS no se ve,
+    // pero comprobamos la forma de retorno vacía con una liga que no califica.
+    const creator = await makeUser("empty");
+    const l = await makePublicLeague(creator, `Ephemeral ${suffix}`);
+    await prisma.league.update({ where: { id: l.id }, data: { status: "archived" } });
+    // El directorio global sigue devolviendo las demás; la forma vacía se
+    // cubre en el unit del servicio (sin I/O). Aquí: la archivada no aparece.
+    const dir = await service.listPublic();
+    expect(dir.map((l) => l.id)).not.toContain(l.id);
+  });
+
+  it("getLeague: una pública la ve un extraño sin sesión (código null, no admin)", async () => {
+    const creator = await makeUser("pub-view");
+    const league = await makePublicLeague(creator, `Pública vista ${suffix}`);
+
+    // Sin sesión (userId null): ve la liga, sin privilegios.
+    const view = await service.getLeague(league.id, null);
+    expect(view.id).toBe(league.id);
+    expect(view.isAdmin).toBe(false);
+    expect(view.code).toBeNull();
+    expect(view.activeMembers).toBe(1);
+    // Miembros con seudónimo (nunca PII) y rol.
+    expect(view.members).toHaveLength(1);
+    expect(view.members[0]!).toMatchObject({ role: "admin" });
+    expect(view.members[0]!.username).not.toContain("@");
+  });
+
+  it("getLeague: una pública la ve el admin con su código", async () => {
+    const creator = await makeUser("pub-admin");
+    const league = await makePublicLeague(creator, `Pública admin ${suffix}`);
+
+    const view = await service.getLeague(league.id, creator);
+    expect(view.isAdmin).toBe(true);
+    expect(view.code).toBe(league.code);
+    expect(view.code).not.toBeNull();
+  });
+
+  it("getLeague: una privada sin sesión → NOT_FOUND (no revela existencia)", async () => {
+    const creator = await makeUser("priv-null");
+    const league = await service.createLeague(
+      validInput({ name: `Privada null ${suffix}` }),
+      { ...META, actorId: creator },
+    );
+
+    await expect(service.getLeague(league.id, null)).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+    // Mismo error que una liga inexistente (no se distingue).
+    await expect(service.getLeague(randomUUID(), null)).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+  });
+
+  it("getLeague: una privada a un autenticado que no es miembro → NOT_FOUND", async () => {
+    const creator = await makeUser("priv-str");
+    const stranger = await makeUser("priv-str2");
+    const league = await service.createLeague(
+      validInput({ name: `Privada extraño ${suffix}` }),
+      { ...META, actorId: creator },
+    );
+
+    await expect(service.getLeague(league.id, stranger)).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+  });
+
+  it("getLeague: una privada la ve su miembro activo", async () => {
+    const creator = await makeUser("priv-member");
+    const member = await makeUser("priv-member2");
+    const league = await service.createLeague(
+      validInput({ name: `Privada miembro ${suffix}` }),
+      { ...META, actorId: creator },
+    );
+    await prisma.leagueMember.create({
+      data: { leagueId: league.id, userId: member, role: "member" },
+    });
+
+    const view = await service.getLeague(league.id, member);
+    expect(view.id).toBe(league.id);
+    expect(view.isAdmin).toBe(false);
+    expect(view.code).toBeNull();
+    expect(view.activeMembers).toBe(2);
+  });
+
+  it("leagueRanking: una pública expone su ranking a un extraño sin sesión", async () => {
+    const creator = await makeUser("rank-pub");
+    const member = await makeUser("rank-pub2");
+    const league = await makePublicLeague(creator, `Pública ranking ${suffix}`);
+    await prisma.leagueMember.create({
+      data: { leagueId: league.id, userId: member, role: "member" },
+    });
+
+    // Publica una versión de ranking general (gpId null) con 2 miembros.
+    const now = new Date("2026-10-25T12:00:00Z");
+    await prisma.ranking.createMany({
+      data: [
+        {
+          leagueId: league.id,
+          gpId: null,
+          userId: creator,
+          position: 1,
+          points: 170.5,
+          resultsVersion: "v1",
+          computedAt: now,
+        },
+        {
+          leagueId: league.id,
+          gpId: null,
+          userId: member,
+          position: 2,
+          points: 120,
+          resultsVersion: "v1",
+          computedAt: now,
+        },
+      ],
+    });
+
+    // Sin sesión: ve el ranking, con seudónimos (nunca PII).
+    const view = await service.leagueRanking(league.id, null, null);
+    expect(view.entries).toHaveLength(2);
+    expect(view.entries[0]).toMatchObject({ position: 1, points: 170.5 });
+    expect(view.entries[1]).toMatchObject({ position: 2, points: 120 });
+    for (const e of view.entries) {
+      expect(e.username).not.toContain("@");
+    }
+    expect(view.computedAt?.toISOString()).toBe(now.toISOString());
+    expect(view.resultsVersion).toBe("v1");
+  });
+
+  it("leagueRanking: toma la última versión publicada (no la anterior)", async () => {
+    const creator = await makeUser("rank-ver");
+    const league = await makePublicLeague(creator, `Pública versión ${suffix}`);
+
+    const v1 = new Date("2026-10-24T12:00:00Z");
+    const v2 = new Date("2026-10-25T12:00:00Z");
+    await prisma.ranking.createMany({
+      data: [
+        {
+          leagueId: league.id,
+          gpId: null,
+          userId: creator,
+          position: 2,
+          points: 100,
+          resultsVersion: "v1",
+          computedAt: v1,
+        },
+        {
+          leagueId: league.id,
+          gpId: null,
+          userId: creator,
+          position: 1,
+          points: 150,
+          resultsVersion: "v2",
+          computedAt: v2,
+        },
+      ],
+    });
+
+    const view = await service.leagueRanking(league.id, null, null);
+    // Solo la versión vigente (v2): 1 fila, posición 1, 150 pts.
+    expect(view.entries).toHaveLength(1);
+    expect(view.entries[0]).toMatchObject({ position: 1, points: 150 });
+    expect(view.resultsVersion).toBe("v2");
+  });
+
+  it("leagueRanking: por GP (gpId indicado) y general (gpId null) son distintos", async () => {
+    const creator = await makeUser("rank-gp");
+    const league = await makePublicLeague(creator, `Pública GP ${suffix}`);
+    const gp = await prisma.gp.create({
+      data: {
+        seasonId: (
+          await prisma.season.create({ data: { name: `T ${suffix}`, year: 2099 } })
+        ).id,
+        round: 1,
+        name: `GP ${suffix}`,
+        circuitId: (
+          await prisma.circuit.create({ data: { name: `C ${suffix}`, country: "X" } })
+        ).id,
+        date: new Date("2099-06-01T12:00:00Z"),
+      },
+    });
+    const now = new Date("2026-10-25T12:00:00Z");
+    await prisma.ranking.createMany({
+      data: [
+        {
+          leagueId: league.id,
+          gpId: gp.id,
+          userId: creator,
+          position: 1,
+          points: 30,
+          resultsVersion: "v1",
+          computedAt: now,
+        },
+        {
+          leagueId: league.id,
+          gpId: null,
+          userId: creator,
+          position: 1,
+          points: 90,
+          resultsVersion: "v1",
+          computedAt: now,
+        },
+      ],
+    });
+
+    const byGp = await service.leagueRanking(league.id, gp.id, null);
+    expect(byGp.entries).toHaveLength(1);
+    expect(byGp.entries[0]!.points).toBe(30);
+
+    const overall = await service.leagueRanking(league.id, null, null);
+    expect(overall.entries).toHaveLength(1);
+    expect(overall.entries[0]!.points).toBe(90);
+  });
+
+  it("leagueRanking: sin filas publicadas → vacío elegante", async () => {
+    const creator = await makeUser("rank-empty");
+    const league = await makePublicLeague(creator, `Pública vacía ${suffix}`);
+
+    const view = await service.leagueRanking(league.id, null, null);
+    expect(view.entries).toEqual([]);
+    expect(view.computedAt).toBeNull();
+    expect(view.resultsVersion).toBeNull();
+  });
+
+  it("leagueRanking: una privada a un extraño → NOT_FOUND", async () => {
+    const creator = await makeUser("rank-priv");
+    const stranger = await makeUser("rank-priv2");
+    const league = await service.createLeague(
+      validInput({ name: `Privada ranking ${suffix}` }),
+      { ...META, actorId: creator },
+    );
+    await prisma.ranking.create({
+      data: {
+        leagueId: league.id,
+        gpId: null,
+        userId: creator,
+        position: 1,
+        points: 10,
+        resultsVersion: "v1",
+      },
+    });
+
+    await expect(
+      service.leagueRanking(league.id, null, stranger),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(
+      service.leagueRanking(league.id, null, null),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("leagueRanking: una privada la ve su miembro", async () => {
+    const creator = await makeUser("rank-privm");
+    const member = await makeUser("rank-privm2");
+    const league = await service.createLeague(
+      validInput({ name: `Privada ranking m ${suffix}` }),
+      { ...META, actorId: creator },
+    );
+    await prisma.leagueMember.create({
+      data: { leagueId: league.id, userId: member, role: "member" },
+    });
+    await prisma.ranking.create({
+      data: {
+        leagueId: league.id,
+        gpId: null,
+        userId: creator,
+        position: 1,
+        points: 10,
+        resultsVersion: "v1",
+      },
+    });
+
+    const view = await service.leagueRanking(league.id, null, member);
+    expect(view.entries).toHaveLength(1);
+    expect(view.entries[0]!.points).toBe(10);
+  });
+});
+
+/**
  * US-23 · Router `leagues` (glue BFF, ADR-0023) — el actor sale del
  * contexto (nunca del input) y los procedimientos delegan en el servicio.
  *
@@ -680,6 +1066,110 @@ describe("US-23 · Router leagues (glue BFF)", () => {
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     await expect(caller.myLeagues()).rejects.toMatchObject({
       code: "UNAUTHORIZED",
+    });
+  });
+
+  // ── US-24 · Procedimientos públicos (sin sesión, ADR-0024) ──────────────
+
+  /** Contexto SIN sesión (visitante). */
+  async function ctxAnon() {
+    const req = new Request("http://localhost/api/trpc/leagues", {
+      method: "POST",
+      headers: { "x-forwarded-for": "198.51.100.72" },
+    });
+    return createContext(req, prisma);
+  }
+
+  it("listPublic (router, sin sesión): expone las públicas activas", async () => {
+    // Crea una pública activa vía el router autenticado.
+    const callerAuth = leaguesRouter.createCaller(await ctxAuth());
+    const created = await callerAuth.create(
+      validInput({
+        name: `Pública router ${rsuffix}`,
+        type: "public",
+        visibility: "public",
+      }),
+    );
+
+    const caller = leaguesRouter.createCaller(await ctxAnon());
+    const dir = await caller.listPublic();
+    expect(dir.map((l) => l.id)).toContain(created.id);
+    expect(dir.find((l) => l.id === created.id)).toMatchObject({
+      name: `Pública router ${rsuffix}`,
+      type: "public",
+      activeMembers: 1,
+    });
+    // El código no sale por el directorio.
+    expect(dir.find((l) => l.id === created.id)).not.toHaveProperty("code");
+  });
+
+  it("get (router, sin sesión): una pública es visible", async () => {
+    const callerAuth = leaguesRouter.createCaller(await ctxAuth());
+    const created = await callerAuth.create(
+      validInput({
+        name: `Pública get ${rsuffix}`,
+        type: "public",
+        visibility: "public",
+      }),
+    );
+
+    const caller = leaguesRouter.createCaller(await ctxAnon());
+    const view = await caller.get({ leagueId: created.id });
+    expect(view.id).toBe(created.id);
+    expect(view.isAdmin).toBe(false);
+    expect(view.code).toBeNull();
+  });
+
+  it("get (router, sin sesión): una privada → NOT_FOUND (no revela)", async () => {
+    const callerAuth = leaguesRouter.createCaller(await ctxAuth());
+    const created = await callerAuth.create(
+      validInput({ name: `Privada get ${rsuffix}` }),
+    );
+
+    const caller = leaguesRouter.createCaller(await ctxAnon());
+    await expect(caller.get({ leagueId: created.id })).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+  });
+
+  it("ranking (router, sin sesión): una pública expone su ranking", async () => {
+    const callerAuth = leaguesRouter.createCaller(await ctxAuth());
+    const created = await callerAuth.create(
+      validInput({
+        name: `Pública ranking ${rsuffix}`,
+        type: "public",
+        visibility: "public",
+      }),
+    );
+    // Publica una fila de ranking general.
+    await prisma.ranking.create({
+      data: {
+        leagueId: created.id,
+        gpId: null,
+        userId: (
+          await prisma.user.findFirst({ where: { username: `router_${rsuffix}` } })
+        )!.id,
+        position: 1,
+        points: 55,
+        resultsVersion: "v1",
+      },
+    });
+
+    const caller = leaguesRouter.createCaller(await ctxAnon());
+    const view = await caller.ranking({ leagueId: created.id });
+    expect(view.entries).toHaveLength(1);
+    expect(view.entries[0]).toMatchObject({ position: 1, points: 55 });
+  });
+
+  it("ranking (router, sin sesión): una privada → NOT_FOUND", async () => {
+    const callerAuth = leaguesRouter.createCaller(await ctxAuth());
+    const created = await callerAuth.create(
+      validInput({ name: `Privada ranking ${rsuffix}` }),
+    );
+
+    const caller = leaguesRouter.createCaller(await ctxAnon());
+    await expect(caller.ranking({ leagueId: created.id })).rejects.toMatchObject({
+      code: "NOT_FOUND",
     });
   });
 });

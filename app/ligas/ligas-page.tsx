@@ -2,18 +2,20 @@
 
 import { getQueryKey } from "@trpc/react-query";
 import { useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { type FormEvent, useState } from "react";
 
 import { Alert, Button, Field } from "@/shared/components";
 import { trpc } from "@/trpc/client";
 
 /**
- * Ligas (US-23, leagues.md §3): crear una liga privada con código y ver
- * las ligas del usuario.
+ * Ligas (US-23, leagues.md §3; US-24, leagues.md §2): mis ligas, directorio
+ * de ligas públicas y creación de una liga.
  *
  * El cliente solo envía los campos del formulario: validación, límites de
  * miembros, código de alta entropía y auditoría los hace el servidor
- * (AGENTS.md §8). El código se muestra solo al admin (leagues.md §5).
+ * (AGENTS.md §8). El código se muestra solo al admin en el detalle
+ * (leagues.md §5; US-24: sigue siendo secreto también en ligas públicas).
  */
 
 /** Borrador del formulario de creación (US-23). */
@@ -41,44 +43,38 @@ const EMPTY_FORM: LeagueForm = {
   endDate: "",
 };
 
+/** Etiqueta legible del modo de entrada (leagues.md §3). */
+function entryModeLabel(mode: "code" | "invite" | "mixed"): string {
+  if (mode === "code") return "por código";
+  if (mode === "invite") return "solo invitación";
+  return "código o invitación";
+}
+
 export default function LigasPage() {
   const queryClient = useQueryClient();
   const myLeagues = trpc.leagues.myLeagues.useQuery();
+  const publicLeagues = trpc.leagues.listPublic.useQuery();
 
   const [form, setForm] = useState<LeagueForm>(EMPTY_FORM);
-  /** Liga recién creada (para mostrar su código al creador/admin). */
-  const [created, setCreated] = useState<{ name: string; code: string | null } | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  /** Liga recién creada (para enlazar a su detalle). */
+  const [created, setCreated] = useState<{ name: string; id: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const create = trpc.leagues.create.useMutation({
     onSuccess: (league) => {
-      setCreated({ name: league.name, code: league.code });
-      setSuccess(`Liga «${league.name}» creada.`);
+      setCreated({ name: league.name, id: league.id });
       setError(null);
       setForm(EMPTY_FORM);
       queryClient.invalidateQueries({
         queryKey: getQueryKey(trpc.leagues.myLeagues),
       });
-    },
-    onError: (err) => {
-      setError(err instanceof Error ? err.message : "No se pudo crear la liga.");
-      setSuccess(null);
-    },
-  });
-
-  const rotate = trpc.leagues.rotateCode.useMutation({
-    onSuccess: (newCode) => {
-      setCreated(null);
-      setSuccess(`Código rotado. El código anterior quedó revocado. Nuevo código: ${newCode}`);
-      setError(null);
       queryClient.invalidateQueries({
-        queryKey: getQueryKey(trpc.leagues.myLeagues),
+        queryKey: getQueryKey(trpc.leagues.listPublic),
       });
     },
     onError: (err) => {
-      setError(err instanceof Error ? err.message : "No se pudo rotar el código.");
-      setSuccess(null);
+      setError(err instanceof Error ? err.message : "No se pudo crear la liga.");
+      setCreated(null);
     },
   });
 
@@ -110,24 +106,12 @@ export default function LigasPage() {
   return (
     <div>
       {error && <Alert variant="error">{error}</Alert>}
-      {success && <Alert variant="success">{success}</Alert>}
 
       {created && (
-        <div>
-          <h2>Liga creada</h2>
-          <p>
-            <strong>{created.name}</strong>
-          </p>
-          {created.code ? (
-            <Alert variant="info">
-              Código de invitación: <strong>{created.code}</strong>
-            </Alert>
-          ) : (
-            <Alert variant="info">
-              Esta liga no usa código de invitación (modo «solo invitación»).
-            </Alert>
-          )}
-        </div>
+        <Alert variant="success">
+          Liga «{created.name}» creada.{" "}
+          <Link href={`/ligas/${created.id}`}>Ver detalle</Link>
+        </Alert>
       )}
 
       <h2>Mis ligas</h2>
@@ -136,34 +120,53 @@ export default function LigasPage() {
         <Alert variant="error">No se pudo cargar tu lista de ligas.</Alert>
       )}
       {myLeagues.data && myLeagues.data.length === 0 && (
-        <p className="muted">Todavía no estás en ninguna liga. Crea una abajo.</p>
+        <p className="muted">
+          Todavía no estás en ninguna liga. Crea una abajo o únete a una del
+          directorio.
+        </p>
       )}
       {myLeagues.data && myLeagues.data.length > 0 && (
         <ul>
           {myLeagues.data.map((league) => (
             <li key={league.id}>
-              <strong>{league.name}</strong>{" "}
+              <Link href={`/ligas/${league.id}`}>
+                <strong>{league.name}</strong>
+              </Link>{" "}
               <span className="muted">
                 ({league.type === "private" ? "privada" : "pública"} ·{" "}
                 {league.activeMembers}
                 {league.activeMembers === 1 ? " miembro" : " miembros"})
               </span>
-              {league.isAdmin && (
-                <span className="muted"> · admin</span>
-              )}
-              {league.code && (
-                <>
-                  {" "}
-                  · código: <strong>{league.code}</strong>{" "}
-                  <Button
-                    type="button"
-                    onClick={() => rotate.mutate({ leagueId: league.id })}
-                    disabled={rotate.isPending}
-                  >
-                    {rotate.isPending ? "Rotando…" : "Rotar código"}
-                  </Button>
-                </>
-              )}
+              {league.isAdmin && <span className="muted"> · admin</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <h2>Directorio de ligas públicas</h2>
+      {publicLeagues.isPending && <p className="muted">Consultando…</p>}
+      {publicLeagues.isError && (
+        <Alert variant="error">No se pudo cargar el directorio de ligas.</Alert>
+      )}
+      {publicLeagues.data && publicLeagues.data.length === 0 && (
+        <p className="muted">
+          Todavía no hay ligas públicas. Crea la primera abajo.
+        </p>
+      )}
+      {publicLeagues.data && publicLeagues.data.length > 0 && (
+        <ul>
+          {publicLeagues.data.map((league) => (
+            <li key={league.id}>
+              <Link href={`/ligas/${league.id}`}>
+                <strong>{league.name}</strong>
+              </Link>
+              {league.description && (
+                <span className="muted"> — {league.description}</span>
+              )}{" "}
+              <span className="muted">
+                ({league.activeMembers}/{league.maxMembers} miembros ·{" "}
+                {entryModeLabel(league.entryMode)})
+              </span>
             </li>
           ))}
         </ul>
@@ -193,9 +196,7 @@ export default function LigasPage() {
             id="type"
             name="type"
             value={form.type}
-            onChange={(e) =>
-              set("type", e.target.value as LeagueForm["type"])
-            }
+            onChange={(e) => set("type", e.target.value as LeagueForm["type"])}
           >
             <option value="private">Privada</option>
             <option value="public">Pública</option>
