@@ -579,18 +579,19 @@ model BudgetMovement {
 // ── Ligas ────────────────────────────────────────────────────────────────────
 
 model League {
-  id         String           @id @default(uuid()) @db.Uuid
-  name       String
-  type       LeagueType       @default(private)
-  visibility LeagueVisibility @default(private)
-  minMembers Int              @default(2) @map("min_members")
-  maxMembers Int              @default(50) @map("max_members")
-  entryMode  LeagueEntryMode  @default(code) @map("entry_mode")
-  startDate  DateTime?        @map("start_date") @db.Timestamptz
-  endDate    DateTime?        @map("end_date") @db.Timestamptz
-  status     LeagueStatus     @default(planned)
-  createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt  DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  id          String           @id @default(uuid()) @db.Uuid
+  name        String
+  description String?          @map("description")
+  type        LeagueType       @default(private)
+  visibility  LeagueVisibility @default(private)
+  minMembers  Int              @default(2) @map("min_members")
+  maxMembers  Int              @default(50) @map("max_members")
+  entryMode   LeagueEntryMode  @default(code) @map("entry_mode")
+  startDate   DateTime?        @map("start_date") @db.Timestamptz
+  endDate     DateTime?        @map("end_date") @db.Timestamptz
+  status      LeagueStatus     @default(planned)
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   members  LeagueMember[]
   invites  LeagueInvite[]

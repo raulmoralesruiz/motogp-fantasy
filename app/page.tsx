@@ -258,6 +258,9 @@ export default function HomePage() {
             <Link href="/puntuacion">Mi puntuación</Link>
           </p>
           <p>
+            <Link href="/ligas">Ligas</Link>
+          </p>
+          <p>
             <Link href="/perfil">Perfil</Link>
           </p>
           <Button

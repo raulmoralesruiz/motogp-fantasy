@@ -115,6 +115,15 @@ export interface RateLimitStore {
     userId: string,
     windowSec: number,
   ): Promise<{ count: number; remainingSec: number }>;
+  /**
+   * Registra una creación de liga del usuario (ventana fija POR USUARIO,
+   * US-23/security.md §1.6 "creación de ligas"; clave independiente de las
+   * anteriores).
+   */
+  recordLeagueCreation(
+    userId: string,
+    windowSec: number,
+  ): Promise<{ count: number; remainingSec: number }>;
 }
 
 /**
@@ -126,6 +135,7 @@ export class InMemoryRateLimitStore implements RateLimitStore {
   private windows = new Map<string, { count: number; resetAtMs: number }>();
   private resetWindows = new Map<string, { count: number; resetAtMs: number }>();
   private deleteWindows = new Map<string, { count: number; resetAtMs: number }>();
+  private leagueCreateWindows = new Map<string, { count: number; resetAtMs: number }>();
   private failures = new Map<string, number>();
   private locks = new Map<string, number>();
 
@@ -172,6 +182,13 @@ export class InMemoryRateLimitStore implements RateLimitStore {
     windowSec: number,
   ): Promise<{ count: number; remainingSec: number }> {
     return this.recordWindow(this.deleteWindows, userId, windowSec);
+  }
+
+  async recordLeagueCreation(
+    userId: string,
+    windowSec: number,
+  ): Promise<{ count: number; remainingSec: number }> {
+    return this.recordWindow(this.leagueCreateWindows, userId, windowSec);
   }
 
   async recordFailure(account: string): Promise<number> {

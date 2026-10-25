@@ -27,6 +27,13 @@ const serverEnvSchema = z.object({
     .int()
     .positive()
     .default(3600),
+  // US-23 · Creación de ligas (security.md §1.6): rate limit POR USUARIO
+  // (parámetro operativo, no regla de juego: no vive en `season_rules`).
+  LEAGUE_CREATE_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(5),
+  LEAGUE_CREATE_RATE_LIMIT_WINDOW_SEC: z.coerce.number()
+    .int()
+    .positive()
+    .default(3600),
   // URL pública de la app: monta el link de recuperación (US-02). En
   // producción la fija el build (build-arg) y el contenedor.
   NEXT_PUBLIC_APP_URL: z.string().min(1).default("http://localhost:3000"),

@@ -7,6 +7,7 @@ import { router } from "../trpc";
 import { adminRouter } from "./admin";
 import { getDefaultAuthRouter } from "./auth";
 import { getDefaultDashboardRouter } from "./dashboard";
+import { getDefaultLeaguesRouter } from "./leagues";
 import { getDefaultLineupsRouter } from "./lineups";
 import { getDefaultMarketRouter } from "./market";
 import { getDefaultProfileRouter } from "./profile";
@@ -24,6 +25,7 @@ export const appRouter = router({
   lineups: getDefaultLineupsRouter(),
   results: getDefaultResultsRouter(),
   dashboard: getDefaultDashboardRouter(),
+  leagues: getDefaultLeaguesRouter(),
 });
 
 export type AppRouter = typeof appRouter;

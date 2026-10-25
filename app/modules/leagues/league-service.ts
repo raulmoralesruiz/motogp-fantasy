@@ -1,6 +1,15 @@
 /**
- * Servicio de ligas (US-15, dashboard): lecturas de solo lectura de las
- * ligas del usuario y sus rankings.
+ * Servicio de ligas (US-15, US-21, US-23).
+ *
+ * - **US-15 (dashboard):** `myRankings` — ligas activas del usuario + sus
+ *   posiciones en `rankings` (por GP y general).
+ * - **US-21 (rankings):** `recalculateRankings` — calcula y publica los
+ *   rankings por GP y general a partir de `scores` (ADR-0022).
+ * - **US-23 (creación de liga, ADR-0023):** `createLeague` (creador =
+ *   admin; código de alta entropía si el modo lo requiere; auditoría
+ *   `league.created`), `rotateCode` (solo admin; revoca el código
+ *   anterior; auditoría `league.code_rotated`), `getLeague` (solo
+ *   miembros activos; el código solo lo ve el admin) y `myLeagues`.
  *
  * El dashboard (US-15) muestra «posición en cada liga»: las ligas activas
  * del usuario (`league_members.status = active`) + sus posiciones en la
@@ -12,16 +21,75 @@
  * Multi-liga (invariante 4): los puntos por GP de un usuario son los
  * mismos en todas sus ligas; la posición SÍ es por liga.
  *
- * Las dependencias se inyectan (prisma): el servicio se prueba sin los
- * singletons de la app (mismo patrón que `LineupService`).
+ * Las dependencias se inyectan (prisma, rate limit, límites de miembros):
+ * el servicio se prueba sin los singletons de la app (mismo patrón que
+ * `LineupService`).
  */
 import { TRPCError } from "@trpc/server";
-import type { Prisma, PrismaClient, Ranking } from "@prisma/client";
+import type {
+  LeagueEntryMode,
+  LeagueType,
+  LeagueVisibility,
+  Prisma,
+  PrismaClient,
+  Ranking,
+} from "@prisma/client";
 
-import { sortRanking } from "./core";
+import { appendAudit } from "@/modules/admin";
+import { PROVISIONAL_SEASON_RULES } from "@/shared/config";
+import { createLeagueInputSchema } from "@/shared/validation/leagues";
+
+import { generateLeagueCode, sortRanking } from "./core";
 
 export interface LeagueServiceDeps {
   prisma: PrismaClient;
+  /**
+   * Rate limit de creación de ligas (security.md §1.6, US-23). Opcional:
+   * sin store no se aplica el límite (tests de servicio sin Redis).
+   */
+  rateLimit?: {
+    recordLeagueCreation(
+      userId: string,
+      windowSec: number,
+    ): Promise<{ count: number; remainingSec: number }>;
+  };
+  /** Configuración del rate limit de creación (US-23). */
+  rateLimitCfg?: { maxPerWindow: number; windowSec: number };
+  /**
+   * Límites PROVISIONAL de miembros por liga (leagues.md §3: 2–50). Por
+   * defecto `PROVISIONAL_SEASON_RULES.league` (shared/config, AGENTS.md
+   * §1.3: no hardcodear parámetros de reglas).
+   */
+  leagueLimits?: { minMembers: number; maxMembers: number };
+}
+
+/** Metadatos del actor para auditoría (T-09). */
+export interface AuditMeta {
+  actorId: string;
+  ip: string;
+}
+
+/** Vista de una liga para la UI (US-23). */
+export interface LeagueView {
+  id: string;
+  name: string;
+  description: string | null;
+  type: LeagueType;
+  visibility: LeagueVisibility;
+  minMembers: number;
+  maxMembers: number;
+  entryMode: LeagueEntryMode;
+  startDate: Date | null;
+  endDate: Date | null;
+  /** Miembros activos (status = active). */
+  activeMembers: number;
+  /** El actor es admin de la liga (miembro activo con rol admin). */
+  isAdmin: boolean;
+  /**
+   * Código activo: solo lo ve el admin (leagues.md §5); `null` si la liga
+   * no tiene código activo (modo `invite` o sin rotar).
+   */
+  code: string | null;
 }
 
 /** Posición del usuario en una liga (US-15): por GP y general. */
@@ -57,6 +125,185 @@ function latestRanking(rows: readonly RankingRow[]): RankingRow | null {
 
 export class LeagueService {
   constructor(private readonly deps: LeagueServiceDeps) {}
+
+  // ── US-23 · Creación de liga privada con código (leagues.md §3) ────────
+
+  /**
+   * Crea una liga (US-23, leagues.md §3):
+   * - El creador define nombre/descripción/tipo/visibilidad/min-máx/modo
+   *   de entrada/duración.
+   * - El creador es **admin** (miembro activo con rol admin).
+   * - Si el modo de entrada lo requiere (`code`/`mixed`), se genera un
+   *   código de alta entropía (≥8 chars, sin 0/O/1/I; `core/invite-code`).
+   * - Rate limit por usuario (security.md §1.6: "creación de ligas").
+   * - Auditoría `league.created` en la misma transacción (T-09). El código
+   *   NO se registra en auditoría (es un secreto, como una contraseña).
+   *
+   * @throws {TRPCError} BAD_REQUEST si el payload no pasa la validación
+   *   server-side (formato, límites de miembros, consistencia
+   *   tipo/visibilidad) o si se supera el rate limit.
+   */
+  async createLeague(input: unknown, meta: AuditMeta): Promise<LeagueView> {
+    const validated = this.validateCreation(input);
+    const actorId = meta.actorId;
+
+    // Rate limit por usuario (security.md §1.6). Solo si hay store
+    // inyectado (producción y tests de integración).
+    const rateLimit = this.deps.rateLimit;
+    if (rateLimit) {
+      const cfg = this.deps.rateLimitCfg ?? { maxPerWindow: 5, windowSec: 3600 };
+      const { count, remainingSec } = await rateLimit.recordLeagueCreation(
+        actorId,
+        cfg.windowSec,
+      );
+      if (count > cfg.maxPerWindow && remainingSec > 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Estás enviando demasiadas peticiones. Inténtalo de nuevo en ${Math.ceil(remainingSec)} s.`,
+        });
+      }
+    }
+
+    // Código si el modo de entrada lo requiere (leagues.md §3: "si el modo
+    // lo requiere"): `code` y `mixed` sí; `invite` no (solo invitación).
+    const code =
+      validated.entryMode === "code" || validated.entryMode === "mixed"
+        ? generateLeagueCode()
+        : null;
+
+    const league = await this.deps.prisma.$transaction(async (tx) => {
+      const created = await tx.league.create({
+        data: {
+          name: validated.name,
+          description: validated.description,
+          type: validated.type,
+          visibility: validated.visibility,
+          minMembers: validated.minMembers,
+          maxMembers: validated.maxMembers,
+          entryMode: validated.entryMode,
+          startDate: validated.startDate,
+          endDate: validated.endDate,
+          // La liga queda operativa al crearse (ADR-0023): el creador es el
+          // admin y puede unirse a miembros de inmediato con el código.
+          status: "active",
+          members: {
+            create: { userId: actorId, role: "admin" },
+          },
+          invites: code
+            ? { create: { code, createdBy: actorId } }
+            : undefined,
+        },
+      });
+      await appendAudit(tx, {
+        actorId: meta.actorId,
+        action: "league.created",
+        entity: "league",
+        entityId: created.id,
+        afterData: {
+          name: created.name,
+          type: created.type,
+          visibility: created.visibility,
+          entryMode: created.entryMode,
+          minMembers: created.minMembers,
+          maxMembers: created.maxMembers,
+          // El código NO se registra (secreto): solo si se generó uno.
+          codeGenerated: code !== null,
+        },
+        ip: meta.ip,
+      });
+      return created;
+    });
+
+    // La vista se lee tras la transacción (miembros + código + conteo).
+    return this.toLeagueView(league.id, actorId);
+  }
+
+  /**
+   * Rota el código de la liga (US-23, leagues.md §4: "generar nuevo código
+   * invalida el anterior"):
+   * - Solo el **admin** de la liga (leagues.md §5).
+   * - Revoca todos los códigos activos y crea uno nuevo (transacción).
+   * - Auditoría `league.code_rotated` (IDs de invitación, no el código).
+   *
+   * @returns el nuevo código.
+   */
+  async rotateCode(
+    leagueId: string,
+    actorId: string,
+    meta: AuditMeta,
+  ): Promise<string> {
+    const league = await this.deps.prisma.league.findUnique({
+      where: { id: leagueId },
+    });
+    if (!league) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "La liga no existe." });
+    }
+    this.assertLeagueAdmin(
+      await this.deps.prisma.leagueMember.findUnique({
+        where: { leagueId_userId: { leagueId, userId: actorId } },
+      }),
+    );
+
+    const newCode = generateLeagueCode();
+    await this.deps.prisma.$transaction(async (tx) => {
+      const revoked = await tx.leagueInvite.updateMany({
+        where: { leagueId, status: "active" },
+        data: { status: "revoked" },
+      });
+      const created = await tx.leagueInvite.create({
+        data: { leagueId, code: newCode, createdBy: actorId },
+      });
+      await appendAudit(tx, {
+        actorId: meta.actorId,
+        action: "league.code_rotated",
+        entity: "league",
+        entityId: leagueId,
+        beforeData: { revokedCount: revoked.count },
+        afterData: { inviteId: created.id },
+        ip: meta.ip,
+      });
+    });
+    return newCode;
+  }
+
+  /**
+   * Detalle de una liga (US-23): solo los **miembros activos** la ven
+   * (leagues.md §9: las privadas no son visibles para extraños; la
+   * accesibilidad de ligas públicas la añade US-24). El código solo lo
+   * devuelve el admin (leagues.md §5).
+   *
+   * Fuera de la liga → NOT_FOUND (no se revela la existencia, US-24 CA).
+   */
+  async getLeague(leagueId: string, userId: string): Promise<LeagueView> {
+    const league = await this.deps.prisma.league.findUnique({
+      where: { id: leagueId },
+    });
+    if (!league) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "La liga no existe." });
+    }
+    const membership = await this.deps.prisma.leagueMember.findUnique({
+      where: { leagueId_userId: { leagueId, userId } },
+    });
+    if (!membership || membership.status !== "active") {
+      // Mismo error que "no existe": no se revela la existencia de ligas
+      // privadas a extraños (leagues.md §9, US-24 CA).
+      throw new TRPCError({ code: "NOT_FOUND", message: "La liga no existe." });
+    }
+    return this.toLeagueView(league.id, userId);
+  }
+
+  /** Ligas activas del usuario (US-23): detalle + código si es admin. */
+  async myLeagues(userId: string): Promise<LeagueView[]> {
+    const memberships = await this.deps.prisma.leagueMember.findMany({
+      where: { userId, status: "active" },
+      select: { leagueId: true },
+      orderBy: { joinedAt: "asc" },
+    });
+    if (memberships.length === 0) return [];
+    return Promise.all(memberships.map((m) => this.toLeagueView(m.leagueId, userId)));
+  }
+
+  // ── US-15 · Dashboard (lecturas de solo lectura) ───────────────────────
 
   /**
    * Ligas activas del usuario + sus posiciones (US-15, dashboard).
@@ -107,6 +354,8 @@ export class LeagueService {
       };
     });
   }
+
+  // ── US-21 · Rankings por GP y general (ADR-0022) ───────────────────────
 
   /**
    * Calcula y publica los rankings de una liga a partir de `scores` (US-21).
@@ -311,6 +560,8 @@ export class LeagueService {
     return { leagues: publishedLeagues.size, rankings: perGpRows.length + overallRows.length };
   }
 
+  // ── Privados ────────────────────────────────────────────────────────────
+
   /**
    * Coste total de los lineups de la temporada por usuario (desempate 3:
    * "menor coste total de lineups"). Coste de un lineup = suma de los precios
@@ -356,5 +607,126 @@ export class LeagueService {
       costByUser.set(l.userId, (costByUser.get(l.userId) ?? 0) + cost);
     }
     return costByUser;
+  }
+
+  /**
+   * Revalida el payload de creación server-side (el cliente nunca se confía
+   * — AGENTS.md §8):
+   * 1. Formato completo (`createLeagueInputSchema`).
+   * 2. Límites de miembros PROVISIONAL (leagues.md §3: 2–50; desde
+   *    `shared/config`, no hardcodeados — AGENTS.md §1.3).
+   * 3. Consistencia tipo/visibilidad (leagues.md §2): privada ⇒ no pública;
+   *    pública ⇒ visible en directorio.
+   */
+  private validateCreation(input: unknown): {
+    name: string;
+    description: string | null;
+    type: LeagueType;
+    visibility: LeagueVisibility;
+    minMembers: number;
+    maxMembers: number;
+    entryMode: LeagueEntryMode;
+    startDate: Date | null;
+    endDate: Date | null;
+  } {
+    const result = createLeagueInputSchema.safeParse(input);
+    if (!result.success) {
+      const issues = result.error.issues
+        .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+        .join("; ");
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: `Liga inválida: ${issues}`,
+      });
+    }
+    const v = result.data;
+    const limits = this.deps.leagueLimits ?? PROVISIONAL_SEASON_RULES.league;
+
+    if (v.minMembers < limits.minMembers) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: `El mínimo de miembros no puede ser inferior a ${limits.minMembers}.`,
+      });
+    }
+    if (v.maxMembers > limits.maxMembers) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: `El máximo de miembros no puede superar ${limits.maxMembers}.`,
+      });
+    }
+    if (v.type === "private" && v.visibility === "public") {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Una liga privada no puede tener visibilidad pública.",
+      });
+    }
+    if (v.type === "public" && v.visibility !== "public") {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Una liga pública debe tener visibilidad pública.",
+      });
+    }
+
+    return {
+      name: v.name,
+      description: v.description ?? null,
+      type: v.type,
+      visibility: v.visibility,
+      minMembers: v.minMembers,
+      maxMembers: v.maxMembers,
+      entryMode: v.entryMode,
+      startDate: v.startDate ?? null,
+      endDate: v.endDate ?? null,
+    };
+  }
+
+  /** Exige que la membresía sea de un ADMIN activo (leagues.md §5). */
+  private assertLeagueAdmin(
+    membership: { role: string; status: string } | null,
+  ): void {
+    if (!membership || membership.status !== "active" || membership.role !== "admin") {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Solo el admin de la liga puede hacer esta acción.",
+      });
+    }
+  }
+
+  /**
+   * Proyecta la vista de una liga para el actor (US-23): detalle + miembros
+   * activos + código (solo admin; leagues.md §5).
+   */
+  private async toLeagueView(leagueId: string, actorId: string): Promise<LeagueView> {
+    const prisma = this.deps.prisma;
+    const [league, membership, activeInvite, activeMembers] = await Promise.all([
+      prisma.league.findUniqueOrThrow({ where: { id: leagueId } }),
+      prisma.leagueMember.findUnique({
+        where: { leagueId_userId: { leagueId, userId: actorId } },
+      }),
+      prisma.leagueInvite.findFirst({
+        where: { leagueId, status: "active" },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.leagueMember.count({ where: { leagueId, status: "active" } }),
+    ]);
+    const isAdmin =
+      membership !== null &&
+      membership.status === "active" &&
+      membership.role === "admin";
+    return {
+      id: league.id,
+      name: league.name,
+      description: league.description,
+      type: league.type,
+      visibility: league.visibility,
+      minMembers: league.minMembers,
+      maxMembers: league.maxMembers,
+      entryMode: league.entryMode,
+      startDate: league.startDate,
+      endDate: league.endDate,
+      activeMembers,
+      isAdmin,
+      code: isAdmin ? (activeInvite?.code ?? null) : null,
+    };
   }
 }

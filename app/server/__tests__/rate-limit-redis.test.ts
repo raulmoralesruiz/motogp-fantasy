@@ -123,4 +123,22 @@ describe("redisRateLimitStore", () => {
       expect(result).toEqual({ count: 2, remainingSec: 3500 });
     });
   });
+
+  describe("recordLeagueCreation (US-23, prefijo rl:league:create:)", () => {
+    it("usa la clave de ventana de creación POR USUARIO", async () => {
+      mocks.redis.eval.mockResolvedValue(4);
+      mocks.redis.ttl.mockResolvedValue(3590);
+
+      const result = await redisRateLimitStore.recordLeagueCreation("user-456", 3600);
+
+      expect(mocks.redis.eval).toHaveBeenCalledTimes(1);
+      const [script, numKeys, key, windowSec] = mocks.redis.eval.mock.calls[0] ?? [];
+      expect(script).toContain('redis.call("INCR", KEYS[1])');
+      expect(numKeys).toBe(1);
+      expect(key).toBe("rl:league:create:user:user-456");
+      expect(windowSec).toBe("3600");
+      expect(mocks.redis.ttl).toHaveBeenCalledWith("rl:league:create:user:user-456");
+      expect(result).toEqual({ count: 4, remainingSec: 3590 });
+    });
+  });
 });

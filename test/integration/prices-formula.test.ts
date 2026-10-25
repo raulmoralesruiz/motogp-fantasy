@@ -214,7 +214,13 @@ describe("US-08 · Fórmula de precios y ajuste manual (PostgreSQL real)", () =>
 
   /** Auditorías de una acción sobre una fila de precio (entityId). */
   async function auditsFor(action: string, priceRowId: string) {
-    return prisma.auditLog.findMany({ where: { action, entityId: priceRowId } });
+    // `orderBy` explícito: sin él Postgres no garantiza el orden de las filas
+    // (índice `(entity, entityId)` sin clave de desempate) y las aserciones
+    // por posición (`audits[1]`) serían inestables.
+    return prisma.auditLog.findMany({
+      where: { action, entityId: priceRowId },
+      orderBy: { createdAt: "asc" },
+    });
   }
 
   /** Resultados definitivos de la carrera de gp1 (r1 P1, r2 P2, r3 P3, DNF). */
