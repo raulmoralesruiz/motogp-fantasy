@@ -1,6 +1,6 @@
 # ADR-0020: Definitivo, primer recálculo y estados de evento (US-18)
 
-- **Estado:** Aceptado (2026-10-24) — implementado y verificado (motor puro + servicio + router + UI + tests; pendiente de commit)
+- **Estado:** Aceptado (2026-10-24) — implementado, verificado, commitado (`f99f815`) y desplegado en producción (2026-10-25)
 - **Fecha:** 2026-10-24
 - **Relacionado:** US-18 (backlog E5), ADR-0007 (pipeline de resultados), ADR-0018 (semántica del pipeline — fija `results_version` y "el primer definitivo, US-18"), ADR-0019 (adapter PulseLive), `scoring.md` §2/§5/§6/§7, `data-model.md` §5/§6, invariantes 6 y 7 (AGENTS.md §4), `season_rules` (tablas de puntuación versionadas).
 

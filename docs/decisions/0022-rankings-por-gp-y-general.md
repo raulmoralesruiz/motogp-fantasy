@@ -1,6 +1,6 @@
 # ADR-0022: Rankings por GP y general (US-21)
 
-- **Estado:** Aceptado (2026-10-25) — implementado y verificado (fórmula pura + servicio + orquestación BFF + tests; pendiente de commit)
+- **Estado:** Aceptado (2026-10-25) — implementado, verificado, commitado (`56055cc`) y desplegado en producción (2026-10-25)
 - **Fecha:** 2026-10-25
 - **Relacionado:** US-21 (backlog E5), ADR-0005 (modelo de ligas — rankings derivados de `scores`, por `(league, user, gp)`), ADR-0020/0021 (pipeline de resultados — `results_version`), `leagues.md` §8 (reglas de ranking y desempates, fuente de verdad), `data-model.md` §5 (`rankings` = derivado de `scores`), invariantes 4 y 7 (AGENTS.md §4).
 

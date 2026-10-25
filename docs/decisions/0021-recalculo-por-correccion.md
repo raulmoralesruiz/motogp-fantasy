@@ -1,6 +1,6 @@
 # ADR-0021: Recálculo auditable y versionado por corrección (US-19)
 
-- **Estado:** Aceptado (2026-10-24) — implementado y verificado (servicio + tests; pendiente de commit)
+- **Estado:** Aceptado (2026-10-24) — implementado, verificado, commitado (`6a2fe2f`) y desplegado en producción (2026-10-25)
 - **Fecha:** 2026-10-24
 - **Relacionado:** US-19 (backlog E5), ADR-0007 (pipeline de resultados), ADR-0018 (semántica del pipeline — fija "cada corrección, US-19" y "el recálculo se dispara solo si el GP ya tiene `results_version`"), ADR-0020 (definitivo + primer recálculo — fija el motor y el servicio que US-19 reutiliza), `scoring.md` §7, invariantes 6 y 7 (AGENTS.md §4), `season_rules` (tablas de puntuación versionadas).
 
