@@ -148,19 +148,22 @@ Falta definir:
   1. Revalida el input server-side (`joinLeagueInputSchema`: `leagueId?` +
      `code?`, al menos uno).
   2. Registra el intento en la ventana por IP (si hay store inyectado).
-  3. Resuelve la liga: por el código (invite activa; si no existe/revocada
+  3. **Consulta el bloqueo por IP — PRIORIDAD TOTAL (espejo US-01): si la
+     IP está bloqueada, lanza "Demasiados intentos fallidos." ANTES de
+     resolver el código.** (Ver addendum: el orden original — resolver el
+     código primero — esquivaba el bloqueo con un código erróneo.)
+  4. Resuelve la liga: por el código (invite activa; si no existe/revocada
      o no coincide con `leagueId` → "El código no es válido." + registro de
      fallo) o por `leagueId` (inexistente → NOT_FOUND).
-  4. Lee membresía activa, miembros activos y código activo de la liga;
-     consulta el bloqueo por IP.
-  5. Aplica la regla pura; si rechaza por "código no válido", registra el
+  5. Lee membresía activa, miembros activos y código activo de la liga.
+  6. Aplica la regla pura; si rechaza por "código no válido", registra el
      fallo y, al alcanzar el umbral, bloquea la IP (y resetea el contador
      con la unión correcta).
-  6. Transacción: `SELECT … FOR UPDATE` de la fila de la liga → recontar
+  7. Transacción: `SELECT … FOR UPDATE` de la fila de la liga → recontar
      miembros activos (última plaza) → insertar membresía
      (`role=member`, `status=active`) → auditoría `league.joined`
      (`via: code | open`; el código NO se registra — secreto).
-  7. Devuelve la `LeagueView` del actor (la UI redirige al detalle).
+  8. Devuelve la `LeagueView` del actor (la UI redirige al detalle).
 - **Rate limit** (módulo `identity`, frontera de I/O): `RateLimitStore`
   gana `recordLeagueJoinAttempt(ip, windowSec)`,
   `recordLeagueJoinFailure(ip)`, `resetLeagueJoinFailures(ip)`,
@@ -231,7 +234,9 @@ Falta definir:
   → "El código no es válido.", ya miembro → "Ya eres miembro de esta liga.",
   llena → "La liga está llena.", status ≠ active y `entryMode=invite` → "La
   liga no acepta entradas.", ventana N+1 → rate-limit, N fallos → bloqueo
-  (el código correcto también se rechaza hasta que expira), reset del
+  (el código correcto también se rechaza hasta que expira), **código
+  erróneo también se rechaza con "Demasiados intentos fallidos" mientras la
+  IP esté bloqueada** (test de regresión, ver addendum), reset del
   contador con éxito, **concurrencia: dos usuarios por la última plaza →
   solo uno entra**, router (sin sesión → UNAUTHORIZED; con sesión → OK) —
   `test/integration/leagues.test.ts`.
@@ -240,3 +245,41 @@ Falta definir:
   `/ligas` (enlace a `/unirse`) — `app/ligas/__tests__/` +
   `app/unirse/__tests__/`.
 - **Cobertura:** mantener el gate global fusionado 99.9% (T-24).
+
+## Addendum 2026-10-27 — fix del orden del bloqueo (bug de verificación en prod)
+
+**Problema.** La verificación E2E en producción (2026-10-25, 19/20 checks)
+descubrió que el bloqueo por IP **no se aplicaba a un código erróneo**: la
+IP bloqueada seguía recibiendo "El código no es válido." en lugar de
+"Demasiados intentos fallidos." El orden implementado era —
+resolver el código (paso 3 original; lanzaba directamente en el caso
+erróneo) → consultar el bloqueo (paso 4 original) —, de modo que un código
+erróneo nunca llegaba al check de bloqueo.
+
+Esto contradecía la propia decisión de este ADR:
+
+- la regla pura `evaluateLeagueJoin` declara orden `locked → … →
+  invalid_code` (`locked` es prioridad 1);
+- §4 "Anti fuerza bruta" lo define como "espejo exacto del patrón US-01"
+  y el login (`evaluateLoginAttempt`/`auth-service.login`) consulta el
+  bloqueo **antes** de verificar credenciales;
+- §4: "bloqueo … (aunque el código sea correcto)" — la intención es que el
+  bloqueo sea la restricción dominante.
+
+Los tests de integración no lo detectaron porque solo cubrían el caso de
+código **correcto** con la IP bloqueada (el código correcto sí pasaba por
+la resolución y llegaba al check).
+
+**Decisión (fix).** El check de bloqueo se mueve al **paso 3** (antes de
+resolver el código), como en el login. El lanzamiento reutiliza
+`joinRejection({ reason: "locked" })` (sin duplicar el mensaje) y la rama
+`locked` de la llamada desde la regla pura queda inalcanzable por
+construcción (`ipLockRemainingSec` es 0 al llegar allí — si no, ya se
+habría lanzado). Test de regresión añadido: código erróneo con la IP
+bloqueada → "Demasiados intentos fallidos.".
+
+**Consecuencias.** El atacante pasa a estar limitado por el bloqueo (15
+min) además de la ventana (10/60 s) también con códigos erróneos. Ventana
+y fallos siguen por IP; sin cambios de esquema, envs ni API. Todas las
+puertas en verde (lint, typecheck, unit 669, UI 397, integración 365,
+build, cobertura 99.9% ≥ 99.9%).

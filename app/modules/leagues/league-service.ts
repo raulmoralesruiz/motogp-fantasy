@@ -424,7 +424,23 @@ export class LeagueService {
       ipWindowRemainingSec = w.remainingSec;
     }
 
-    // 2) Resolver la liga: por el código (invite activa) o por leagueId.
+    // 2) Bloqueo por IP — PRIORIDAD TOTAL, como el login US-01: se consulta
+    //    ANTES de resolver el código (el orden de la regla pura es
+    //    `locked → … → invalid_code`, ADR-0025). Sin este check previo, un
+    //    código erróneo lanzaría "El código no es válido." en el paso 3 y
+    //    esquivaría el bloqueo: la IP bloqueada seguiría iterando códigos.
+    let ipLockRemainingSec = 0;
+    if (joinRL) {
+      ipLockRemainingSec = await joinRL.leagueJoinLockRemainingSec(ip);
+      if (ipLockRemainingSec > 0) {
+        throw this.joinRejection({
+          reason: "locked",
+          retryAfterSec: Math.ceil(ipLockRemainingSec),
+        });
+      }
+    }
+
+    // 3) Resolver la liga: por el código (invite activa) o por leagueId.
     let resolvedLeagueId: string;
     let codeValid = false;
     if (code !== undefined) {
@@ -463,11 +479,9 @@ export class LeagueService {
       throw new TRPCError({ code: "NOT_FOUND", message: "La liga no existe." });
     }
 
-    // 3) Estado para la regla pura (leagues/core/join, ADR-0025).
-    let ipLockRemainingSec = 0;
-    if (joinRL) {
-      ipLockRemainingSec = await joinRL.leagueJoinLockRemainingSec(ip);
-    }
+    // 4) Estado para la regla pura (leagues/core/join, ADR-0025). El
+    //    bloqueo ya se rechazó arriba; aquí solo se pasa el estado (0) por
+    //    si se reordena — la regla pura lo contempla como prioridad 1.
     const [membership, activeMembers, activeInvite] = await Promise.all([
       this.deps.prisma.leagueMember.findUnique({
         where: { leagueId_userId: { leagueId: resolvedLeagueId, userId: actorId } },
@@ -1087,10 +1101,17 @@ export class LeagueService {
   }
 
   /**
-   * Traduce un rechazo de la regla pura (US-25) en el error server-side con
-   * motivo explícito en español (leagues.md §6, CA de US-25). El switch es
-   * exhaustivo sobre `LeagueJoinRejectionReason` (sin `default` muerto): si
-   * el núcleo añade un motivo, el typecheck obliga a tratarlo aquí.
+   * Traduce un rechazo (US-25) en el error server-side con motivo explícito
+   * en español (leagues.md §6, CA de US-25). El switch es exhaustivo sobre
+   * `LeagueJoinRejectionReason` (sin `default` muerto): si el núcleo añade
+   * un motivo, el typecheck obliga a tratarlo aquí.
+   *
+   * Se usa en dos puntos: el check temprano de bloqueo (paso 2, espejo
+   * US-01 — `locked` con prioridad total antes de resolver el código) y el
+   * rechazo de la regla pura (paso 5). Al llegar al paso 5,
+   * `ipLockRemainingSec` es 0 (si no, ya se habría lanzado en el paso 2),
+   * así que la rama `locked` de esa llamada está inalcanzable — de ahí que
+   * el test de regresión la cubra por el paso 2.
    */
   private joinRejection(decision: {
     reason: LeagueJoinRejectionReason;

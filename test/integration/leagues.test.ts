@@ -1343,6 +1343,15 @@ describe("US-25 · Unirse a una liga por código o entrada abierta (PostgreSQL r
       });
       // La IP sigue bloqueada (el contador de fallos no se reseteó solo).
       expect(await store.leagueJoinLockRemainingSec(META.ip)).toBeGreaterThan(0);
+      // Regresión (bug de orden): un código ERRÓNEO también debe respetar el
+      // bloqueo (no esquivarlo con "El código no es válido." en la resolución
+      // previa) — ADR-0025, orden `locked → … → invalid_code`, espejo US-01.
+      await expect(
+        svc.joinLeague({ code: `TAMPOCO${suffix}` }, { ...META, actorId: attacker }),
+      ).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+        message: expect.stringContaining("Demasiados intentos fallidos"),
+      });
     });
 
     it("el bloqueo expira (setNow) y se puede unir de nuevo", async () => {
