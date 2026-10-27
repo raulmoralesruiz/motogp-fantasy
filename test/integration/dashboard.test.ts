@@ -384,6 +384,42 @@ describe("US-15 · Dashboard (PostgreSQL real)", () => {
     });
   });
 
+  it("liga con rankings versionados: myRankings toma la última publicación", async () => {
+    // Dos publicaciones para el mismo (liga, usuario, GP) con el MISMO
+    // `computedAt` (recálculo versionado, AGENTS.md §5): la vigente es la de
+    // mayor `createdAt` (desempate de `latestRanking`).
+    const computedAt = new Date("2199-07-01T00:00:00Z");
+    await prisma.ranking.create({
+      data: {
+        leagueId: league1Id,
+        gpId: gpA2Id,
+        userId,
+        position: 5,
+        points: 50,
+        resultsVersion: "scoring-v2",
+        computedAt,
+        createdAt: new Date("2199-07-01T00:00:00Z"),
+      },
+    });
+    await prisma.ranking.create({
+      data: {
+        leagueId: league1Id,
+        gpId: gpA2Id,
+        userId,
+        position: 1,
+        points: 200,
+        resultsVersion: "scoring-v3",
+        computedAt,
+        createdAt: new Date("2199-07-02T00:00:00Z"),
+      },
+    });
+
+    const { dashboard } = await callerFor(USER_IP, userToken);
+    const view = await dashboard.get();
+    const l1 = view.leagues.find((l) => l.leagueId === league1Id);
+    expect(l1).toMatchObject({ gpPosition: 1, gpPoints: 200 });
+  });
+
   it("liga sin rankings: posiciones null", async () => {
     const league2 = await prisma.league.create({
       data: { name: `Liga ${suffix} B` },

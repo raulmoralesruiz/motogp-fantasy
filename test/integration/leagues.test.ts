@@ -1774,4 +1774,466 @@ describe("US-23 · Router leagues (glue BFF)", () => {
       message: "Ya eres miembro de esta liga.",
     });
   });
+
+  // ── US-26 · Endpoints de gestión (glue BFF) ──────────────────────────────
+  // El actor del bloque es admin de `leagueId`; estos tests cubren el glue
+  // (input → servicio) de los endpoints nuevos.
+
+  it("update (router): el admin cambia el nombre", async () => {
+    const caller = leaguesRouter.createCaller(await ctxAuth());
+    const view = await caller.update({
+      leagueId,
+      name: `Liga router US-26 ${rsuffix}`,
+    });
+    expect(view.name).toBe(`Liga router US-26 ${rsuffix}`);
+  });
+
+  it("setMemberInvites (router): el admin habilita las invitaciones de miembros", async () => {
+    const caller = leaguesRouter.createCaller(await ctxAuth());
+    const view = await caller.setMemberInvites({ leagueId, enabled: true });
+    expect(view.allowMemberInvites).toBe(true);
+  });
+
+  it("close (router): el admin cierra la liga", async () => {
+    // Crea una liga aparte para no cerrar la `leagueId` que usan otros tests.
+    const created = await leaguesRouter
+      .createCaller(await ctxAuth())
+      .create(validInput({ name: `Liga close ${rsuffix}` }));
+    const caller = leaguesRouter.createCaller(await ctxAuth());
+    await caller.close({ leagueId: created.id });
+    const league = await prisma.league.findUniqueOrThrow({
+      where: { id: created.id },
+    });
+    expect(league.status).toBe("finished");
+  });
+
+  it("kick (router): el admin expulsa a un miembro", async () => {
+    const created = await leaguesRouter
+      .createCaller(await ctxAuth())
+      .create(validInput({ name: `Liga kick ${rsuffix}` }));
+    const member = (
+      await prisma.user.create({
+        data: {
+          email: `kick-${rsuffix}@test.local`,
+          passwordHash: "h",
+          username: `kick_${rsuffix}`,
+        },
+      })
+    ).id;
+    await prisma.leagueMember.create({
+      data: { leagueId: created.id, userId: member, role: "member" },
+    });
+    const caller = leaguesRouter.createCaller(await ctxAuth());
+
+    const afterKick = await caller.kick({
+      leagueId: created.id,
+      targetUserId: member,
+    });
+    expect(afterKick.members.find((m) => m.userId === member)).toBeUndefined();
+  });
+
+  it("transferAdmin (router): el admin cede el rol a un miembro", async () => {
+    const created = await leaguesRouter
+      .createCaller(await ctxAuth())
+      .create(validInput({ name: `Liga transfer ${rsuffix}` }));
+    const member = (
+      await prisma.user.create({
+        data: {
+          email: `transfer-${rsuffix}@test.local`,
+          passwordHash: "h",
+          username: `transfer_${rsuffix}`,
+        },
+      })
+    ).id;
+    await prisma.leagueMember.create({
+      data: { leagueId: created.id, userId: member, role: "member" },
+    });
+    const caller = leaguesRouter.createCaller(await ctxAuth());
+
+    const afterTransfer = await caller.transferAdmin({
+      leagueId: created.id,
+      targetUserId: member,
+    });
+    // El actor (admin) pasa a miembro; el destino, a admin.
+    expect(afterTransfer.isAdmin).toBe(false);
+    expect(
+      afterTransfer.members.find((m) => m.userId === member)?.role,
+    ).toBe("admin");
+  });
+});
+
+/**
+ * US-26 · Permisos de liga (admin/miembro) (PostgreSQL real, ADR-0026).
+ *
+ * CA: "solo el admin expulsa, cambia configuración, revoca código, cierra la
+ * liga o transfiere el rol (tests de integración: un miembro intenta cada
+ * acción → 403); invitar solo si el admin lo habilita."
+ *
+ * Cubre (regla pura `canManageLeague`, fuente única T-08):
+ * - **updateLeague**: admin OK + auditoría; miembro → FORBIDDEN; visibilidad
+ *   inconsistente → BAD_REQUEST; sin campos → BAD_REQUEST; extraño (privada)
+ *   → NOT_FOUND.
+ * - **transferAdmin**: admin OK (destino admin, actor miembro) + auditoría;
+ *   miembro → FORBIDDEN; destino no miembro → BAD_REQUEST; auto → BAD_REQUEST.
+ * - **kickMember**: admin OK (miembro `kicked`) + auditoría; miembro →
+ *   FORBIDDEN; destino no miembro → BAD_REQUEST; auto → BAD_REQUEST.
+ * - **closeLeague**: admin OK (status `finished`) + auditoría; miembro →
+ *   FORBIDDEN; ya cerrada → BAD_REQUEST.
+ * - **setMemberInvites**: admin OK + auditoría; miembro → FORBIDDEN.
+ * - **Código (canInvite)**: el miembro solo lo ve si el admin lo habilita.
+ */
+describe("US-26 · Permisos de liga (admin/miembro) (PostgreSQL real)", () => {
+  let prisma: PrismaClient;
+  let service: LeagueService;
+  const suffix = randomUUID().slice(0, 8);
+
+  beforeAll(() => {
+    prisma = createPrisma();
+    service = new LeagueService({ prisma });
+  });
+
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  async function makeUser(tag: string): Promise<string> {
+    return (
+      await prisma.user.create({
+        data: {
+          email: `${tag}-${suffix}@test.local`,
+          passwordHash: "h",
+          username: `${tag}_${suffix}`,
+        },
+      })
+    ).id;
+  }
+
+  /** Liga privada (admin) + un miembro. Devuelve los IDs y la vista del admin. */
+  async function makeLeagueWithMember(tag: string) {
+    const admin = await makeUser(`${tag}-admin`);
+    const member = await makeUser(`${tag}-member`);
+    const view = await service.createLeague(
+      validInput({ name: `Liga ${tag} ${suffix}` }),
+      { ...META, actorId: admin },
+    );
+    await prisma.leagueMember.create({
+      data: { leagueId: view.id, userId: member, role: "member" },
+    });
+    return { leagueId: view.id, admin, member, code: view.code as string };
+  }
+
+  // ── updateLeague ──────────────────────────────────────────────────────────
+
+  it("updateLeague: el admin cambia nombre/descripción/visibilidad + auditoría", async () => {
+    const { leagueId, admin } = await makeLeagueWithMember("up");
+
+    const view = await service.updateLeague(
+      leagueId,
+      { leagueId, name: "Liga renombrada", description: "Nueva descripción" },
+      admin,
+      { ...META, actorId: admin },
+    );
+
+    expect(view.name).toBe("Liga renombrada");
+    expect(view.description).toBe("Nueva descripción");
+    const audit = await prisma.auditLog.findFirst({
+      where: { action: "league.updated", entityId: leagueId },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(audit).not.toBeNull();
+    expect(audit?.actorId).toBe(admin);
+    expect(audit?.afterData).toMatchObject({ name: "Liga renombrada" });
+  });
+
+  it("updateLeague: un miembro (no admin) → FORBIDDEN", async () => {
+    const { leagueId, member } = await makeLeagueWithMember("upm");
+    await expect(
+      service.updateLeague(
+        leagueId,
+        { leagueId, name: "Intento intruso" },
+        member,
+        { ...META, actorId: member },
+      ),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("updateLeague: visibilidad inconsistente con el tipo → BAD_REQUEST", async () => {
+    const { leagueId, admin } = await makeLeagueWithMember("upv");
+    await expect(
+      service.updateLeague(
+        leagueId,
+        { leagueId, visibility: "public" },
+        admin,
+        { ...META, actorId: admin },
+      ),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("updateLeague: una liga pública no puede pasar a visibilidad no pública → BAD_REQUEST", async () => {
+    const admin = await makeUser("upp-admin");
+    const pub = await service.createLeague(
+      validInput({
+        name: `Liga pública ${suffix}`,
+        type: "public",
+        visibility: "public",
+      }),
+      { ...META, actorId: admin },
+    );
+    await expect(
+      service.updateLeague(
+        pub.id,
+        { leagueId: pub.id, visibility: "unlisted" },
+        admin,
+        { ...META, actorId: admin },
+      ),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("updateLeague: sin campos a cambiar → BAD_REQUEST", async () => {
+    const { leagueId, admin } = await makeLeagueWithMember("upn");
+    await expect(
+      service.updateLeague(
+        leagueId,
+        { leagueId },
+        admin,
+        { ...META, actorId: admin },
+      ),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("updateLeague: un extraño en una liga privada → NOT_FOUND (no revela)", async () => {
+    const { leagueId } = await makeLeagueWithMember("ups");
+    const stranger = await makeUser("up-stranger");
+    await expect(
+      service.updateLeague(
+        leagueId,
+        { leagueId, name: "Intruso" },
+        stranger,
+        { ...META, actorId: stranger },
+      ),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  // ── transferAdmin ─────────────────────────────────────────────────────────
+
+  it("transferAdmin: el admin cede el rol (destino admin, actor miembro) + auditoría", async () => {
+    const { leagueId, admin, member } = await makeLeagueWithMember("ta");
+
+    const view = await service.transferAdmin(
+      leagueId,
+      member,
+      admin,
+      { ...META, actorId: admin },
+    );
+
+    expect(view.isAdmin).toBe(false); // el actor pasa a miembro
+    const newAdmin = view.members.find((m) => m.userId === member);
+    expect(newAdmin?.role).toBe("admin");
+    const oldAdmin = view.members.find((m) => m.userId === admin);
+    expect(oldAdmin?.role).toBe("member");
+    const audit = await prisma.auditLog.findFirst({
+      where: { action: "league.admin_transferred", entityId: leagueId },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(audit).not.toBeNull();
+    expect(audit?.afterData).toMatchObject({ newAdminId: member });
+  });
+
+  it("transferAdmin: un miembro (no admin) → FORBIDDEN", async () => {
+    const { leagueId, member } = await makeLeagueWithMember("tam");
+    await expect(
+      service.transferAdmin(leagueId, leagueId, member, {
+        ...META,
+        actorId: member,
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("transferAdmin: el destino no es miembro → BAD_REQUEST", async () => {
+    const { leagueId, admin } = await makeLeagueWithMember("tan");
+    const outsider = await makeUser("ta-outsider");
+    await expect(
+      service.transferAdmin(leagueId, outsider, admin, {
+        ...META,
+        actorId: admin,
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("transferAdmin: transferirse a sí mismo → BAD_REQUEST", async () => {
+    const { leagueId, admin } = await makeLeagueWithMember("taf");
+    await expect(
+      service.transferAdmin(leagueId, admin, admin, {
+        ...META,
+        actorId: admin,
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  // ── kickMember ────────────────────────────────────────────────────────────
+
+  it("kickMember: el admin expulsa (miembro `kicked`) + auditoría", async () => {
+    const { leagueId, admin, member } = await makeLeagueWithMember("km");
+
+    const view = await service.kickMember(leagueId, member, admin, {
+      ...META,
+      actorId: admin,
+    });
+
+    // El expulsado ya no es miembro activo.
+    expect(view.members.find((m) => m.userId === member)).toBeUndefined();
+    const row = await prisma.leagueMember.findUnique({
+      where: { leagueId_userId: { leagueId, userId: member } },
+    });
+    expect(row?.status).toBe("kicked");
+    expect(row?.leftAt).not.toBeNull();
+    const audit = await prisma.auditLog.findFirst({
+      where: { action: "league.member_kicked", entityId: leagueId },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(audit).not.toBeNull();
+    expect(audit?.afterData).toMatchObject({ kickedUserId: member });
+  });
+
+  it("kickMember: un miembro (no admin) → FORBIDDEN", async () => {
+    const { leagueId, member } = await makeLeagueWithMember("kmm");
+    const other = await makeUser("km-other");
+    await prisma.leagueMember.create({
+      data: { leagueId, userId: other, role: "member" },
+    });
+    await expect(
+      service.kickMember(leagueId, other, member, {
+        ...META,
+        actorId: member,
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("kickMember: el destino no es miembro → BAD_REQUEST", async () => {
+    const { leagueId, admin } = await makeLeagueWithMember("kmn");
+    const outsider = await makeUser("km-outsider");
+    await expect(
+      service.kickMember(leagueId, outsider, admin, {
+        ...META,
+        actorId: admin,
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("kickMember: expulsarse a sí mismo → BAD_REQUEST", async () => {
+    const { leagueId, admin } = await makeLeagueWithMember("kmf");
+    await expect(
+      service.kickMember(leagueId, admin, admin, {
+        ...META,
+        actorId: admin,
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  // ── closeLeague ───────────────────────────────────────────────────────────
+
+  it("closeLeague: el admin cierra (status `finished`) + auditoría", async () => {
+    const { leagueId, admin } = await makeLeagueWithMember("cl");
+
+    const view = await service.closeLeague(leagueId, admin, {
+      ...META,
+      actorId: admin,
+    });
+
+    expect(view).toBeDefined();
+    const league = await prisma.league.findUniqueOrThrow({
+      where: { id: leagueId },
+    });
+    expect(league.status).toBe("finished");
+    const audit = await prisma.auditLog.findFirst({
+      where: { action: "league.closed", entityId: leagueId },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(audit).not.toBeNull();
+    expect(audit?.afterData).toMatchObject({ status: "finished" });
+  });
+
+  it("closeLeague: un miembro (no admin) → FORBIDDEN", async () => {
+    const { leagueId, member } = await makeLeagueWithMember("clm");
+    await expect(
+      service.closeLeague(leagueId, member, { ...META, actorId: member }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("closeLeague: una liga ya cerrada → BAD_REQUEST", async () => {
+    const { leagueId, admin } = await makeLeagueWithMember("clf");
+    await service.closeLeague(leagueId, admin, { ...META, actorId: admin });
+    await expect(
+      service.closeLeague(leagueId, admin, { ...META, actorId: admin }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  // ── setMemberInvites ──────────────────────────────────────────────────────
+
+  it("setMemberInvites: el admin habilita (miembro ve el código) + auditoría", async () => {
+    const { leagueId, admin, member, code } = await makeLeagueWithMember("mi");
+
+    // Antes: el miembro no ve el código.
+    const before = await service.getLeague(leagueId, member);
+    expect(before.code).toBeNull();
+    expect(before.allowMemberInvites).toBe(false);
+
+    const view = await service.setMemberInvites(
+      leagueId,
+      true,
+      admin,
+      { ...META, actorId: admin },
+    );
+    expect(view.allowMemberInvites).toBe(true);
+
+    // Después: el miembro sí ve el código (canInvite).
+    const after = await service.getLeague(leagueId, member);
+    expect(after.code).toBe(code);
+
+    const audit = await prisma.auditLog.findFirst({
+      where: { action: "league.member_invites_changed", entityId: leagueId },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(audit).not.toBeNull();
+    expect(audit?.afterData).toMatchObject({ allowMemberInvites: true });
+  });
+
+  it("setMemberInvites: el admin deshabilita (el miembro deja de ver el código)", async () => {
+    const { leagueId, admin, member, code } = await makeLeagueWithMember("mid");
+    await service.setMemberInvites(leagueId, true, admin, {
+      ...META,
+      actorId: admin,
+    });
+    const view = await service.setMemberInvites(
+      leagueId,
+      false,
+      admin,
+      { ...META, actorId: admin },
+    );
+    expect(view.allowMemberInvites).toBe(false);
+    const memberView = await service.getLeague(leagueId, member);
+    expect(memberView.code).toBeNull();
+    // El admin sigue viéndolo.
+    const adminView = await service.getLeague(leagueId, admin);
+    expect(adminView.code).toBe(code);
+  });
+
+  it("setMemberInvites: un miembro (no admin) → FORBIDDEN", async () => {
+    const { leagueId, member } = await makeLeagueWithMember("mim");
+    await expect(
+      service.setMemberInvites(leagueId, true, member, {
+        ...META,
+        actorId: member,
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  // ── rotateCode (regla pura unificada, US-26) ─────────────────────────────
+
+  it("rotateCode: un miembro (no admin) → FORBIDDEN (regla pura canManageLeague)", async () => {
+    const { leagueId, member } = await makeLeagueWithMember("rc");
+    await expect(
+      service.rotateCode(leagueId, member, { ...META, actorId: member }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
 });

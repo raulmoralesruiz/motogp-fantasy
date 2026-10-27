@@ -27,6 +27,7 @@
  */
 import { TRPCError } from "@trpc/server";
 import type {
+  League,
   LeagueEntryMode,
   LeagueType,
   LeagueVisibility,
@@ -40,15 +41,23 @@ import { PROVISIONAL_SEASON_RULES } from "@/shared/config";
 import {
   createLeagueInputSchema,
   joinLeagueInputSchema,
+  kickMemberInputSchema,
+  setMemberInvitesInputSchema,
+  transferAdminInputSchema,
+  updateLeagueInputSchema,
 } from "@/shared/validation/leagues";
 
 import {
+  canInvite,
+  canManageLeague,
   canViewLeague,
   evaluateLeagueJoin,
   generateLeagueCode,
   shouldLockLeagueJoin,
   sortRanking,
+  type LeagueAdminAction,
   type LeagueJoinReason,
+  type LeagueMemberRole,
 } from "./core";
 
 /**
@@ -116,8 +125,13 @@ export interface AuditMeta {
   ip: string;
 }
 
-/** Miembro expuesto en la vista (US-24, leagues.md §9): solo seudónimo + rol. */
+/** Miembro expuesto en la vista (US-24, leagues.md §9): seudónimo + rol. */
 export interface LeagueMemberView {
+  /**
+   * Identificador del usuario (UUID opaco, no PII): lo necesita el admin para
+   * dirigir acciones (transferir/expulsar, US-26).
+   */
+  userId: string;
   /** Seudónimo público (`profiles.displayName ?? users.username`); nunca PII. */
   username: string;
   role: "admin" | "member";
@@ -133,6 +147,11 @@ export interface LeagueView {
   minMembers: number;
   maxMembers: number;
   entryMode: LeagueEntryMode;
+  /**
+   * El admin ha habilitado que los miembros vean/compartan el código de
+   * invitación (US-26, leagues.md §5: "invitar solo si el admin lo habilita").
+   */
+  allowMemberInvites: boolean;
   startDate: Date | null;
   endDate: Date | null;
   /** Miembros activos (status = active). */
@@ -147,9 +166,10 @@ export interface LeagueView {
   /** El actor es admin de la liga (miembro activo con rol admin). */
   isAdmin: boolean;
   /**
-   * Código activo: solo lo ve el admin (leagues.md §5); `null` si la liga
-   * no tiene código activo (modo `invite` o sin rotar) o si el actor no es
-   * admin (US-24: el código sigue siendo secreto también en ligas públicas).
+   * Código activo: lo ve el admin siempre (leagues.md §5) y el miembro solo
+   * si el admin lo habilita (`allowMemberInvites`, US-26); `null` si la liga
+   * no tiene código activo (modo `invite` o sin rotar) o si el actor no puede
+   * verlo (US-24: el código sigue siendo secreto por defecto).
    */
   code: string | null;
 }
@@ -326,17 +346,9 @@ export class LeagueService {
     actorId: string,
     meta: AuditMeta,
   ): Promise<string> {
-    const league = await this.deps.prisma.league.findUnique({
-      where: { id: leagueId },
-    });
-    if (!league) {
-      throw new TRPCError({ code: "NOT_FOUND", message: "La liga no existe." });
-    }
-    this.assertLeagueAdmin(
-      await this.deps.prisma.leagueMember.findUnique({
-        where: { leagueId_userId: { leagueId, userId: actorId } },
-      }),
-    );
+    // US-26 (leagues.md §5): solo el admin revoca/genera código — regla pura
+    // `canManageLeague` (fuente única, T-08); un miembro recibe 403.
+    await this.assertCanManage(leagueId, actorId, "rotate_code");
 
     const newCode = generateLeagueCode();
     await this.deps.prisma.$transaction(async (tx) => {
@@ -358,6 +370,291 @@ export class LeagueService {
       });
     });
     return newCode;
+  }
+
+  // ── US-26 · Permisos de liga (admin/miembro, leagues.md §5, ADR-0026) ──
+  //
+  // Todas las acciones de gestión son EXCLUSIVAS del admin (regla pura
+  // `canManageLeague`, fuente única T-08). Un miembro que intente cualquiera
+  // de ellas recibe 403 FORBIDDEN (CA de US-26). Los métodos revalidan el
+  // payload server-side (AGENTS.md §8) y auditan en la misma transacción.
+
+  /**
+   * Cambia la configuración de la liga (US-26, leagues.md §5: "Cambiar
+   * nombre/descripción/visibilidad" — solo admin):
+   * - Solo el **admin** (un miembro → 403, CA de US-26).
+   * - Actualización parcial (nombre/descripción/visibilidad), revalidada
+   *   server-side; la consistencia tipo/visibilidad se mantiene (leagues.md §2).
+   * - Auditoría `league.updated` (antes/después) en la misma transacción.
+   *
+   * @throws {TRPCError} BAD_REQUEST si el payload no pasa la validación o la
+   *   visibilidad resulta inconsistente con el tipo; FORBIDDEN si el actor no
+   *   es admin; NOT_FOUND si la liga no existe (o es privada a un extraño).
+   */
+  async updateLeague(
+    leagueId: string,
+    input: unknown,
+    actorId: string,
+    meta: AuditMeta,
+  ): Promise<LeagueView> {
+    const result = updateLeagueInputSchema.safeParse(input);
+    if (!result.success) {
+      const issues = result.error.issues
+        .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+        .join("; ");
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: `Cambio inválido: ${issues}`,
+      });
+    }
+    const v = result.data;
+    const league = await this.assertCanManage(leagueId, actorId, "update");
+
+    // Consistencia tipo/visibilidad (leagues.md §2), solo si se cambia.
+    if (v.visibility !== undefined) {
+      if (league.type === "private" && v.visibility === "public") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Una liga privada no puede tener visibilidad pública.",
+        });
+      }
+      if (league.type === "public" && v.visibility !== "public") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Una liga pública debe tener visibilidad pública.",
+        });
+      }
+    }
+
+    const data: {
+      name?: string;
+      description?: string | null;
+      visibility?: LeagueVisibility;
+    } = {};
+    if (v.name !== undefined) data.name = v.name;
+    if (v.description !== undefined) data.description = v.description;
+    if (v.visibility !== undefined) data.visibility = v.visibility;
+
+    await this.deps.prisma.$transaction(async (tx) => {
+      await tx.league.update({ where: { id: leagueId }, data });
+      await appendAudit(tx, {
+        actorId: meta.actorId,
+        action: "league.updated",
+        entity: "league",
+        entityId: leagueId,
+        beforeData: {
+          name: league.name,
+          description: league.description,
+          visibility: league.visibility,
+        },
+        afterData: data,
+        ip: meta.ip,
+      });
+    });
+
+    return this.toLeagueView(leagueId, actorId);
+  }
+
+  /**
+   * Transfiere el rol de admin a otro miembro (US-26, leagues.md §5:
+   * "Transferir admin" — solo admin):
+   * - Solo el **admin** actual (un miembro → 403, CA de US-26).
+   * - El destino debe ser un **miembro activo** de la liga.
+   * - El admin transferente pasa a `member` (queda un solo admin; la
+   *   integridad la garantiza la transacción).
+   * - Auditoría `league.admin_transferred` en la misma transacción.
+   *
+   * @throws {TRPCError} BAD_REQUEST si el destino no es miembro activo o si
+   *   el actor intenta transferirse a sí mismo; FORBIDDEN si el actor no es
+   *   admin; NOT_FOUND si la liga no existe (o es privada a un extraño).
+   */
+  async transferAdmin(
+    leagueId: string,
+    targetUserId: string,
+    actorId: string,
+    meta: AuditMeta,
+  ): Promise<LeagueView> {
+    transferAdminInputSchema.parse({ leagueId, targetUserId });
+    await this.assertCanManage(leagueId, actorId, "transfer_admin");
+
+    if (targetUserId === actorId) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "No puedes transferirte el rol a ti mismo.",
+      });
+    }
+    const target = await this.deps.prisma.leagueMember.findUnique({
+      where: { leagueId_userId: { leagueId, userId: targetUserId } },
+    });
+    if (!target || target.status !== "active") {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "El destino debe ser un miembro activo de la liga.",
+      });
+    }
+
+    await this.deps.prisma.$transaction(async (tx) => {
+      await tx.leagueMember.update({
+        where: { leagueId_userId: { leagueId, userId: targetUserId } },
+        data: { role: "admin" },
+      });
+      // El admin transferente pasa a miembro (queda un solo admin).
+      await tx.leagueMember.update({
+        where: { leagueId_userId: { leagueId, userId: actorId } },
+        data: { role: "member" },
+      });
+      await appendAudit(tx, {
+        actorId: meta.actorId,
+        action: "league.admin_transferred",
+        entity: "league",
+        entityId: leagueId,
+        afterData: { newAdminId: targetUserId, previousAdminId: actorId },
+        ip: meta.ip,
+      });
+    });
+
+    return this.toLeagueView(leagueId, actorId);
+  }
+
+  /**
+   * Expulsa a un miembro (US-26, leagues.md §5: "Expulsar miembro" — solo
+   * admin):
+   * - Solo el **admin** (un miembro → 403, CA de US-26).
+   * - El destino debe ser un **miembro activo** de la liga (no a sí mismo:
+   *   la salida voluntaria del admin es US-27).
+   * - El miembro queda marcado `kicked` (soft delete; el histórico de puntos
+   *   se conserva — la semántica de histórico/lineups la completa US-27).
+   * - Auditoría `league.member_kicked` en la misma transacción.
+   *
+   * @throws {TRPCError} BAD_REQUEST si el destino no es miembro activo o si
+   *   el actor intenta expulsarse a sí mismo; FORBIDDEN si el actor no es
+   *   admin; NOT_FOUND si la liga no existe (o es privada a un extraño).
+   */
+  async kickMember(
+    leagueId: string,
+    targetUserId: string,
+    actorId: string,
+    meta: AuditMeta,
+  ): Promise<LeagueView> {
+    kickMemberInputSchema.parse({ leagueId, targetUserId });
+    await this.assertCanManage(leagueId, actorId, "kick");
+
+    if (targetUserId === actorId) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "No puedes expulsarte a ti mismo.",
+      });
+    }
+    const target = await this.deps.prisma.leagueMember.findUnique({
+      where: { leagueId_userId: { leagueId, userId: targetUserId } },
+    });
+    if (!target || target.status !== "active") {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "El destino debe ser un miembro activo de la liga.",
+      });
+    }
+
+    await this.deps.prisma.$transaction(async (tx) => {
+      await tx.leagueMember.update({
+        where: { leagueId_userId: { leagueId, userId: targetUserId } },
+        data: { status: "kicked", leftAt: new Date() },
+      });
+      await appendAudit(tx, {
+        actorId: meta.actorId,
+        action: "league.member_kicked",
+        entity: "league",
+        entityId: leagueId,
+        afterData: { kickedUserId: targetUserId },
+        ip: meta.ip,
+      });
+    });
+
+    return this.toLeagueView(leagueId, actorId);
+  }
+
+  /**
+   * Cierra la liga (US-26, leagues.md §5: "Cerrar la liga" — solo admin):
+   * - Solo el **admin** (un miembro → 403, CA de US-26).
+   * - La liga pasa a `finished` (no se borra: el histórico se conserva —
+   *   leagues.md §11; la liberación de lineups la completa US-27).
+   * - Auditoría `league.closed` en la misma transacción.
+   *
+   * @throws {TRPCError} BAD_REQUEST si la liga ya no está activa; FORBIDDEN
+   *   si el actor no es admin; NOT_FOUND si la liga no existe (o es privada
+   *   a un extraño).
+   */
+  async closeLeague(
+    leagueId: string,
+    actorId: string,
+    meta: AuditMeta,
+  ): Promise<LeagueView> {
+    const league = await this.assertCanManage(leagueId, actorId, "close");
+
+    if (league.status !== "active") {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "La liga ya no está activa.",
+      });
+    }
+
+    await this.deps.prisma.$transaction(async (tx) => {
+      await tx.league.update({
+        where: { id: leagueId },
+        data: { status: "finished" },
+      });
+      await appendAudit(tx, {
+        actorId: meta.actorId,
+        action: "league.closed",
+        entity: "league",
+        entityId: leagueId,
+        beforeData: { status: "active" },
+        afterData: { status: "finished" },
+        ip: meta.ip,
+      });
+    });
+
+    return this.toLeagueView(leagueId, actorId);
+  }
+
+  /**
+   * Habilita/deshabilita que los miembros vean/compartan el código de
+   * invitación (US-26, leagues.md §5: "invitar solo si el admin lo habilita"
+   * — solo admin):
+   * - Solo el **admin** (un miembro → 403, CA de US-26).
+   * - Activa/desactiva `leagues.allow_member_invites`; la visibilidad del
+   *   código para el miembro la decide la regla pura `canInvite` (US-26).
+   * - Auditoría `league.member_invites_changed` en la misma transacción.
+   *
+   * @throws {TRPCError} FORBIDDEN si el actor no es admin; NOT_FOUND si la
+   *   liga no existe (o es privada a un extraño).
+   */
+  async setMemberInvites(
+    leagueId: string,
+    enabled: boolean,
+    actorId: string,
+    meta: AuditMeta,
+  ): Promise<LeagueView> {
+    setMemberInvitesInputSchema.parse({ leagueId, enabled });
+    const league = await this.assertCanManage(leagueId, actorId, "update");
+
+    await this.deps.prisma.$transaction(async (tx) => {
+      await tx.league.update({
+        where: { id: leagueId },
+        data: { allowMemberInvites: enabled },
+      });
+      await appendAudit(tx, {
+        actorId: meta.actorId,
+        action: "league.member_invites_changed",
+        entity: "league",
+        entityId: leagueId,
+        beforeData: { allowMemberInvites: league.allowMemberInvites },
+        afterData: { allowMemberInvites: enabled },
+        ip: meta.ip,
+      });
+    });
+
+    return this.toLeagueView(leagueId, actorId);
   }
 
   // ── US-25 · Unirse a una liga por código o entrada abierta (ADR-0025) ──
@@ -1071,16 +1368,46 @@ export class LeagueService {
     };
   }
 
-  /** Exige que la membresía sea de un ADMIN activo (leagues.md §5). */
-  private assertLeagueAdmin(
-    membership: { role: string; status: string } | null,
-  ): void {
-    if (!membership || membership.status !== "active" || membership.role !== "admin") {
+  /**
+   * Revalida el permiso de gestión de la liga (US-26, leagues.md §5): el
+   * actor debe ser un **miembro activo con rol admin**. Aplica la regla pura
+   * `canManageLeague` (fuente única, T-08) y devuelve la liga (para no
+   * recargarla en el método).
+   *
+   * Orden de rechazo (seguridad + CA de US-26):
+   * 1. Liga inexistente → NOT_FOUND.
+   * 2. Extraño (no miembro activo) en una liga **privada** → NOT_FOUND
+   *    (no se revela la existencia — ADR-0024, T-12 IDOR).
+   * 3. Miembro activo no admin (o extraño en pública) → 403 FORBIDDEN
+   *    (CA de US-26: "un miembro intenta cada acción → 403").
+   */
+  private async assertCanManage(
+    leagueId: string,
+    actorId: string,
+    action: LeagueAdminAction,
+  ): Promise<League> {
+    const league = await this.deps.prisma.league.findUnique({
+      where: { id: leagueId },
+    });
+    if (!league) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "La liga no existe." });
+    }
+    const membership = await this.deps.prisma.leagueMember.findUnique({
+      where: { leagueId_userId: { leagueId, userId: actorId } },
+    });
+    const isActiveMember = membership !== null && membership.status === "active";
+    if (!isActiveMember && league.type === "private") {
+      throw new TRPCError({ code: "NOT_FOUND", message: "La liga no existe." });
+    }
+    const role: LeagueMemberRole =
+      isActiveMember && membership.role === "admin" ? "admin" : "member";
+    if (!canManageLeague(role, action)) {
       throw new TRPCError({
         code: "FORBIDDEN",
         message: "Solo el admin de la liga puede hacer esta acción.",
       });
     }
+    return league;
   }
 
   /**
@@ -1202,6 +1529,7 @@ export class LeagueService {
       prisma.leagueMember.findMany({
         where: { leagueId, status: "active" },
         select: {
+          userId: true,
           role: true,
           joinedAt: true,
           user: { select: { username: true, profile: { select: { displayName: true } } } },
@@ -1217,6 +1545,13 @@ export class LeagueService {
       : null;
     const isMember = membership !== null && membership.status === "active";
     const isAdmin = isMember && membership.role === "admin";
+    // Código (US-26, leagues.md §5): el admin siempre; el miembro solo si el
+    // admin lo habilita (`allowMemberInvites`). Regla pura `canInvite`.
+    const canSeeCode =
+      isMember &&
+      canInvite(isAdmin ? "admin" : "member", {
+        allowMemberInvites: league.allowMemberInvites,
+      });
     return {
       id: league.id,
       name: league.name,
@@ -1226,16 +1561,18 @@ export class LeagueService {
       minMembers: league.minMembers,
       maxMembers: league.maxMembers,
       entryMode: league.entryMode,
+      allowMemberInvites: league.allowMemberInvites,
       startDate: league.startDate,
       endDate: league.endDate,
       activeMembers,
       members: memberRows.map((m) => ({
+        userId: m.userId,
         username: m.user.profile?.displayName ?? m.user.username,
         role: m.role,
       })),
       isMember,
       isAdmin,
-      code: isAdmin ? (activeInvite?.code ?? null) : null,
+      code: canSeeCode ? (activeInvite?.code ?? null) : null,
     };
   }
 }

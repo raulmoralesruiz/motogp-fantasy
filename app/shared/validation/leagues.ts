@@ -103,6 +103,73 @@ export const joinLeagueInputSchema = z
     path: ["leagueId"],
   });
 
+/**
+ * Cambio de configuración de la liga (US-26, leagues.md §5: "Cambiar
+ * nombre/descripción/visibilidad" — solo admin).
+ *
+ * Actualización parcial: al menos uno de `name`/`description`/`visibility`.
+ * Aquí se valida el formato; la consistencia tipo/visibilidad y los permisos
+ * los revalida el servicio (AGENTS.md §8).
+ */
+export const updateLeagueInputSchema = z
+  .object({
+    leagueId: z.string().uuid("El identificador de liga no es válido"),
+    // `.optional()` (no `.nullish()`): el nombre y la visibilidad no pueden
+    // ser `null` (campos obligatorios de la liga); ausente = no se cambia.
+    name: z
+      .string()
+      .min(1, "El nombre de la liga es obligatorio")
+      .max(80, "El nombre de la liga no puede superar los 80 caracteres")
+      .optional(),
+    // `.nullish()`: `null` borra la descripción; ausente = no se cambia.
+    description: z
+      .string()
+      .max(500, "La descripción de la liga no puede superar los 500 caracteres")
+      .nullish(),
+    visibility: leagueVisibilitySchema.optional(),
+  })
+  .refine(
+    (v) => v.name !== undefined || v.description !== undefined || v.visibility !== undefined,
+    {
+      message: "Indica al menos un campo a cambiar (nombre, descripción o visibilidad)",
+      path: ["name"],
+    },
+  );
+
+/**
+ * Transferencia del rol de admin (US-26, leagues.md §5: "Transferir admin" —
+ * solo admin). El destino debe ser un miembro activo de la liga (lo revalida
+ * el servicio).
+ */
+export const transferAdminInputSchema = z.object({
+  leagueId: z.string().uuid("El identificador de liga no es válido"),
+  targetUserId: z
+    .string()
+    .uuid("El identificador de usuario no es válido"),
+});
+
+/**
+ * Expulsión de un miembro (US-26, leagues.md §5: "Expulsar miembro" — solo
+ * admin). El destino debe ser un miembro activo de la liga (lo revalida el
+ * servicio).
+ */
+export const kickMemberInputSchema = z.object({
+  leagueId: z.string().uuid("El identificador de liga no es válido"),
+  targetUserId: z
+    .string()
+    .uuid("El identificador de usuario no es válido"),
+});
+
+/**
+ * Habilitar/deshabilitar que los miembros vean/compartan el código de
+ * invitación (US-26, leagues.md §5: "invitar solo si el admin lo habilita" —
+ * solo admin).
+ */
+export const setMemberInvitesInputSchema = z.object({
+  leagueId: z.string().uuid("El identificador de liga no es válido"),
+  enabled: z.boolean(),
+});
+
 export type LeagueType = z.infer<typeof leagueTypeSchema>;
 export type LeagueVisibility = z.infer<typeof leagueVisibilitySchema>;
 export type LeagueEntryMode = z.infer<typeof leagueEntryModeSchema>;
@@ -110,3 +177,7 @@ export type CreateLeagueInput = z.infer<typeof createLeagueInputSchema>;
 export type LeagueIdInput = z.infer<typeof leagueIdInputSchema>;
 export type LeagueRankingInput = z.infer<typeof leagueRankingInputSchema>;
 export type JoinLeagueInput = z.infer<typeof joinLeagueInputSchema>;
+export type UpdateLeagueInput = z.infer<typeof updateLeagueInputSchema>;
+export type TransferAdminInput = z.infer<typeof transferAdminInputSchema>;
+export type KickMemberInput = z.infer<typeof kickMemberInputSchema>;
+export type SetMemberInvitesInput = z.infer<typeof setMemberInvitesInputSchema>;

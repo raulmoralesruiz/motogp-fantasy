@@ -587,6 +587,9 @@ model League {
   minMembers  Int              @default(2) @map("min_members")
   maxMembers  Int              @default(50) @map("max_members")
   entryMode   LeagueEntryMode  @default(code) @map("entry_mode")
+  // US-26 (leagues.md §5): el admin puede habilitar que los miembros vean/
+  // compartan el código de invitación ("invitar solo si el admin lo habilita").
+  allowMemberInvites Boolean   @default(false) @map("allow_member_invites")
   startDate   DateTime?        @map("start_date") @db.Timestamptz
   endDate     DateTime?        @map("end_date") @db.Timestamptz
   status      LeagueStatus     @default(planned)

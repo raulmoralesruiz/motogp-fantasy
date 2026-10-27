@@ -54,7 +54,7 @@
 | `docs/architecture/integrations.md`  | Contrato `ResultsSource`, fuentes evaluadas (PulseLive/Sportradar/comunitarias/manual), pipeline                                                                |
 | `docs/architecture/security.md`      | Amenazas y controles, RBAC, auditoría, GDPR, backups                                                                                                            |
 | `docs/architecture/testing.md`       | Capas de testing (7), casos límite, ejemplos verificables, puertas de CI                                                                                        |
-| `docs/decisions/0001…0010`           | ADRs: stack, economía, puntuación, fuente de datos, ligas, monolito, pipeline de resultados, cabeceras de seguridad/CORS, email provisional, bootstrap de admin |
+| `docs/decisions/0001…0026`           | ADRs: stack, economía, puntuación, fuente de datos, ligas, monolito, pipeline de resultados, cabeceras de seguridad/CORS, email provisional, bootstrap de admin, …, rankings (US-21), ligas (US-23…US-26: creación, pública/directorio, unión, permisos admin/miembro) |
 | `docs/roadmap.md`                    | Fases 0–5 + post-MVP, hitos, camino crítico                                                                                                                     |
 | `docs/backlog.md`                    | Epics, user stories, tareas técnicas, dependencias, prioridades, criterios de aceptación verificables                                                           |
 

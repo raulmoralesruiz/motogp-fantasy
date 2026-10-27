@@ -40,14 +40,16 @@ const LEAGUE = {
   minMembers: 2,
   maxMembers: 50,
   entryMode: "code",
+  allowMemberInvites: false,
   startDate: null,
   endDate: null,
   activeMembers: 2,
   members: [
-    { username: "piloto1", role: "admin" },
-    { username: "piloto2", role: "member" },
+    { userId: "user-1", username: "piloto1", role: "admin" },
+    { userId: "user-2", username: "piloto2", role: "member" },
   ],
   isAdmin: true,
+  isMember: true,
   code: "ABC123XYZ9",
 };
 
@@ -98,12 +100,14 @@ function mockMutation(hook: unknown): ReturnType<typeof vi.fn> {
 }
 
 function mutationOptions(hook: unknown): {
-  onSuccess?: (result: unknown) => void;
+  // `onSuccess` puede declarar 0 argumentos (la página ignora el resultado);
+  // `...args` permite llamarla con 0 o N argumentos en el test.
+  onSuccess?: (...args: unknown[]) => void;
   onError?: (err: Error) => void;
 } {
   const calls = asMockFn(hook).mock.calls;
   return (calls[calls.length - 1]?.[0] ?? {}) as {
-    onSuccess?: (result: unknown) => void;
+    onSuccess?: (...args: unknown[]) => void;
     onError?: (err: Error) => void;
   };
 }
@@ -142,7 +146,9 @@ describe("LeagueDetailPage (US-24)", () => {
 
     expect(screen.getByText("Liga de los amigos")).toBeInTheDocument();
     expect(screen.getByText("Solo para la familia")).toBeInTheDocument();
-    expect(screen.getByText(/Privada/)).toBeInTheDocument();
+    // "Privada ·" (info de la liga) — el select de visibilidad también tiene
+    // una opción "Privada", así que el patrón incluye el separador.
+    expect(screen.getByText(/Privada ·/)).toBeInTheDocument();
     expect(screen.getByText(/2\/50 miembros/)).toBeInTheDocument();
     expect(screen.getByText(/por código/)).toBeInTheDocument();
   });
@@ -303,7 +309,7 @@ describe("LeagueDetailPage (US-24)", () => {
       isAdmin: false,
       isMember: false,
       code: null,
-      members: [{ username: "fundador", role: "admin" }],
+      members: [{ userId: "user-9", username: "fundador", role: "admin" }],
     };
 
     function mockMe(isError = false) {
@@ -430,6 +436,360 @@ describe("LeagueDetailPage (US-24)", () => {
       expect(
         screen.queryByRole("button", { name: "Unirme a la liga" }),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  describe("panel de administración (US-26, leagues.md §5)", () => {
+    // Actor = admin (user-1), miembro piloto2 (user-2).
+    const ADMIN_LEAGUE = {
+      ...LEAGUE,
+      members: [
+        { userId: "user-1", username: "piloto1", role: "admin" },
+        { userId: "user-2", username: "piloto2", role: "member" },
+      ],
+    };
+
+    function mockMeAs(userId: string) {
+      mockResult(trpc.auth.me.useQuery, {
+        data: { id: userId, username: "yo", email: "yo@liga.com", roles: [] },
+        isPending: false,
+        isError: false,
+      });
+    }
+
+    it("admin: muestra el formulario de configuración (nombre/descripción/visibilidad)", () => {
+      mockLeague(ADMIN_LEAGUE);
+      mockRanking(RANKING);
+      mockMeAs("user-1");
+      renderDetail(<LeagueDetailPage />);
+
+      expect(screen.getByRole("heading", { name: "Configuración" })).toBeInTheDocument();
+      expect(screen.getByLabelText("Nombre")).toBeInTheDocument();
+      expect(screen.getByLabelText("Descripción")).toBeInTheDocument();
+      expect(screen.getByLabelText("Visibilidad")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Guardar cambios" })).toBeInTheDocument();
+    });
+
+    it("admin: muestra el ajuste de invitaciones de miembros", () => {
+      mockLeague(ADMIN_LEAGUE);
+      mockRanking(RANKING);
+      mockMeAs("user-1");
+      renderDetail(<LeagueDetailPage />);
+
+      expect(
+        screen.getByLabelText(
+          /Permitir que los miembros vean y compartan el código de invitación/,
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("admin: muestra el botón de cerrar la liga", () => {
+      mockLeague(ADMIN_LEAGUE);
+      mockRanking(RANKING);
+      mockMeAs("user-1");
+      renderDetail(<LeagueDetailPage />);
+
+      expect(screen.getByRole("button", { name: "Cerrar la liga" })).toBeInTheDocument();
+    });
+
+    it("admin: muestra 'Hacer admin' (solo no-admin) y 'Expulsar' para cada miembro ajeno", () => {
+      mockLeague(ADMIN_LEAGUE);
+      mockRanking(RANKING);
+      mockMeAs("user-1");
+      renderDetail(<LeagueDetailPage />);
+
+      // piloto2 (member, ajeno) → ambos botones.
+      expect(screen.getByRole("button", { name: "Hacer admin" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Expulsar" })).toBeInTheDocument();
+    });
+
+    it("admin único: NO muestra 'Expulsar'/'Hacer admin' sobre su propia fila", () => {
+      // El actor (user-1) es el único miembro: no hay ajenos a los que dirigir
+      // acciones, así que no aparece ningún botón de gestión de miembros.
+      mockLeague({
+        ...ADMIN_LEAGUE,
+        activeMembers: 1,
+        members: [{ userId: "user-1", username: "piloto1", role: "admin" }],
+      });
+      mockRanking(RANKING);
+      mockMeAs("user-1");
+      renderDetail(<LeagueDetailPage />);
+
+      expect(screen.queryByRole("button", { name: "Expulsar" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Hacer admin" })).not.toBeInTheDocument();
+    });
+
+    it("miembro (no admin): no ve NINGÚN botón de gestión (US-26: solo el admin gestiona)", () => {
+      mockLeague({ ...ADMIN_LEAGUE, isAdmin: false });
+      mockRanking(RANKING);
+      mockMeAs("user-2");
+      renderDetail(<LeagueDetailPage />);
+
+      expect(screen.queryByRole("heading", { name: "Administración" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Rotar código" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Hacer admin" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Expulsar" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Cerrar la liga" })).not.toBeInTheDocument();
+    });
+
+    it("clic en 'Hacer admin': envía leagueId + targetUserId", async () => {
+      mockLeague(ADMIN_LEAGUE);
+      mockRanking(RANKING);
+      mockMeAs("user-1");
+      const mutate = mockMutation(trpc.leagues.transferAdmin.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: "Hacer admin" }));
+
+      expect(mutate.mock.calls[0]?.[0]).toEqual({
+        leagueId: "league-1",
+        targetUserId: "user-2",
+      });
+    });
+
+    it("clic en 'Expulsar': envía leagueId + targetUserId", async () => {
+      mockLeague(ADMIN_LEAGUE);
+      mockRanking(RANKING);
+      mockMeAs("user-1");
+      const mutate = mockMutation(trpc.leagues.kick.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: "Expulsar" }));
+
+      expect(mutate.mock.calls[0]?.[0]).toEqual({
+        leagueId: "league-1",
+        targetUserId: "user-2",
+      });
+    });
+
+    it("clic en 'Cerrar la liga': envía la leagueId", async () => {
+      mockLeague(ADMIN_LEAGUE);
+      mockRanking(RANKING);
+      mockMeAs("user-1");
+      const mutate = mockMutation(trpc.leagues.close.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: "Cerrar la liga" }));
+
+      expect(mutate.mock.calls[0]?.[0]).toEqual({ leagueId: "league-1" });
+    });
+
+    it("cambiar el ajuste de invitaciones: envía leagueId + enabled", async () => {
+      mockLeague({ ...ADMIN_LEAGUE, allowMemberInvites: false });
+      mockRanking(RANKING);
+      mockMeAs("user-1");
+      const mutate = mockMutation(trpc.leagues.setMemberInvites.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      const user = userEvent.setup();
+      await user.click(
+        screen.getByLabelText(
+          /Permitir que los miembros vean y compartan el código de invitación/,
+        ),
+      );
+
+      expect(mutate.mock.calls[0]?.[0]).toEqual({
+        leagueId: "league-1",
+        enabled: true,
+      });
+    });
+
+    it("guardar la configuración: envía los campos editados", async () => {
+      mockLeague(ADMIN_LEAGUE);
+      mockRanking(RANKING);
+      mockMeAs("user-1");
+      const mutate = mockMutation(trpc.leagues.update.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      const user = userEvent.setup();
+      await user.clear(screen.getByLabelText("Nombre"));
+      await user.type(screen.getByLabelText("Nombre"), "Liga renombreada");
+      await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+      expect(mutate.mock.calls[0]?.[0]).toEqual({
+        leagueId: "league-1",
+        name: "Liga renombreada",
+        description: "Solo para la familia",
+        visibility: "private",
+      });
+    });
+
+    it("si una acción de gestión falla muestra el motivo del servidor (p. ej. 403)", async () => {
+      mockLeague(ADMIN_LEAGUE);
+      mockRanking(RANKING);
+      mockMeAs("user-1");
+      mockMutation(trpc.leagues.kick.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: "Expulsar" }));
+
+      await act(async () => {
+        mutationOptions(trpc.leagues.kick.useMutation).onError?.(
+          new Error("Solo el admin de la liga puede hacer esta acción."),
+        );
+      });
+
+      expect(
+        screen.getByText("Solo el admin de la liga puede hacer esta acción."),
+      ).toBeInTheDocument();
+    });
+
+    it("editar descripción y visibilidad: envía los cambios", async () => {
+      mockLeague(ADMIN_LEAGUE);
+      mockRanking(RANKING);
+      mockMeAs("user-1");
+      const mutate = mockMutation(trpc.leagues.update.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      const user = userEvent.setup();
+      await user.clear(screen.getByLabelText("Descripción"));
+      await user.type(screen.getByLabelText("Descripción"), "Nueva descripción");
+      await user.selectOptions(screen.getByLabelText("Visibilidad"), "unlisted");
+      await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+      expect(mutate.mock.calls[0]?.[0]).toEqual({
+        leagueId: "league-1",
+        name: "Liga de los amigos",
+        description: "Nueva descripción",
+        visibility: "unlisted",
+      });
+    });
+
+    it("update: éxito muestra 'Configuración guardada.'", async () => {
+      mockLeague(ADMIN_LEAGUE);
+      mockRanking(RANKING);
+      mockMeAs("user-1");
+      mockMutation(trpc.leagues.update.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      await act(async () => {
+        mutationOptions(trpc.leagues.update.useMutation).onSuccess?.();
+      });
+      expect(screen.getByText("Configuración guardada.")).toBeInTheDocument();
+    });
+
+    it("update: error muestra el motivo del servidor", async () => {
+      mockLeague(ADMIN_LEAGUE);
+      mockRanking(RANKING);
+      mockMeAs("user-1");
+      mockMutation(trpc.leagues.update.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      await act(async () => {
+        mutationOptions(trpc.leagues.update.useMutation).onError?.(
+          new Error("Una liga privada no puede tener visibilidad pública."),
+        );
+      });
+      expect(
+        screen.getByText("Una liga privada no puede tener visibilidad pública."),
+      ).toBeInTheDocument();
+    });
+
+    it("transferAdmin: éxito muestra 'Rol de admin transferido.'", async () => {
+      mockLeague(ADMIN_LEAGUE);
+      mockRanking(RANKING);
+      mockMeAs("user-1");
+      mockMutation(trpc.leagues.transferAdmin.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      await act(async () => {
+        mutationOptions(trpc.leagues.transferAdmin.useMutation).onSuccess?.();
+      });
+      expect(screen.getByText("Rol de admin transferido.")).toBeInTheDocument();
+    });
+
+    it("transferAdmin: error muestra el motivo del servidor", async () => {
+      mockLeague(ADMIN_LEAGUE);
+      mockRanking(RANKING);
+      mockMeAs("user-1");
+      mockMutation(trpc.leagues.transferAdmin.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      await act(async () => {
+        mutationOptions(trpc.leagues.transferAdmin.useMutation).onError?.(
+          new Error("El destino debe ser un miembro activo de la liga."),
+        );
+      });
+      expect(
+        screen.getByText("El destino debe ser un miembro activo de la liga."),
+      ).toBeInTheDocument();
+    });
+
+    it("kick: éxito muestra 'Miembro expulsado.'", async () => {
+      mockLeague(ADMIN_LEAGUE);
+      mockRanking(RANKING);
+      mockMeAs("user-1");
+      mockMutation(trpc.leagues.kick.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      await act(async () => {
+        mutationOptions(trpc.leagues.kick.useMutation).onSuccess?.();
+      });
+      expect(screen.getByText("Miembro expulsado.")).toBeInTheDocument();
+    });
+
+    it("close: éxito muestra 'Liga cerrada.'", async () => {
+      mockLeague(ADMIN_LEAGUE);
+      mockRanking(RANKING);
+      mockMeAs("user-1");
+      mockMutation(trpc.leagues.close.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      await act(async () => {
+        mutationOptions(trpc.leagues.close.useMutation).onSuccess?.();
+      });
+      expect(screen.getByText("Liga cerrada.")).toBeInTheDocument();
+    });
+
+    it("close: error muestra el motivo del servidor", async () => {
+      mockLeague(ADMIN_LEAGUE);
+      mockRanking(RANKING);
+      mockMeAs("user-1");
+      mockMutation(trpc.leagues.close.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      await act(async () => {
+        mutationOptions(trpc.leagues.close.useMutation).onError?.(
+          new Error("La liga ya no está activa."),
+        );
+      });
+      expect(screen.getByText("La liga ya no está activa.")).toBeInTheDocument();
+    });
+
+    it("setMemberInvites: éxito muestra 'Ajuste de invitaciones guardado.'", async () => {
+      mockLeague(ADMIN_LEAGUE);
+      mockRanking(RANKING);
+      mockMeAs("user-1");
+      mockMutation(trpc.leagues.setMemberInvites.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      await act(async () => {
+        mutationOptions(trpc.leagues.setMemberInvites.useMutation).onSuccess?.();
+      });
+      expect(
+        screen.getByText("Ajuste de invitaciones guardado."),
+      ).toBeInTheDocument();
+    });
+
+    it("setMemberInvites: error muestra el motivo del servidor", async () => {
+      mockLeague(ADMIN_LEAGUE);
+      mockRanking(RANKING);
+      mockMeAs("user-1");
+      mockMutation(trpc.leagues.setMemberInvites.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      await act(async () => {
+        mutationOptions(trpc.leagues.setMemberInvites.useMutation).onError?.(
+          new Error("Solo el admin de la liga puede hacer esta acción."),
+        );
+      });
+      expect(
+        screen.getByText("Solo el admin de la liga puede hacer esta acción."),
+      ).toBeInTheDocument();
     });
   });
 });

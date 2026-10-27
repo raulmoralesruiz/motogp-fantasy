@@ -4,21 +4,29 @@ import { getQueryKey } from "@trpc/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { Alert, Button } from "@/shared/components";
+import { Alert, Button, Field } from "@/shared/components";
 import { trpc } from "@/trpc/client";
 
 /**
  * Detalle de una liga (US-24, leagues.md §8/§9; US-25, leagues.md §6;
- * pantalla 10 de user-flows): info de la liga, miembros (seudónimos, admin
- * marcado), ranking general, panel de admin (código + rotación) si el actor
- * es admin, y botón de unión a la liga **pública** (entrada abierta,
- * ADR-0024/ADR-0025) si el actor está autenticado y no es miembro.
+ * US-26, leagues.md §5; pantalla 10 de user-flows): info de la liga,
+ * miembros (seudónimos, admin marcado), ranking general, panel de
+ * administración si el actor es admin, y botón de unión a la liga
+ * **pública** (entrada abierta, ADR-0024/ADR-0025) si el actor está
+ * autenticado y no es miembro.
+ *
+ * **Panel de administración (US-26, leagues.md §5):** solo el admin gestiona
+ * la liga — código de invitación (ver/rotar), habilitar que los miembros
+ * vean el código, cambiar configuración (nombre/descripción/visibilidad),
+ * transferir el rol, expulsar miembros y cerrar la liga. Un miembro solo
+ * juega (ver ranking/miembros, colocar/cambiar lineup); el servidor revalida
+ * cada acción (AGENTS.md §8) y devuelve 403 a un miembro.
  *
  * Visibilidad (ADR-0024): pública ⇒ cualquiera la ve; privada ⇒ solo miembros
- * activos (un extraño recibe NOT_FOUND → "La liga no existe."). El código solo
- * lo ve el admin (leagues.md §5; US-24: secreto también en ligas públicas).
+ * activos (un extraño recibe NOT_FOUND → "La liga no existe."). El código lo
+ * ve el admin siempre y el miembro solo si el admin lo habilita (US-26).
  *
  * El ranking es la última versión publicada (US-21/ADR-0022); se lee, no se
  * recalcula en la vista. Vacío elegante si aún no hay filas.
@@ -42,18 +50,104 @@ export default function LeagueDetailPage() {
 
   const [rotated, setRotated] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  // Formulario de configuración (US-26): se inicializa cuando carga la liga.
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [visibility, setVisibility] = useState("");
+  const [configReady, setConfigReady] = useState(false);
+
+  useEffect(() => {
+    if (league.data && !configReady) {
+      setName(league.data.name);
+      setDescription(league.data.description ?? "");
+      setVisibility(league.data.visibility);
+      setConfigReady(true);
+    }
+  }, [league.data, configReady]);
+
+  /** Refresca la vista de la liga tras una acción de gestión. */
+  function invalidateLeague() {
+    queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.leagues.get) });
+  }
+
+  function clearFeedback() {
+    setError(null);
+    setSuccess(null);
+    setRotated(null);
+  }
 
   const rotate = trpc.leagues.rotateCode.useMutation({
     onSuccess: (newCode) => {
+      clearFeedback();
       setRotated(newCode);
-      setError(null);
-      queryClient.invalidateQueries({
-        queryKey: getQueryKey(trpc.leagues.get),
-      });
+      invalidateLeague();
     },
     onError: (err) => {
-      setError(err instanceof Error ? err.message : "No se pudo rotar el código.");
+      setSuccess(null);
       setRotated(null);
+      setError(err instanceof Error ? err.message : "No se pudo rotar el código.");
+    },
+  });
+
+  const update = trpc.leagues.update.useMutation({
+    onSuccess: () => {
+      clearFeedback();
+      setSuccess("Configuración guardada.");
+      invalidateLeague();
+    },
+    onError: (err) => {
+      setSuccess(null);
+      setError(err instanceof Error ? err.message : "No se pudo guardar la configuración.");
+    },
+  });
+
+  const transferAdmin = trpc.leagues.transferAdmin.useMutation({
+    onSuccess: () => {
+      clearFeedback();
+      setSuccess("Rol de admin transferido.");
+      invalidateLeague();
+    },
+    onError: (err) => {
+      setSuccess(null);
+      setError(err instanceof Error ? err.message : "No se pudo transferir el rol.");
+    },
+  });
+
+  const kick = trpc.leagues.kick.useMutation({
+    onSuccess: () => {
+      clearFeedback();
+      setSuccess("Miembro expulsado.");
+      invalidateLeague();
+    },
+    onError: (err) => {
+      setSuccess(null);
+      setError(err instanceof Error ? err.message : "No se pudo expulsar al miembro.");
+    },
+  });
+
+  const close = trpc.leagues.close.useMutation({
+    onSuccess: () => {
+      clearFeedback();
+      setSuccess("Liga cerrada.");
+      invalidateLeague();
+    },
+    onError: (err) => {
+      setSuccess(null);
+      setError(err instanceof Error ? err.message : "No se pudo cerrar la liga.");
+    },
+  });
+
+  const setMemberInvites = trpc.leagues.setMemberInvites.useMutation({
+    onSuccess: () => {
+      clearFeedback();
+      setSuccess("Ajuste de invitaciones guardado.");
+      invalidateLeague();
+    },
+    onError: (err) => {
+      setSuccess(null);
+      setError(err instanceof Error ? err.message : "No se pudo guardar el ajuste.");
     },
   });
 
@@ -62,9 +156,7 @@ export default function LeagueDetailPage() {
   const join = trpc.leagues.join.useMutation({
     onSuccess: () => {
       setError(null);
-      queryClient.invalidateQueries({
-        queryKey: getQueryKey(trpc.leagues.get),
-      });
+      invalidateLeague();
     },
     onError: (err) => {
       setError(err instanceof Error ? err.message : "No se pudo unirse a la liga.");
@@ -89,10 +181,12 @@ export default function LeagueDetailPage() {
   }
 
   const l = league.data;
+  const meId = me.data?.id;
 
   return (
     <div>
       {error && <Alert variant="error">{error}</Alert>}
+      {success && <Alert variant="success">{success}</Alert>}
       {rotated && (
         <Alert variant="success">
           Código rotado. El código anterior quedó revocado. Nuevo código:{" "}
@@ -117,12 +211,42 @@ export default function LeagueDetailPage() {
         <p className="muted">Todavía no hay miembros.</p>
       ) : (
         <ul>
-          {l.members.map((m, i) => (
-            <li key={i}>
-              {m.username}
-              {m.role === "admin" && <span className="muted"> · admin</span>}
-            </li>
-          ))}
+          {l.members.map((m) => {
+            const isSelf = meId !== undefined && m.userId === meId;
+            return (
+              <li key={m.userId}>
+                {m.username}
+                {m.role === "admin" && <span className="muted"> · admin</span>}
+                {l.isAdmin && !isSelf && (
+                  <span>
+                    {m.role !== "admin" && (
+                      <Button
+                        type="button"
+                        onClick={() =>
+                          transferAdmin.mutate({
+                            leagueId: l.id,
+                            targetUserId: m.userId,
+                          })
+                        }
+                        disabled={transferAdmin.isPending}
+                      >
+                        Hacer admin
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      onClick={() =>
+                        kick.mutate({ leagueId: l.id, targetUserId: m.userId })
+                      }
+                      disabled={kick.isPending}
+                    >
+                      Expulsar
+                    </Button>
+                  </span>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
 
@@ -173,6 +297,8 @@ export default function LeagueDetailPage() {
       {l.isAdmin && (
         <div>
           <h3>Administración</h3>
+
+          <h4>Código de invitación</h4>
           {l.code ? (
             <Alert variant="info">
               Código de invitación: <strong>{l.code}</strong>{" "}
@@ -189,6 +315,78 @@ export default function LeagueDetailPage() {
               Esta liga no usa código de invitación (modo «solo invitación»).
             </Alert>
           )}
+          <div className="field">
+            <label>
+              <input
+                type="checkbox"
+                checked={l.allowMemberInvites}
+                onChange={(e) =>
+                  setMemberInvites.mutate({
+                    leagueId: l.id,
+                    enabled: e.target.checked,
+                  })
+                }
+                disabled={setMemberInvites.isPending}
+              />{" "}
+              Permitir que los miembros vean y compartan el código de invitación
+            </label>
+          </div>
+
+          <h4>Configuración</h4>
+          <div>
+            <Field
+              label="Nombre"
+              name="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <Field
+              label="Descripción"
+              name="description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+            <div className="field">
+              <label htmlFor="visibility">Visibilidad</label>
+              <select
+                id="visibility"
+                name="visibility"
+                value={visibility}
+                onChange={(e) => setVisibility(e.target.value)}
+              >
+                <option value="public">Pública</option>
+                <option value="unlisted">No listada</option>
+                <option value="private">Privada</option>
+              </select>
+            </div>
+            <Button
+              type="button"
+              onClick={() =>
+                update.mutate({
+                  leagueId: l.id,
+                  name,
+                  description,
+                  visibility: visibility as "public" | "unlisted" | "private",
+                })
+              }
+              disabled={update.isPending}
+            >
+              {update.isPending ? "Guardando…" : "Guardar cambios"}
+            </Button>
+          </div>
+
+          <h4>Cerrar liga</h4>
+          <p className="muted">
+            Al cerrar la liga pasa a «finalizada» y deja de aceptar cambios.
+            El histórico de puntos se conserva.
+          </p>
+          <Button
+            type="button"
+            onClick={() => close.mutate({ leagueId: l.id })}
+            disabled={close.isPending}
+          >
+            {close.isPending ? "Cerrando…" : "Cerrar la liga"}
+          </Button>
         </div>
       )}
     </div>

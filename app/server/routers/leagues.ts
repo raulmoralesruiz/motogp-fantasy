@@ -1,14 +1,17 @@
 /**
- * Router de ligas (US-23, ADR-0023; US-24, ADR-0024; US-25, ADR-0025):
- * creación de liga privada con código + liga pública y directorio + unión
- * por código o entrada abierta.
+ * Router de ligas (US-23, ADR-0023; US-24, ADR-0024; US-25, ADR-0025;
+ * US-26, ADR-0026): creación de liga privada con código + liga pública y
+ * directorio + unión por código o entrada abierta + permisos de liga
+ * (admin/miembro).
  *
  * Autorización (T-08, security.md §1.5):
  * - `create`: cualquier usuario autenticado (el actor es el creador y
  *   queda admin de su liga; el `userId` sale del contexto, nunca del
  *   input — AGENTS.md §8).
- * - `rotateCode`: solo el admin de la liga (revalida el servicio por
- *   recurso; un miembro recibe 403 FORBIDDEN).
+ * - `rotateCode` / `update` / `transferAdmin` / `kick` / `close` /
+ *   `setMemberInvites`: solo el admin de la liga (US-26, leagues.md §5 —
+ *   revalida el servicio por recurso con la regla pura `canManageLeague`;
+ *   un miembro recibe 403 FORBIDDEN).
  * - `join`: cualquier usuario autenticado (US-25) — el actor sale del
  *   contexto; la elegibilidad (estado, modo de entrada, código, membresía,
  *   plaza) la revalida el servicio (AGENTS.md §8).
@@ -31,8 +34,12 @@ import { LeagueJoinRateLimit, LeagueService } from "@/modules/leagues";
 import {
   createLeagueInputSchema,
   joinLeagueInputSchema,
+  kickMemberInputSchema,
   leagueIdInputSchema,
   leagueRankingInputSchema,
+  setMemberInvitesInputSchema,
+  transferAdminInputSchema,
+  updateLeagueInputSchema,
 } from "@/shared/validation/leagues";
 
 import { getServerEnv } from "../env";
@@ -92,6 +99,72 @@ export function createLeaguesRouter(deps: LeaguesRouterDeps) {
       .input(leagueIdInputSchema)
       .mutation(({ ctx, input }) =>
         service.rotateCode(input.leagueId, ctx.user.id, {
+          actorId: ctx.user.id,
+          ip: ctx.ip,
+        }),
+      ),
+
+    /**
+     * Cambia la configuración de la liga (US-26, leagues.md §5): nombre /
+     * descripción / visibilidad. Solo el admin (un miembro → 403).
+     */
+    update: protectedProcedure
+      .input(updateLeagueInputSchema)
+      .mutation(({ ctx, input }) =>
+        service.updateLeague(input.leagueId, input, ctx.user.id, {
+          actorId: ctx.user.id,
+          ip: ctx.ip,
+        }),
+      ),
+
+    /**
+     * Transfiere el rol de admin a otro miembro (US-26, leagues.md §5).
+     * Solo el admin (un miembro → 403); el destino debe ser miembro activo.
+     */
+    transferAdmin: protectedProcedure
+      .input(transferAdminInputSchema)
+      .mutation(({ ctx, input }) =>
+        service.transferAdmin(input.leagueId, input.targetUserId, ctx.user.id, {
+          actorId: ctx.user.id,
+          ip: ctx.ip,
+        }),
+      ),
+
+    /**
+     * Expulsa a un miembro (US-26, leagues.md §5). Solo el admin (un
+     * miembro → 403); el destino debe ser miembro activo (no a sí mismo).
+     */
+    kick: protectedProcedure
+      .input(kickMemberInputSchema)
+      .mutation(({ ctx, input }) =>
+        service.kickMember(input.leagueId, input.targetUserId, ctx.user.id, {
+          actorId: ctx.user.id,
+          ip: ctx.ip,
+        }),
+      ),
+
+    /**
+     * Cierra la liga (US-26, leagues.md §5): pasa a `finished` (el
+     * histórico se conserva). Solo el admin (un miembro → 403).
+     */
+    close: protectedProcedure
+      .input(leagueIdInputSchema)
+      .mutation(({ ctx, input }) =>
+        service.closeLeague(input.leagueId, ctx.user.id, {
+          actorId: ctx.user.id,
+          ip: ctx.ip,
+        }),
+      ),
+
+    /**
+     * Habilita/deshabilita que los miembros vean/compartan el código de
+     * invitación (US-26, leagues.md §5: "invitar solo si el admin lo
+     * habilita"). Solo el admin (un miembro → 403).
+     */
+    setMemberInvites: protectedProcedure
+      .input(setMemberInvitesInputSchema)
+      .mutation(({ ctx, input }) =>
+        service.setMemberInvites(input.leagueId, input.enabled, ctx.user.id, {
           actorId: ctx.user.id,
           ip: ctx.ip,
         }),
