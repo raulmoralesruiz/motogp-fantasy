@@ -161,3 +161,32 @@ implementar:
   precios reales, versionado por `results_version`, liga sin miembros → sin
   filas, GP inexistente → NOT_FOUND) — `test/integration/rankings.test.ts`.
 - **Cobertura:** mantener el gate global fusionado 99.9% (T-24).
+
+## Addendum 2026-10-28 — cierre de US-28 y US-29 (sin decisión nueva)
+
+**Contexto.** US-28 (ranking por liga con desempates) y US-29 (juego en varias
+ligas con el mismo lineup) eran las dos historias P0 restantes de Fase 4. Al
+revisar la implementación, ambas **ya estaban cubiertas por esta decisión**
+(US-21): no hay regla nueva ni cambio de semántica, por lo que **no se toma
+decisión nueva** (precedente US-14/US-20: sin regla nueva, sin ADR propio;
+este addendum documenta el cierre).
+
+- **US-28** — "cada liga tiene su ranking (GP y general) sobre sus miembros
+  activos; los desempates aplican en el orden definido". Ya implementado:
+  `sortRanking` (fórmula pura, 9 tests de unit en el orden de `leagues.md` §8)
+  + `recalculateRankings` (por liga, por GP + general, solo miembros `active`).
+  El cierre añade el **test de integración pendiente**: un miembro que sale
+  (`status = left`) queda fuera de la nueva publicación y el histórico
+  (publicaciones anteriores, versionadas por append) se conserva.
+- **US-29** — "un usuario en 2+ ligas tiene un único lineup por GP y los
+  mismos puntos en todas las ligas". Ya garantizado por el esquema de BD
+  (invariante 3: `lineups` unique `(user, gp)`; invariante 4: `scores` por
+  `(user, gp)`, `rankings` por `(league, user, gp)`) y por el motor de
+  puntuación (un `Score` por lineup). El cierre añade el **test de integración
+  pendiente**: usuario en 2 ligas → un único lineup por GP (el 2º intento lo
+  rechaza la constraint única, P2002) y los mismos puntos en las dos ligas
+  (por GP y general, valores idénticos).
+
+**Validación añadida.** `test/integration/rankings.test.ts` +2 casos (US-28
+y US-29). Puertas en verde: lint 0, typecheck, unit 674, UI 419, pureza,
+build, integración 394/394, gate de cobertura 99.92% ≥ 99.9%.

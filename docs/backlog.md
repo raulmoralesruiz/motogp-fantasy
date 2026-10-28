@@ -240,11 +240,13 @@
 - **US-27 · Salir, ser expulsado o cierre de liga (histórico conservado)** — `P1` — Dep: US-26.
   - CA: al salir/expulsar: el miembro queda marcado `left`/`kicked`, su histórico de puntos **se conserva** en el ranking (marcado "retirado"/"expulsado") y el ranking de los demás no se recalcula hacia atrás (test); al cerrar la liga, los lineups de los miembros se liberan (pueden seguir en otras ligas).
 
-- **US-28 · Ranking por liga con desempates** — `P0` — Dep: US-21, US-23.
+- **US-28 · Ranking por liga con desempates** — `P0` — Dep: US-21, US-23. ✅ cerrado (2026-10-28, todas las puertas en verde: lint 0 issues, typecheck, unit 674, UI 419, pureza, build, integración 394/394, gate de cobertura 99.92% ≥ 99.9%).
   - CA: cada liga tiene su ranking (GP y general) sobre sus miembros activos; los desempates aplican en el orden definido (test de unit).
+  - Hecho: **sin código nuevo** — la implementación ya existía con US-21 (ADR-0022): `sortRanking` (fórmula pura; 9 tests de unit de desempates en el orden de `leagues.md` §8) + `LeagueService.recalculateRankings` (por liga, por GP + general, solo miembros `active`). El cierre añade el test de integración pendiente de la CA: **un miembro que sale (`status = left`) queda fuera de la nueva publicación y el histórico (publicaciones anteriores, versionadas por append) se conserva** (`test/integration/rankings.test.ts` +1 caso). Addendum en ADR-0022.
 
-- **US-29 · Juego en varias ligas con el mismo lineup** — `P0` — Dep: US-28.
+- **US-29 · Juego en varias ligas con el mismo lineup** — `P0` — Dep: US-28. ✅ cerrado (2026-10-28, mismas puertas que US-28).
   - CA: un usuario en 2+ ligas tiene **un único lineup por GP** y los **mismos puntos** en todas las ligas (test de integración: los `scores` son por `(user, gp)`; los `rankings` por `(league, user, gp)` con valores idénticos).
+  - Hecho: **sin código nuevo** — las invariantes 3 y 4 ya estaban garantizadas por el esquema de BD (`lineups` unique `(user, gp)`; `scores` unique `(lineup, results_version)`) y por el motor de puntuación (un `Score` por lineup). El cierre añade el test de integración pendiente de la CA: **usuario en 2 ligas → un único lineup por GP (el 2º intento lo rechaza la constraint única, P2002) y los mismos puntos en las dos ligas (por GP y general, valores idénticos)** (`test/integration/rankings.test.ts` +1 caso). Addendum en ADR-0022.
 
 - **US-30 · Me uno a mitad de temporada** — `P1` — Dep: US-29.
   - CA: empieza con 0 puntos desde su primer GP activo en esa liga; no hereda puntos de GPs previos; opción "ranking ajustado" (solo GPs desde la última entrada) configurable por liga, desactivado por defecto (`D-10`).

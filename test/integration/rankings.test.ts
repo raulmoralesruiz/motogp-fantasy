@@ -1,5 +1,10 @@
 /**
  * US-21 · Rankings por GP y general (PostgreSQL real).
+ * US-28 · Ranking sobre miembros activos (cierre; la implementación es la de
+ *   US-21/ADR-0022: solo miembros `active` entran en la publicación).
+ * US-29 · Multi-liga: un único lineup por GP y los mismos puntos en todas
+ *   las ligas (invariantes 3 y 4; la garantía es el esquema de BD + el
+ *   motor de puntuación, aquí se verifica el resultado integral).
  *
  * `LeagueService.recalculateRankings`: calcula y publica los rankings a
  * partir de `scores` (leagues.md §8):
@@ -341,5 +346,141 @@ describe("US-21 · Rankings por GP y general (PostgreSQL real)", () => {
     await expect(service.recalculateRankings(randomUUID(), "rv-1")).rejects.toMatchObject({
       code: "NOT_FOUND",
     });
+  });
+
+  // ── US-28 · Ranking sobre miembros activos (leagues.md §8) ──────────────
+  // CA: "cada liga tiene su ranking (GP y general) sobre sus miembros
+  // activos". Un miembro que sale (`status = left`) queda fuera de la nueva
+  // publicación; el histórico (publicaciones anteriores, versionadas por
+  // append) se conserva.
+
+  it("US-28: un miembro que sale (left) queda fuera de la nueva publicación; el histórico se conserva", async () => {
+    // Liga nueva con dos miembros nuevos, ambos con score en gp1.
+    const userG = (
+      await prisma.user.create({
+        data: { email: `g-${suffix}@test.local`, passwordHash: "h", username: `g_${suffix}` },
+      })
+    ).id;
+    const userF = (
+      await prisma.user.create({
+        data: { email: `f-${suffix}@test.local`, passwordHash: "h", username: `f_${suffix}` },
+      })
+    ).id;
+    const l5 = (
+      await prisma.league.create({ data: { name: `Liga US28 ${suffix}`, type: "private" } })
+    ).id;
+    await prisma.leagueMember.createMany({
+      data: [
+        { leagueId: l5, userId: userG, joinedAt: new Date("2098-01-01T00:00:00Z") },
+        { leagueId: l5, userId: userF, joinedAt: new Date("2098-01-02T00:00:00Z") },
+      ],
+    });
+    for (const [uid, pts] of [
+      [userG, 100],
+      [userF, 60],
+    ] as const) {
+      const lineup = await prisma.lineup.create({ data: { userId: uid, gpId: gp1 } });
+      await prisma.score.create({
+        data: {
+          lineupId: lineup.id,
+          userId: uid,
+          gpId: gp1,
+          pointsTotal: pts,
+          breakdown: {},
+          rulesVersion: "scoring-v1",
+          resultsVersion: "rv-1",
+        },
+      });
+    }
+
+    // 1ª publicación: ambos miembros activos aparecen.
+    await service.recalculateRankings(gp1, "rv-1");
+    const first = await latestRankings({ gpId: gp1 }, l5);
+    expect(first.map((r) => r.userId).sort()).toEqual([userG, userF].sort());
+    expect(first.find((r) => r.userId === userG)!.position).toBe(1);
+    expect(first.find((r) => r.userId === userF)!.position).toBe(2);
+
+    // userF sale de la liga (status → left; la acción de salida la
+    // implementa US-27, aquí solo el estado de la membresía).
+    await prisma.leagueMember.update({
+      where: { leagueId_userId: { leagueId: l5, userId: userF } },
+      data: { status: "left", leftAt: new Date() },
+    });
+
+    // 2ª publicación (nueva versión): userF queda fuera; userG solo.
+    await service.recalculateRankings(gp1, "rv-1");
+    const second = await latestRankings({ gpId: gp1 }, l5);
+    expect(second).toHaveLength(1);
+    expect(second[0]!.userId).toBe(userG);
+    expect(second[0]!.position).toBe(1);
+
+    // El histórico (1ª publicación) se conserva: 2 filas antiguas + 1 nueva.
+    const total = await prisma.ranking.count({ where: { leagueId: l5, gpId: gp1 } });
+    expect(total).toBe(3);
+  });
+
+  // ── US-29 · Multi-liga: mismo lineup, mismos puntos (invariantes 3 y 4) ─
+  // CA: "un usuario en 2+ ligas tiene un único lineup por GP y los mismos
+  // puntos en todas las ligas (los `scores` son por `(user, gp)`; los
+  // `rankings` por `(league, user, gp)` con valores idénticos)".
+
+  it("US-29: un usuario en 2 ligas tiene un único lineup por GP y los mismos puntos en ambas", async () => {
+    // Usuario nuevo en dos ligas nuevas.
+    const userX = (
+      await prisma.user.create({
+        data: { email: `x-${suffix}@test.local`, passwordHash: "h", username: `x_${suffix}` },
+      })
+    ).id;
+    const l3 = (
+      await prisma.league.create({ data: { name: `Liga US29a ${suffix}`, type: "private" } })
+    ).id;
+    const l4 = (
+      await prisma.league.create({ data: { name: `Liga US29b ${suffix}`, type: "private" } })
+    ).id;
+    await prisma.leagueMember.createMany({
+      data: [
+        { leagueId: l3, userId: userX, joinedAt: new Date("2098-01-01T00:00:00Z") },
+        { leagueId: l4, userId: userX, joinedAt: new Date("2098-01-01T00:00:00Z") },
+      ],
+    });
+
+    // Un único lineup por GP (invariante 3): el 2º intento para el mismo
+    // (user, gp) lo rechaza la constraint única de BD.
+    const lineup = await prisma.lineup.create({ data: { userId: userX, gpId: gp1 } });
+    await expect(prisma.lineup.create({ data: { userId: userX, gpId: gp1 } })).rejects.toMatchObject(
+      { code: "P2002" },
+    );
+
+    // Score para ese único lineup (los scores son por (user, gp), invariante 4).
+    await prisma.score.create({
+      data: {
+        lineupId: lineup.id,
+        userId: userX,
+        gpId: gp1,
+        pointsTotal: 80,
+        breakdown: {},
+        rulesVersion: "scoring-v1",
+        resultsVersion: "rv-1",
+      },
+    });
+
+    await service.recalculateRankings(gp1, "rv-1");
+
+    // Mismos puntos en ambas ligas, por GP…
+    const inL3 = (await latestRankings({ gpId: gp1 }, l3)).find((r) => r.userId === userX);
+    const inL4 = (await latestRankings({ gpId: gp1 }, l4)).find((r) => r.userId === userX);
+    expect(inL3).toBeDefined();
+    expect(inL4).toBeDefined();
+    expect(Number(inL3!.points)).toBe(80);
+    expect(Number(inL4!.points)).toBe(80);
+    expect(inL3!.points.toString()).toBe(inL4!.points.toString()); // valores idénticos
+
+    // …y en el ranking general.
+    const overallL3 = (await latestRankings({ gpId: null }, l3)).find((r) => r.userId === userX);
+    const overallL4 = (await latestRankings({ gpId: null }, l4)).find((r) => r.userId === userX);
+    expect(overallL3).toBeDefined();
+    expect(overallL4).toBeDefined();
+    expect(Number(overallL3!.points)).toBe(80);
+    expect(Number(overallL4!.points)).toBe(80);
   });
 });
