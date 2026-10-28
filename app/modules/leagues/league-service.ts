@@ -42,6 +42,7 @@ import {
   createLeagueInputSchema,
   joinLeagueInputSchema,
   kickMemberInputSchema,
+  leagueIdInputSchema,
   setMemberInvitesInputSchema,
   transferAdminInputSchema,
   updateLeagueInputSchema,
@@ -135,6 +136,12 @@ export interface LeagueMemberView {
   /** Seudónimo público (`profiles.displayName ?? users.username`); nunca PII. */
   username: string;
   role: "admin" | "member";
+  /**
+   * Estado de la membresía (US-27, ADR-0027): `left` (se fue voluntariamente)
+   * o `kicked` (expulsado por el admin). Solo presente en `formerMembers`;
+   * los de `members` son activos (ausente).
+   */
+  status?: "left" | "kicked";
 }
 
 /** Vista de una liga para la UI (US-23, extendida por US-24). */
@@ -161,6 +168,12 @@ export interface LeagueView {
    * nombre de usuario, nunca PII). Admins primero, luego por antigüedad.
    */
   members: LeagueMemberView[];
+  /**
+   * Miembros que salieron (`left`) o fueron expulsados (`kicked`) — US-27,
+   * ADR-0027: se muestran marcados "retirado"/"expulsado" en el detalle; el
+   * histórico de puntos se conserva (append-only, US-21/ADR-0022).
+   */
+  formerMembers: LeagueMemberView[];
   /** El actor es miembro activo de la liga (US-25: la UI oculta el botón de unión). */
   isMember: boolean;
   /** El actor es admin de la liga (miembro activo con rol admin). */
@@ -657,6 +670,80 @@ export class LeagueService {
     return this.toLeagueView(leagueId, actorId);
   }
 
+  // ── US-27 · Salir de la liga (ADR-0027) ──────────────────────────────────
+
+  /**
+   * Sale el actor de la liga (US-27, ADR-0027, leagues.md §5/§11):
+   * - Solo un **miembro activo** puede salir (no un miembro `left`/`kicked`
+   *   ni un extraño).
+   * - El **admin NO puede salir**: debe transferir primero el rol a otro
+   *   miembro activo (decisión ADR-0027, consistente con US-26: un solo
+   *   admin, transferencia explícita).
+   * - La membresía pasa a `left` + `leftAt` (soft delete; el histórico de
+   *   puntos se conserva — append-only, US-21/ADR-0022; el ranking de los
+   *   demás no se recalcula hacia atrás).
+   * - Auditoría `league.left` en la misma transacción.
+   *
+   * @throws {TRPCError} NOT_FOUND si la liga no existe (o es privada a un
+   *   extraño); BAD_REQUEST si el actor no es miembro activo o es el admin.
+   */
+  async leaveLeague(
+    leagueId: string,
+    actorId: string,
+    meta: AuditMeta,
+  ): Promise<LeagueView> {
+    leagueIdInputSchema.parse({ leagueId });
+
+    const league = await this.deps.prisma.league.findUnique({
+      where: { id: leagueId },
+    });
+    if (!league) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "La liga no existe." });
+    }
+
+    const membership = await this.deps.prisma.leagueMember.findUnique({
+      where: { leagueId_userId: { leagueId, userId: actorId } },
+    });
+    if (!membership || membership.status !== "active") {
+      // Privada a un extraño: NOT_FOUND (no revelar la existencia, ADR-0024);
+      // miembro ya salido/expulsado: BAD_REQUEST (ya no es miembro activo).
+      if (league.type === "private" && membership === null) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "La liga no existe." });
+      }
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Solo un miembro activo puede salir de la liga.",
+      });
+    }
+
+    // El admin no puede salir: debe transferir primero el rol (ADR-0027).
+    if (membership.role === "admin") {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message:
+          "Transfiere el rol de admin a otro miembro antes de salir de la liga.",
+      });
+    }
+
+    await this.deps.prisma.$transaction(async (tx) => {
+      await tx.leagueMember.update({
+        where: { leagueId_userId: { leagueId, userId: actorId } },
+        data: { status: "left", leftAt: new Date() },
+      });
+      await appendAudit(tx, {
+        actorId: meta.actorId,
+        action: "league.left",
+        entity: "league",
+        entityId: leagueId,
+        beforeData: { userId: actorId, status: "active" },
+        afterData: { userId: actorId, status: "left" },
+        ip: meta.ip,
+      });
+    });
+
+    return this.toLeagueView(leagueId, actorId);
+  }
+
   // ── US-25 · Unirse a una liga por código o entrada abierta (ADR-0025) ──
 
   /**
@@ -844,8 +931,17 @@ export class LeagueService {
           message: "La liga está llena.",
         });
       }
-      await tx.leagueMember.create({
-        data: {
+      // Re-entrada (US-27, ADR-0027): si ya existe una membresía previa
+      // (`left`/`kicked`), se REACTIVA en vez de insertar (la unique
+      // `(leagueId, userId)` haría fallar el `create` con P2002); si no
+      // existe, se crea. Siempre reingresa como `member` (un admin no puede
+      // salir ni ser expulsado, US-26/ADR-0027).
+      await tx.leagueMember.upsert({
+        where: {
+          leagueId_userId: { leagueId: resolvedLeagueId, userId: actorId },
+        },
+        update: { role: "member", status: "active", leftAt: null },
+        create: {
           leagueId: resolvedLeagueId,
           userId: actorId,
           role: "member",
@@ -1519,25 +1615,40 @@ export class LeagueService {
     actorId: string | null,
   ): Promise<LeagueView> {
     const prisma = this.deps.prisma;
-    const [league, activeInvite, activeMembers, memberRows] = await Promise.all([
-      prisma.league.findUniqueOrThrow({ where: { id: leagueId } }),
-      prisma.leagueInvite.findFirst({
-        where: { leagueId, status: "active" },
-        orderBy: { createdAt: "desc" },
-      }),
-      prisma.leagueMember.count({ where: { leagueId, status: "active" } }),
-      prisma.leagueMember.findMany({
-        where: { leagueId, status: "active" },
-        select: {
-          userId: true,
-          role: true,
-          joinedAt: true,
-          user: { select: { username: true, profile: { select: { displayName: true } } } },
-        },
-        // Admins primero, luego por antigüedad (leagues.md §5: el admin gestiona).
-        orderBy: [{ role: "asc" }, { joinedAt: "asc" }],
-      }),
-    ]);
+    const [league, activeInvite, activeMembers, memberRows, formerRows] =
+      await Promise.all([
+        prisma.league.findUniqueOrThrow({ where: { id: leagueId } }),
+        prisma.leagueInvite.findFirst({
+          where: { leagueId, status: "active" },
+          orderBy: { createdAt: "desc" },
+        }),
+        prisma.leagueMember.count({ where: { leagueId, status: "active" } }),
+        prisma.leagueMember.findMany({
+          where: { leagueId, status: "active" },
+          select: {
+            userId: true,
+            role: true,
+            joinedAt: true,
+            user: { select: { username: true, profile: { select: { displayName: true } } } },
+          },
+          // Admins primero, luego por antigüedad (leagues.md §5: el admin gestiona).
+          orderBy: [{ role: "asc" }, { joinedAt: "asc" }],
+        }),
+        // Miembros que salieron o fueron expulsados (US-27): se muestran
+        // marcados en el detalle; el orden es por fecha de salida (la más
+        // reciente primero).
+        prisma.leagueMember.findMany({
+          where: { leagueId, status: { in: ["left", "kicked"] } },
+          select: {
+            userId: true,
+            role: true,
+            status: true,
+            leftAt: true,
+            user: { select: { username: true, profile: { select: { displayName: true } } } },
+          },
+          orderBy: { leftAt: "desc" },
+        }),
+      ]);
     const membership = actorId
       ? await prisma.leagueMember.findUnique({
           where: { leagueId_userId: { leagueId, userId: actorId } },
@@ -1569,6 +1680,13 @@ export class LeagueService {
         userId: m.userId,
         username: m.user.profile?.displayName ?? m.user.username,
         role: m.role,
+      })),
+      formerMembers: formerRows.map((m) => ({
+        userId: m.userId,
+        username: m.user.profile?.displayName ?? m.user.username,
+        role: m.role,
+        // La consulta filtra `status IN (left, kicked)`: solo esos dos valores.
+        status: m.status as "left" | "kicked",
       })),
       isMember,
       isAdmin,

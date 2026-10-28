@@ -1420,6 +1420,342 @@ describe("US-25 · Unirse a una liga por código o entrada abierta (PostgreSQL r
 });
 
 /**
+ * US-27 · Salir de la liga (ADR-0027, leagues.md §5/§11, PostgreSQL real):
+ * - **Salir:** solo un miembro activo; la membresía pasa a `left` + `leftAt`
+ *   (soft delete) y se registra `league.left` en la auditoría. El admin NO
+ *   puede salir (debe transferir primero el rol — ADR-0027).
+ * - **Histórico conservado:** las publicaciones de ranking ya existentes no
+ *   se modifican (append-only, US-21/ADR-0022); la nueva publicación excluye
+ *   al salido/expulsado y el ranking de los demás no se recalcula hacia atrás.
+ * - **Lineups liberados:** al salir/expulsar, los lineups del miembro (por
+ *   `(user, gp)`, no por liga) siguen vivos: puede seguir puntuando y
+ *   rankeando en sus otras ligas (invariantes 3/4).
+ * - **Re-entrada:** un miembro `left`/`kicked` puede volver a unirse si la
+ *   liga acepta entradas (la membresía se reactiva; el `create` con la fila
+ *   previa fallaría con P2002 — ADR-0027).
+ */
+describe("US-27 · Salir de la liga (PostgreSQL real)", () => {
+  let prisma: PrismaClient;
+  let service: LeagueService;
+  const suffix = randomUUID().slice(0, 8);
+
+  let seasonId: string;
+  let gp1: string;
+
+  beforeAll(async () => {
+    prisma = createPrisma();
+    service = new LeagueService({ prisma });
+
+    seasonId = (
+      await prisma.season.create({
+        data: { name: `Temporada US27 ${suffix}`, year: 2098 },
+      })
+    ).id;
+    const circuit = (
+      await prisma.circuit.create({
+        data: { name: `Circuito US27 ${suffix}`, country: "Ficticia" },
+      })
+    ).id;
+    gp1 = (
+      await prisma.gp.create({
+        data: {
+          seasonId,
+          round: 1,
+          name: `GP US27 ${suffix}`,
+          circuitId: circuit,
+          date: new Date("2098-05-01T12:00:00Z"),
+        },
+      })
+    ).id;
+  });
+
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  /** Crea un usuario aislado y devuelve su id. */
+  async function makeUser(tag: string): Promise<string> {
+    return (
+      await prisma.user.create({
+        data: {
+          email: `l27-${tag}-${suffix}@test.local`,
+          passwordHash: "h",
+          username: `l27_${tag}_${suffix}`,
+        },
+      })
+    ).id;
+  }
+
+  /** Crea una liga pública activa (entrada abierta) con el creador como admin. */
+  async function makePublic(creatorId: string, name: string) {
+    return service.createLeague(
+      validInput({
+        name,
+        type: "public",
+        visibility: "public",
+        entryMode: "code",
+      }),
+      { ...META, actorId: creatorId },
+    );
+  }
+
+  /** Crea una liga privada por código con el creador como admin. */
+  async function makePrivate(creatorId: string, name: string) {
+    return service.createLeague(validInput({ name }), {
+      ...META,
+      actorId: creatorId,
+    });
+  }
+
+  /** Añade un score (con su lineup) para (usuario, gp) y devuelve el id. */
+  async function addScore(userId: string, points: number) {
+    const lineup = await prisma.lineup.create({ data: { userId, gpId: gp1 } });
+    await prisma.score.create({
+      data: {
+        lineupId: lineup.id,
+        userId,
+        gpId: gp1,
+        pointsTotal: points,
+        breakdown: {},
+        rulesVersion: "scoring-v1",
+        resultsVersion: "rv-1",
+      },
+    });
+    return lineup.id;
+  }
+
+  /** Última publicación de un ranking (por `computedAt`, como `myRankings`). */
+  async function latestRankings(
+    leagueId: string,
+    where: { gpId: string | null } = { gpId: null },
+  ) {
+    const latest = await prisma.ranking.findFirst({
+      where: { leagueId, ...where },
+      select: { computedAt: true },
+      orderBy: { computedAt: "desc" },
+    });
+    if (!latest) return [];
+    return prisma.ranking.findMany({
+      where: { leagueId, ...where, computedAt: latest.computedAt },
+      orderBy: { position: "asc" },
+    });
+  }
+
+  it("miembro activo: sale y queda marcado `left` (auditoría `league.left`)", async () => {
+    const admin = await makeUser("leave-a");
+    const member = await makeUser("leave-m");
+    const league = await makePublic(admin, `Liga salir ${suffix}`);
+    await prisma.leagueMember.create({
+      data: { leagueId: league.id, userId: member, role: "member" },
+    });
+
+    const view = await service.leaveLeague(league.id, member, {
+      ...META,
+      actorId: member,
+    });
+
+    // La membresía queda `left` + `leftAt` (soft delete).
+    const membership = await prisma.leagueMember.findUniqueOrThrow({
+      where: { leagueId_userId: { leagueId: league.id, userId: member } },
+    });
+    expect(membership.status).toBe("left");
+    expect(membership.leftAt).toBeInstanceOf(Date);
+
+    // El actor ya no es miembro; aparece en `formerMembers` como "retirado".
+    expect(view.isMember).toBe(false);
+    expect(view.members.find((m) => m.userId === member)).toBeUndefined();
+    expect(view.formerMembers.find((m) => m.userId === member)).toMatchObject({
+      status: "left",
+    });
+
+    // Auditoría `league.left` (append-only).
+    const audit = await prisma.auditLog.findFirst({
+      where: { action: "league.left", entityId: league.id },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(audit).not.toBeNull();
+    expect(audit!.actorId).toBe(member);
+  });
+
+  it("admin: NO puede salir (debe transferir primero el rol)", async () => {
+    const admin = await makeUser("leave-admin");
+    const league = await makePublic(admin, `Liga admin sale ${suffix}`);
+
+    await expect(
+      service.leaveLeague(league.id, admin, { ...META, actorId: admin }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message:
+        "Transfiere el rol de admin a otro miembro antes de salir de la liga.",
+    });
+
+    // La membresía del admin sigue activa (no se modificó).
+    const membership = await prisma.leagueMember.findUniqueOrThrow({
+      where: { leagueId_userId: { leagueId: league.id, userId: admin } },
+    });
+    expect(membership.status).toBe("active");
+  });
+
+  it("extraño en liga privada: NOT_FOUND (no revela la existencia)", async () => {
+    const admin = await makeUser("leave-str-a");
+    const stranger = await makeUser("leave-str-s");
+    const league = await makePrivate(admin, `Liga privada salir ${suffix}`);
+
+    await expect(
+      service.leaveLeague(league.id, stranger, { ...META, actorId: stranger }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("miembro ya salido: no puede salir de nuevo", async () => {
+    const admin = await makeUser("leave-again-a");
+    const member = await makeUser("leave-again-m");
+    const league = await makePublic(admin, `Liga salir de nuevo ${suffix}`);
+    await prisma.leagueMember.create({
+      data: { leagueId: league.id, userId: member, role: "member" },
+    });
+    await service.leaveLeague(league.id, member, { ...META, actorId: member });
+
+    await expect(
+      service.leaveLeague(league.id, member, { ...META, actorId: member }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Solo un miembro activo puede salir de la liga.",
+    });
+  });
+
+  it("re-entrada: un miembro `left` vuelve a unirse (se reactiva, sin P2002)", async () => {
+    const admin = await makeUser("rejoin-a");
+    const member = await makeUser("rejoin-m");
+    const league = await makePublic(admin, `Liga re-entrada ${suffix}`);
+    await prisma.leagueMember.create({
+      data: { leagueId: league.id, userId: member, role: "member" },
+    });
+
+    // Sale…
+    await service.leaveLeague(league.id, member, { ...META, actorId: member });
+    // …y vuelve a unirse (entrada abierta): la fila previa se reactiva.
+    const view = await service.joinLeague(
+      { leagueId: league.id },
+      { ...META, actorId: member },
+    );
+    expect(view.isMember).toBe(true);
+
+    const membership = await prisma.leagueMember.findUniqueOrThrow({
+      where: { leagueId_userId: { leagueId: league.id, userId: member } },
+    });
+    expect(membership.status).toBe("active");
+    expect(membership.leftAt).toBeNull();
+    expect(membership.role).toBe("member");
+
+    // Solo una fila de membresía (no se duplicó — la unique se respeta).
+    const count = await prisma.leagueMember.count({
+      where: { leagueId: league.id, userId: member },
+    });
+    expect(count).toBe(1);
+  });
+
+  it("histórico conservado: al salir, la publicación anterior no cambia y la nueva excluye al salido", async () => {
+    const admin = await makeUser("hist-a");
+    const b = await makeUser("hist-b");
+    const c = await makeUser("hist-c");
+    const league = await makePublic(admin, `Liga histórico ${suffix}`);
+    await prisma.leagueMember.createMany({
+      data: [
+        { leagueId: league.id, userId: b, role: "member" },
+        { leagueId: league.id, userId: c, role: "member" },
+      ],
+    });
+    await addScore(b, 100);
+    await addScore(c, 50);
+
+    // Publicación 1: B (1º, 100) y C (2º, 50).
+    await service.recalculateRankings(gp1, "rv-1");
+    const pub1 = await latestRankings(league.id, { gpId: gp1 });
+    expect(pub1.map((r) => r.userId)).toEqual([b, c]);
+    expect(pub1.map((r) => Number(r.points))).toEqual([100, 50]);
+
+    // B sale de la liga.
+    await service.leaveLeague(league.id, b, { ...META, actorId: b });
+
+    // Publicación 2: solo C (1º, 50). B queda fuera.
+    await service.recalculateRankings(gp1, "rv-1");
+    const pub2 = await latestRankings(league.id, { gpId: gp1 });
+    expect(pub2.map((r) => r.userId)).toEqual([c]);
+    expect(pub2.map((r) => Number(r.points))).toEqual([50]);
+
+    // El HISTÓRICO (publicación 1) NO se modificó: B y C siguen con sus
+    // puntos y posiciones originales (no se recalcula hacia atrás).
+    const all = await prisma.ranking.findMany({
+      where: { leagueId: league.id, gpId: gp1 },
+      orderBy: { position: "asc" },
+    });
+    const pub1Rows = all.filter(
+      (r) => r.computedAt.getTime() === pub1[0]!.computedAt.getTime(),
+    );
+    expect(pub1Rows.map((r) => r.userId)).toEqual([b, c]);
+    expect(pub1Rows.map((r) => Number(r.points))).toEqual([100, 50]);
+    // C conserva sus 50 puntos en ambas publicaciones (no se recalculó).
+    const cInPub1 = pub1Rows.find((r) => r.userId === c)!;
+    const cInPub2 = pub2.find((r) => r.userId === c)!;
+    expect(Number(cInPub1.points)).toBe(50);
+    expect(Number(cInPub2.points)).toBe(50);
+  });
+
+  it("lineups liberados: expulsado de una liga sigue puntuando y rankeando en otra", async () => {
+    const admin1 = await makeUser("free-a1");
+    const admin2 = await makeUser("free-a2");
+    const x = await makeUser("free-x");
+    const y = await makeUser("free-y");
+    const l1 = await makePublic(admin1, `Liga free1 ${suffix}`);
+    const l2 = await makePublic(admin2, `Liga free2 ${suffix}`);
+    await prisma.leagueMember.createMany({
+      data: [
+        { leagueId: l1.id, userId: x, role: "member" },
+        { leagueId: l1.id, userId: y, role: "member" },
+        { leagueId: l2.id, userId: x, role: "member" },
+        { leagueId: l2.id, userId: y, role: "member" },
+      ],
+    });
+
+    // Un único lineup por GP (invariante 3) + score (invariante 4).
+    // X=80, Y=60 en ambas ligas (mismos puntos, invariante 4).
+    const lineupId = await addScore(x, 80);
+    await addScore(y, 60);
+
+    // X aparece en AMBAS ligas con los mismos puntos.
+    await service.recalculateRankings(gp1, "rv-1");
+    const inL1 = (await latestRankings(l1.id, { gpId: gp1 })).find(
+      (r) => r.userId === x,
+    );
+    const inL2 = (await latestRankings(l2.id, { gpId: gp1 })).find(
+      (r) => r.userId === x,
+    );
+    expect(Number(inL1!.points)).toBe(80);
+    expect(Number(inL2!.points)).toBe(80);
+
+    // X es expulsado de L1.
+    await service.kickMember(l1.id, x, admin1, { ...META, actorId: admin1 });
+
+    // El lineup NO se borra (sigue vivo; "se libera" de L1, no del usuario).
+    const lineup = await prisma.lineup.findUnique({ where: { id: lineupId } });
+    expect(lineup).not.toBeNull();
+
+    // Nueva publicación (no vacía: Y sigue puntuando): X queda fuera de L1
+    // pero SIGUE en L2 (mismos puntos).
+    await service.recalculateRankings(gp1, "rv-1");
+    const afterL1 = (await latestRankings(l1.id, { gpId: gp1 })).find(
+      (r) => r.userId === x,
+    );
+    const afterL2 = (await latestRankings(l2.id, { gpId: gp1 })).find(
+      (r) => r.userId === x,
+    );
+    expect(afterL1).toBeUndefined();
+    expect(afterL2).toBeDefined();
+    expect(Number(afterL2!.points)).toBe(80);
+  });
+});
+
+/**
  * US-23 · Router `leagues` (glue BFF, ADR-0023) — el actor sale del
  * contexto (nunca del input) y los procedimientos delegan en el servicio.
  *
@@ -1830,6 +2166,30 @@ describe("US-23 · Router leagues (glue BFF)", () => {
       targetUserId: member,
     });
     expect(afterKick.members.find((m) => m.userId === member)).toBeUndefined();
+  });
+
+  it("leave (router): un miembro sale de la liga (el actor sale del contexto)", async () => {
+    const created = await leaguesRouter
+      .createCaller(await ctxAuth())
+      .create(
+        validInput({
+          name: `Liga leave ${rsuffix}`,
+          type: "public",
+          visibility: "public",
+        }),
+      );
+    // Usuario 2 se une y sale (el actor es el usuario 2, no el admin).
+    const caller2 = leaguesRouter.createCaller(await ctxUser2());
+    await caller2.join({ leagueId: created.id });
+
+    const afterLeave = await caller2.leave({ leagueId: created.id });
+    const user2Id = (
+      await prisma.user.findFirst({ where: { username: `router2_${rsuffix}` } })
+    )!.id;
+    expect(afterLeave.isMember).toBe(false);
+    expect(
+      afterLeave.formerMembers.some((m) => m.userId === user2Id),
+    ).toBe(true);
   });
 
   it("transferAdmin (router): el admin cede el rol a un miembro", async () => {

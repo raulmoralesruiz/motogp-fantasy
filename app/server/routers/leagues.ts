@@ -15,6 +15,9 @@
  * - `join`: cualquier usuario autenticado (US-25) — el actor sale del
  *   contexto; la elegibilidad (estado, modo de entrada, código, membresía,
  *   plaza) la revalida el servicio (AGENTS.md §8).
+ * - `leave`: cualquier usuario autenticado (US-27) — el actor sale de la
+ *   liga; el servicio revalida que es miembro activo y no es el admin
+ *   (AGENTS.md §8).
  * - `get`: **pública** (US-24) — pública ⇒ cualquiera (autenticado o no);
  *   privada ⇒ solo miembros activos (extraños → NOT_FOUND, leagues.md §9);
  *   el código solo lo devuelve el admin (leagues.md §5).
@@ -165,6 +168,20 @@ export function createLeaguesRouter(deps: LeaguesRouterDeps) {
       .input(setMemberInvitesInputSchema)
       .mutation(({ ctx, input }) =>
         service.setMemberInvites(input.leagueId, input.enabled, ctx.user.id, {
+          actorId: ctx.user.id,
+          ip: ctx.ip,
+        }),
+      ),
+
+    /**
+     * Sale el actor de la liga (US-27, ADR-0027, leagues.md §5/§11): solo un
+     * miembro activo; el admin debe transferir primero el rol (→ 400). La
+     * membresía pasa a `left` (soft delete; el histórico se conserva).
+     */
+    leave: protectedProcedure
+      .input(leagueIdInputSchema)
+      .mutation(({ ctx, input }) =>
+        service.leaveLeague(input.leagueId, ctx.user.id, {
           actorId: ctx.user.id,
           ip: ctx.ip,
         }),

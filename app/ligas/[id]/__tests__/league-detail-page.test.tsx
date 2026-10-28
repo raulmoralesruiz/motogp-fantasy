@@ -48,6 +48,7 @@ const LEAGUE = {
     { userId: "user-1", username: "piloto1", role: "admin" },
     { userId: "user-2", username: "piloto2", role: "member" },
   ],
+  formerMembers: [],
   isAdmin: true,
   isMember: true,
   code: "ABC123XYZ9",
@@ -790,6 +791,158 @@ describe("LeagueDetailPage (US-24)", () => {
       expect(
         screen.getByText("Solo el admin de la liga puede hacer esta acción."),
       ).toBeInTheDocument();
+    });
+  });
+
+  describe("salir de la liga (US-27, ADR-0027)", () => {
+    // Actor = miembro no admin (user-2); admin = user-1.
+    const MEMBER_LEAGUE = { ...LEAGUE, isAdmin: false };
+
+    it("miembro no admin: muestra el botón 'Salir de la liga'", () => {
+      mockLeague(MEMBER_LEAGUE);
+      mockRanking(RANKING);
+      renderDetail(<LeagueDetailPage />);
+
+      expect(
+        screen.getByRole("button", { name: "Salir de la liga" }),
+      ).toBeInTheDocument();
+    });
+
+    it("admin: NO muestra el botón de salir (debe transferir primero el rol)", () => {
+      mockLeague(LEAGUE);
+      mockRanking(RANKING);
+      renderDetail(<LeagueDetailPage />);
+
+      expect(
+        screen.queryByRole("button", { name: "Salir de la liga" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByText(/transfiere primero el rol/),
+      ).toBeInTheDocument();
+    });
+
+    it("no miembro: no muestra el botón de salir", () => {
+      mockLeague({ ...LEAGUE, isMember: false, isAdmin: false });
+      mockRanking(RANKING);
+      renderDetail(<LeagueDetailPage />);
+
+      expect(
+        screen.queryByRole("button", { name: "Salir de la liga" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("clic en 'Salir de la liga' (confirmado): envía la leagueId", async () => {
+      mockLeague(MEMBER_LEAGUE);
+      mockRanking(RANKING);
+      vi.spyOn(window, "confirm").mockReturnValue(true);
+      const mutate = mockMutation(trpc.leagues.leave.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: "Salir de la liga" }));
+
+      expect(window.confirm).toHaveBeenCalled();
+      expect(mutate.mock.calls[0]?.[0]).toEqual({ leagueId: "league-1" });
+      vi.restoreAllMocks();
+    });
+
+    it("clic en 'Salir de la liga' (cancelado): NO muta", async () => {
+      mockLeague(MEMBER_LEAGUE);
+      mockRanking(RANKING);
+      vi.spyOn(window, "confirm").mockReturnValue(false);
+      const mutate = mockMutation(trpc.leagues.leave.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: "Salir de la liga" }));
+
+      expect(mutate).not.toHaveBeenCalled();
+      vi.restoreAllMocks();
+    });
+
+    it("leave: éxito en liga privada → vuelve al directorio (ya no es visible)", async () => {
+      mockLeague(MEMBER_LEAGUE); // privada
+      mockRanking(RANKING);
+      mockMutation(trpc.leagues.leave.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      await act(async () => {
+        mutationOptions(trpc.leagues.leave.useMutation).onSuccess?.({
+          type: "private",
+        });
+      });
+      expect(navigation.push).toHaveBeenCalledWith("/ligas");
+    });
+
+    it("leave: éxito en liga pública → mensaje de confirmación (sigue visible)", async () => {
+      mockLeague({ ...MEMBER_LEAGUE, type: "public", visibility: "public" });
+      mockRanking(RANKING);
+      mockMutation(trpc.leagues.leave.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      await act(async () => {
+        mutationOptions(trpc.leagues.leave.useMutation).onSuccess?.({
+          type: "public",
+        });
+      });
+      expect(navigation.push).not.toHaveBeenCalled();
+      expect(
+        screen.getByText(/Has salido de la liga/),
+      ).toBeInTheDocument();
+    });
+
+    it("leave: error muestra el motivo del servidor (p. ej. admin)", async () => {
+      mockLeague(MEMBER_LEAGUE);
+      mockRanking(RANKING);
+      mockMutation(trpc.leagues.leave.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      await act(async () => {
+        mutationOptions(trpc.leagues.leave.useMutation).onError?.(
+          new Error(
+            "Transfiere el rol de admin a otro miembro antes de salir de la liga.",
+          ),
+        );
+      });
+      expect(
+        screen.getByText(
+          "Transfiere el rol de admin a otro miembro antes de salir de la liga.",
+        ),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe("miembros que salieron (US-27, ADR-0027)", () => {
+    const FORMER_LEAGUE = {
+      ...LEAGUE,
+      formerMembers: [
+        { userId: "user-3", username: "piloto3", role: "member", status: "left" },
+        { userId: "user-4", username: "piloto4", role: "member", status: "kicked" },
+      ],
+    };
+
+    it("muestra a los miembros que salieron marcados 'retirado'/'expulsado'", () => {
+      mockLeague(FORMER_LEAGUE);
+      mockRanking(RANKING);
+      renderDetail(<LeagueDetailPage />);
+
+      expect(
+        screen.getByRole("heading", { name: /Miembros que salieron/ }),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/piloto3/)).toBeInTheDocument();
+      expect(screen.getByText(/retirado/)).toBeInTheDocument();
+      expect(screen.getByText(/piloto4/)).toBeInTheDocument();
+      expect(screen.getByText(/expulsado/)).toBeInTheDocument();
+    });
+
+    it("sin miembros que salieron: no muestra la sección", () => {
+      mockLeague(LEAGUE);
+      mockRanking(RANKING);
+      renderDetail(<LeagueDetailPage />);
+
+      expect(
+        screen.queryByRole("heading", { name: /Miembros que salieron/ }),
+      ).not.toBeInTheDocument();
     });
   });
 });

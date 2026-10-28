@@ -3,7 +3,7 @@
 import { getQueryKey } from "@trpc/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Alert, Button, Field } from "@/shared/components";
@@ -43,6 +43,7 @@ export default function LeagueDetailPage() {
   const params = useParams<{ id: string }>();
   const leagueId = params.id;
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const league = trpc.leagues.get.useQuery({ leagueId });
   const ranking = trpc.leagues.ranking.useQuery({ leagueId });
@@ -163,6 +164,26 @@ export default function LeagueDetailPage() {
     },
   });
 
+  // Salida de la liga (US-27, ADR-0027): solo un miembro activo no admin.
+  // Tras salir de una **privada** ya no es visible (NOT_FOUND) → volver al
+  // directorio; tras salir de una **pública** la vista se refresca (ya no
+  // es miembro, el botón de unión reaparece).
+  const leave = trpc.leagues.leave.useMutation({
+    onSuccess: (view) => {
+      clearFeedback();
+      if (view.type === "private") {
+        router.push("/ligas");
+        return;
+      }
+      setSuccess("Has salido de la liga. El histórico de puntos se conserva.");
+      invalidateLeague();
+    },
+    onError: (err) => {
+      setSuccess(null);
+      setError(err instanceof Error ? err.message : "No se pudo salir de la liga.");
+    },
+  });
+
   if (league.isPending) {
     return <p className="muted">Consultando…</p>;
   }
@@ -248,6 +269,58 @@ export default function LeagueDetailPage() {
             );
           })}
         </ul>
+      )}
+
+      {l.formerMembers.length > 0 && (
+        <>
+          <h3>
+            Miembros que salieron ({l.formerMembers.length}
+            {l.formerMembers.length === 1 ? "" : "s"})
+          </h3>
+          <ul>
+            {l.formerMembers.map((m) => (
+              <li key={m.userId}>
+                {m.username}{" "}
+                <span className="muted">
+                  · {m.status === "kicked" ? "expulsado" : "retirado"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {l.isMember && !l.isAdmin && (
+        <div>
+          <h3>Salir de la liga</h3>
+          <p className="muted">
+            Al salir dejas de participar en esta liga. Tu histórico de puntos
+            se conserva; puedes volver a unirte si la liga sigue abierta.
+          </p>
+          <Button
+            type="button"
+            onClick={() => {
+              const ok = window.confirm(
+                "¿Seguro que quieres salir de esta liga? Tu histórico de puntos se conserva.",
+              );
+              if (!ok) return;
+              leave.mutate({ leagueId: l.id });
+            }}
+            disabled={leave.isPending}
+          >
+            {leave.isPending ? "Saliendo…" : "Salir de la liga"}
+          </Button>
+        </div>
+      )}
+
+      {l.isAdmin && (
+        <div>
+          <h3>Salir de la liga</h3>
+          <p className="muted">
+            Eres el admin de la liga: para salir, transfiere primero el rol a
+            otro miembro.
+          </p>
+        </div>
       )}
 
       {l.type === "public" && !l.isMember && (
