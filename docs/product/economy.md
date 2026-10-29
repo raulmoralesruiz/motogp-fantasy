@@ -77,14 +77,16 @@ Presupuesto del GP = `B + carry`, donde `carry = min(tasa × sin_usar_previo, to
 
 ## 4. Modelo recomendado (especificación)
 
-### 4.1 Parámetros (PROVISIONAL, configurables por temporada)
+### 4.1 Parámetros (DEFINITIVOS — calibración D-01, 2026-10-29; configurables por temporada)
 
-| Parámetro               | Símbolo | Valor prov. | Rango razonable |
-| ----------------------- | ------- | ----------- | --------------- |
-| Presupuesto base por GP | `B`     | 100.00      | 100–120         |
-| Tasa de carry           | `t`     | 0.25        | 0.10–0.30       |
-| Tope de carry           | `cmax`  | 8.00        | 5–10            |
-| Presupuesto máx.        | —       | 108.00      | —               |
+| Parámetro               | Símbolo | Valor definitivo | Rango razonable |
+| ----------------------- | ------- | ---------------- | --------------- |
+| Presupuesto base por GP | `B`     | 100.00           | 100–120         |
+| Tasa de carry           | `t`     | 0.25             | 0.10–0.30       |
+| Tope de carry           | `cmax`  | 8.00             | 5–10            |
+| Presupuesto máx.        | —       | 108.00           | —               |
+
+> **Calibración D-01 (2026-10-29, ADR-0030):** se mantuvieron los valores PROVISIONAL como definitivos. La búsqueda de parámetros (`npm run calibrate`, 36 combinaciones del rango razonable sobre la temporada 2026 real, opción E) pasa las 3 métricas de equilibrio T-15 en el 100% de los casos (Gini 0.000–0.010 < 0.05; recuperación 1.03–1.10 > 0.95; diversidad 87% > 70%; espiral de la muerte 0/40). La combinación elegida (centro del rango) ofrece el mejor equilibrio entre premio a la eficiencia y el riesgo "carry incentiva no gastar" (§8).
 
 ### 4.2 Fórmulas
 
@@ -110,7 +112,7 @@ precio(r+1)  ← acotado a [0.85·precio(r), 1.15·precio(r)] y [0.25·P0, 2.00�
 
 - **Lesión confirmada** para el GP `r+1`: `precio(r+1) = max(0.25·P0, 0.5·precio(r))`.
 - **Baja por temporada**: `precio = 0.25·P0`.
-- `Pmax` = puntuación máxima de referencia del piloto en un GP (PROVISIONAL: 60; el máximo teórico con la tabla provisional de `scoring.md` es ~55–67). `perf` está topado a 100 para que el índice permanezca en 0–100.
+- `Pmax` = puntuación máxima de referencia del activo en un GP. **Calibración D-02 (2026-10-29, ADR-0030):** el motor de precios puntúa solo la carrera principal (ADR-0015), cuyo máximo es **30** (25 por victoria + 5 bono ganador). Por tanto `PMAX_RIDER = 30` y `PMAX_GROUP = 30` (media top-2, máx 30 por piloto). El punto neutro `W=50` corresponde a ~15 pts (entre 3º y 4º) y una victoria → `perf 100`. *(Antes: `PMAX_RIDER=60`, máximo teórico del fin de semana completo; con puntuación solo de carrera principal ningún piloto alcanzaba `perf > 50` y el mercado era deflacionista por construcción.)* `perf` está topado a 100 para que el índice permanezca en 0–100.
 - Todo movimiento de precio queda registrado: `activo, gp, precio_previo, precio_nuevo, motivo (fórmula|manual), versión_fórmula`.
 
 ### 4.4 Anti-explotación

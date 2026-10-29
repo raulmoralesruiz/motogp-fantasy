@@ -138,9 +138,11 @@ GP con sprint. Lineup: oro = {A, C}, plata = {E, H}, constructor = X, equipo = X
 - **Recálculo:** al corregir un resultado, se recalcula el GP completo con la misma `rules_version` y se genera una nueva `results_version`. El histórico conserva ambas.
 - **No hay cambios retroactivos silenciosos:** cambiar reglas a mitad de temporada requiere una nueva versión y se aplica solo a GPs futuros (o se recalcula todo de forma explícita y auditada, decisión del admin con registro).
 
-## 8. Decisiones pendientes
+## 8. Decisiones (resueltas en la calibración D-02, 2026-10-29 — ADR-0030)
 
-- Valores exactos de las tablas (PROVISIONAL aquí).
-- Si el "resultado extraordinario" se mantiene o se retira.
-- Si posiciones ganadas dan +1 por posición o un bono fijo.
-- Si el constructor/equipo puntúan por media de top-2 o por otro esquema (p. ej. solo el mejor).
+- **Valores de las tablas:** se fijan como `scoring-v1` definitiva (las tablas PROVISIONAL de §2 pasan a definitivas; ya implementadas y versionadas en `season_rules`).
+- **Resultado extraordinario:** se **mantiene** (+5, top-3 de la carrera siendo el más barato del equipo).
+- **Posiciones ganadas:** **+1 por posición ganada**, tope 3 (desde la parrilla de Q2).
+- **Constructor/equipo:** puntúan por **media de sus 2 mejores pilotos** (campo completo del GP).
+
+> Estas decisiones cierran también D-12 (bonos extraordinario/posiciones ganadas) y D-13 (esquema constructor/equipo) del backlog.

@@ -189,7 +189,7 @@ precio(r+1)  ← acotado a [0.85·precio(r), 1.15·precio(r)] y [0.25·P0, 2.00�
 ### Cada pieza, en humano
 
 1. **`perf` — "¿qué tal lo hizo este GP?"**
-   Sus puntos divididos por su máximo de referencia (Pmax), en escala 0–100. Si Pmax=60 y saca 54 puntos → `perf = 90`. Topado a 100 para que el índice no se dispare.
+   Sus puntos divididos por su máximo de referencia (Pmax), en escala 0–100. El motor de precios puntúa solo la carrera principal (máx 30: 25 por victoria + 5 bono), así que `Pmax=30`: si saca 27 puntos → `perf = 90`. Topado a 100 para que el índice no se dispare.
 
 2. **`W` — "¿va en racha o en caída?"**
    Media ponderada de los últimos 3 GPs, dando más peso al presente: 50% actual, 30% anterior, 20% el de antes. Un piloto en racha sube su W; uno en caída, lo baja.
@@ -300,7 +300,7 @@ Los valores `100 / 25% / 8` son un **punto de partida razonable**, pero son `PRO
 
 ### El bucle de calibración
 
-1. **Partir de los valores provisionales** (`B=100`, `t=0.25`, `cmax=8`, `Pmax=60`).
+1. **Partir de los valores definitivos** (`B=100`, `t=0.25`, `cmax=8`, `Pmax=30` — calibración D-01/D-02, ADR-0030).
 2. **Ejecutar la simulación económica** (`npm run simulate`) sobre datos reales de una temporada completa.
 3. **Medir las métricas de equilibrio** (ver tabla abajo).
 4. **Ajustar el parámetro que falla** (ver guía de ajuste).
