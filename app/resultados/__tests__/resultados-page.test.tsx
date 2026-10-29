@@ -13,6 +13,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mockResult, resetTrpcMocks } from "../../../test/trpc-mock";
 import { render, screen, userEvent } from "../../../test/rtl";
 
+import type { MyLeagueGpRanking, MyResultsView } from "@/server/routers/results";
+
 import ResultadosPage from "../resultados-page";
 
 vi.mock("@/trpc/client", () => import("../../../test/trpc-mock"));
@@ -24,7 +26,7 @@ const GP1 = { id: "gp-1", name: "GP de Jerez", round: 1 };
 const GP2 = { id: "gp-2", name: "GP de Le Mans", round: 2 };
 
 /** Liga con posición en el GP + delta negativo (bajó 1) + general. */
-const LEAGUE = {
+const LEAGUE: MyLeagueGpRanking = {
   leagueId: "league-1",
   leagueName: "Liga A",
   gpPosition: 2,
@@ -35,7 +37,7 @@ const LEAGUE = {
 };
 
 /** Vista `results.myResults` del GP2 (definitivo, rv-2, 1 corrección). */
-const RESULTS = {
+const RESULTS: MyResultsView = {
   gp: {
     id: GP2.id,
     name: GP2.name,
@@ -48,8 +50,12 @@ const RESULTS = {
   },
   cancelled: false,
   state: {
+    gpId: GP2.id,
+    gpName: GP2.name,
+    round: 2,
+    seasonName: "Temporada 2099",
     definitive: true,
-    resultsVersion: "rv-2" as string | null,
+    resultsVersion: "rv-2",
     counts: { provisional: 0, definitive: 36, corrected: 0 },
     totalResults: 36,
     lineups: 12,
@@ -304,6 +310,10 @@ describe("ResultadosPage", () => {
     mockResults({
       ...RESULTS,
       state: {
+        gpId: GP2.id,
+        gpName: GP2.name,
+        round: 2,
+        seasonName: "Temporada 2099",
         definitive: false,
         resultsVersion: null,
         counts: { provisional: 36, definitive: 0, corrected: 0 },
