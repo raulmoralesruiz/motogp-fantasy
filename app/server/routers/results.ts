@@ -20,16 +20,18 @@
  */
 import type { PrismaClient } from "@prisma/client";
 
-import { LeagueService } from "@/modules/leagues";
+import { LeagueService, type MyLeagueRanking } from "@/modules/leagues";
 import {
   PulseLiveResultsSource,
   PulseLiveSourceError,
   ResultsService,
   type EventRefResolution,
   type EventRefResolver,
+  type MyGpResultsView,
   type ResultsSource,
   type SourceEventCatalog,
 } from "@/modules/results";
+import { GpService } from "@/modules/seasons";
 import {
   deleteRiderMappingInputSchema,
   eventFlagInputSchema,
@@ -57,6 +59,31 @@ export interface ResultsRouterDeps {
    * explícito (el servicio lo gestiona).
    */
   source?: ResultsSource & SourceEventCatalog;
+}
+
+/**
+ * US-22 · Mi posición en una liga en el GP + delta vs el GP anterior.
+ */
+export interface MyLeagueGpRanking extends MyLeagueRanking {
+  /**
+   * Delta vs el GP anterior de la temporada: `posición anterior − posición
+   * actual` (positivo = subí, negativo = bajé). `null` si no hay posición
+   * comparable (sin ranking en alguno de los dos GPs, o entrada a mitad de
+   * temporada — US-30).
+   */
+  delta: number | null;
+}
+
+/**
+ * US-22 · Mis resultados de un GP: estado del GP (definitivo/versión),
+ * cancelación, recálculo con histórico (anterior → nuevo), mi posición en
+ * cada liga + delta vs el GP anterior, y el GP anterior de la temporada.
+ */
+export interface MyResultsView extends MyGpResultsView {
+  /** GP anterior de la temporada (`null` si es el primero). */
+  previousGp: { id: string; name: string; round: number } | null;
+  /** Mi posición en cada liga activa + delta vs el GP anterior. */
+  leagues: MyLeagueGpRanking[];
 }
 
 /**
@@ -98,6 +125,8 @@ export function createResultsRouter(deps: ResultsRouterDeps) {
   // definitivos. Orquestación BFF: el router compone módulos (la regla "módulos
   // no importan módulos" se respeta — `results` no importa `leagues`).
   const leagues = new LeagueService({ prisma: deps.prisma });
+  // US-22: GP anterior de la temporada (módulo `seasons`) para el delta.
+  const seasons = new GpService({ prisma: deps.prisma });
 
   return router({
     /**
@@ -277,6 +306,59 @@ export function createResultsRouter(deps: ResultsRouterDeps) {
     myScore: protectedProcedure
       .input(myScoreInputSchema)
       .query(({ ctx, input }) => service.myScore(input.gpId, ctx.user.id)),
+
+    /**
+     * Mis resultados de un GP (US-22): estado del GP (definitivo/versión),
+     * mi posición en cada liga + delta vs el GP anterior de la temporada,
+     * y el recálculo con histórico (anterior → nuevo). GP cancelado →
+     * `cancelled = true` (CA: "GP cancelado, 0 puntos").
+     *
+     * Composición BFF (patrón US-15/US-21): `results` (estado + histórico),
+     * `leagues` (posiciones) y `seasons` (GP anterior). El delta es
+     * `posición anterior − posición actual` (positivo = subí); `null` si no
+     * hay posición comparable. El desglose (US-20) lo expone `myScore`.
+     */
+    myResults: protectedProcedure
+      .input(myScoreInputSchema)
+      .query(async ({ ctx, input }): Promise<MyResultsView> => {
+        const userId = ctx.user.id;
+        const gpResults = await service.myGpResults(input.gpId);
+
+        // Mi posición en cada liga activa en este GP (US-21).
+        const rankings = await leagues.myRankings(userId, input.gpId);
+
+        // GP anterior de la temporada (la ronda menor más alta).
+        const seasonGps = await seasons.listGps(gpResults.gp.seasonId);
+        const previous =
+          [...seasonGps]
+            .filter((gp) => gp.round < gpResults.gp.round)
+            .sort((a, b) => b.round - a.round)[0] ?? null;
+
+        // Mi posición en el GP anterior (para el delta; US-30: si entré a
+        // mitad de temporada, no hay posición → delta `null`).
+        const previousRankings = previous
+          ? await leagues.myRankings(userId, previous.id)
+          : [];
+
+        return {
+          ...gpResults,
+          previousGp: previous
+            ? { id: previous.id, name: previous.name, round: previous.round }
+            : null,
+          leagues: rankings.map((league) => {
+            const prev = previousRankings.find((r) => r.leagueId === league.leagueId);
+            return {
+              ...league,
+              delta:
+                prev !== undefined &&
+                league.gpPosition !== null &&
+                prev.gpPosition !== null
+                  ? prev.gpPosition - league.gpPosition
+                  : null,
+            };
+          }),
+        };
+      }),
   });
 }
 

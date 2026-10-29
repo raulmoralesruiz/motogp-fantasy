@@ -42,6 +42,7 @@ import {
   type ResultStatus,
   type ResultsEventStatus,
   type WeekendEventStatus,
+  type WeekendEventType,
 } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 
@@ -327,13 +328,71 @@ export type MyScoreView = {
 };
 
 /**
+ * US-22 · Entrada del histórico de recálculo de un GP (anterior → nuevo).
+ * Los valores son el mismo JSON plano que la columna `raw`
+ * (`ResultValuesJson`); el motivo es el obligatorio de la corrección (US-16)
+ * y el actor, quien la hizo (`null` = sistema, p. ej. auto-import).
+ */
+export interface MyGpHistoryEntry {
+  riderId: string;
+  riderName: string;
+  /** Etiqueta del evento donde se corrigió (Q2/sprint/carrera). */
+  eventLabel: string;
+  /** Valores antes de la corrección. */
+  before: ResultValuesJson;
+  /** Valores después de la corrección. */
+  after: ResultValuesJson;
+  /** Motivo de la corrección. */
+  reason: string;
+  /** Actor que corrigió (seudónimo); `null` = sistema (auto-import). */
+  actor: string | null;
+  /** Fecha de la corrección. */
+  at: Date;
+}
+
+/**
+ * US-22 · Mis resultados de un GP (vista de solo lectura).
+ *
+ * Compone el estado del GP (US-18), el estado de cancelación (CA US-22:
+ * "GP cancelado, 0 puntos") y el recálculo con histórico anterior → nuevo
+ * (US-19, `results_history`). La posición en cada liga y el delta vs el GP
+ * anterior los compone el router BFF (módulos `leagues`/`seasons` — la regla
+ * "módulos no importan módulos" se respeta; patrón US-15/US-21).
+ */
+export interface MyGpResultsView {
+  gp: {
+    id: string;
+    name: string;
+    round: number;
+    seasonId: string;
+    seasonName: string;
+    date: Date;
+    status: GpDbStatus;
+    lockoutAt: Date | null;
+  };
+  /** `true` si el GP está cancelado (CA US-22: "GP cancelado, 0 puntos"). */
+  cancelled: boolean;
+  /** Estado de los resultados del GP (US-18). */
+  state: GpStateView;
+  /** Recálculo del GP (US-19): nº de correcciones + histórico anterior → nuevo. */
+  recalculation: {
+    /** Nº de correcciones registradas en el GP. */
+    corrections: number;
+    /** Fecha de la última corrección (`null` si no hay). */
+    lastAt: Date | null;
+    /** Histórico anterior → nuevo (de más antigua a más reciente). */
+    history: MyGpHistoryEntry[];
+  };
+}
+
+/**
  * JSON plano de los valores (columna `raw` y auditoría).
  *
  * `type` (no `interface`): Prisma exige un index signature en
  * `InputJsonObject`, que TypeScript infiere en alias de objetos pero no en
  * interfaces.
  */
-type ResultValuesJson = {
+export type ResultValuesJson = {
   position: number | null;
   started: boolean;
   finished: boolean;
@@ -376,6 +435,14 @@ function valuesToJson(values: ResultValues): ResultValuesJson {
 function entryToJson(entry: ResultEntry): ResultValuesJson & { riderId: string } {
   return { riderId: entry.riderId, ...valuesToJson(entry) };
 }
+
+/** Etiquetas en español de los eventos de fin de semana (US-22, histórico). */
+const EVENT_LABELS: Record<WeekendEventType, string> = {
+  q1: "Q1",
+  q2: "Q2",
+  sprint: "sprint",
+  race: "carrera",
+};
 
 /**
  * Nombre del piloto desde el payload crudo de la fuente (defensivo):
@@ -1585,6 +1652,81 @@ export class ResultsService {
         points: breakdown.team.points,
       },
       total: breakdown.total,
+    };
+  }
+
+  // ── US-22: mis resultados del GP (posición/delta los compone el BFF) ──────
+
+  /**
+   * Mis resultados de un GP (US-22): estado del GP, estado de cancelación
+   * y recálculo con histórico anterior → nuevo. Solo lectura.
+   *
+   * La posición en cada liga y el delta vs el GP anterior de la temporada
+   * los compone el router BFF (módulos `leagues`/`seasons` — la regla
+   * "módulos no importan módulos" se respeta; patrón US-15/US-21).
+   *
+   * El histórico es el del GP (todas las correcciones de `results_history`),
+   * coherente con el aviso del dashboard (US-15, `recalculationNotices`).
+   *
+   * Errores:
+   * - GP no existe → NOT_FOUND.
+   */
+  async myGpResults(gpId: string): Promise<MyGpResultsView> {
+    const gp = await this.prisma.gp.findUnique({
+      where: { id: gpId },
+      include: { season: { select: { id: true, name: true } } },
+    });
+    if (!gp) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "El GP no existe." });
+    }
+
+    const [state, rows] = await Promise.all([
+      this.gpState(gpId),
+      this.prisma.resultsHistory.findMany({
+        where: { result: { gpId } },
+        include: {
+          result: {
+            select: {
+              rider: { select: { id: true, name: true } },
+              event: { select: { type: true } },
+            },
+          },
+          user: { select: { username: true } },
+        },
+        orderBy: { createdAt: "asc" },
+      }),
+    ]);
+
+    return {
+      gp: {
+        id: gp.id,
+        name: gp.name,
+        round: gp.round,
+        seasonId: gp.season.id,
+        seasonName: gp.season.name,
+        date: gp.date,
+        status: gp.status,
+        lockoutAt: gp.lockoutAt,
+      },
+      cancelled: gp.status === "cancelled",
+      state,
+      recalculation: {
+        corrections: rows.length,
+        lastAt: rows.reduce<Date | null>(
+          (max, row) => (max === null || row.createdAt > max ? row.createdAt : max),
+          null,
+        ),
+        history: rows.map((row) => ({
+          riderId: row.result.rider.id,
+          riderName: row.result.rider.name,
+          eventLabel: EVENT_LABELS[row.result.event.type],
+          before: row.beforeData as unknown as ResultValuesJson,
+          after: row.afterData as unknown as ResultValuesJson,
+          reason: row.reason,
+          actor: row.user?.username ?? null,
+          at: row.createdAt,
+        })),
+      },
     };
   }
 

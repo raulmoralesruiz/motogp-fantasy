@@ -2,73 +2,8 @@
 
 import { useState } from "react";
 
-import { Alert } from "@/shared/components";
+import { Alert, ScoreBreakdown, fmt } from "@/shared/components";
 import { trpc } from "@/trpc/client";
-
-/** Etiqueta en español de un código de bono/penalización (scoring-v1). */
-const CODE_LABELS: Record<string, string> = {
-  pole: "Pole",
-  "fastest-lap": "Vuelta rápida",
-  winner: "Ganador",
-  "positions-gained": "Posiciones ganadas",
-  extraordinary: "Extraordinario",
-  dnf: "DNF",
-  dq: "DQ",
-  "time-penalty": "Penalización de tiempo",
-};
-
-function codeLabel(code: string): string {
-  return CODE_LABELS[code] ?? code;
-}
-
-/** Formatea un número de puntos (sin ceros sobrantes, coma decimal es). */
-function fmt(value: number): string {
-  return new Intl.NumberFormat("es-ES", { maximumFractionDigits: 2 }).format(value);
-}
-
-/** Lista legible de bonos/penalizaciones (código + puntos con signo). */
-function codesLabel(codes: { code: string; points: number }[]): string {
-  if (codes.length === 0) return "—";
-  return codes
-    .map((c) => `${codeLabel(c.code)} (${c.points > 0 ? "+" : ""}${fmt(c.points)})`)
-    .join(", ");
-}
-
-/** Desglose de un piloto: peso, puntos ponderados y fin de semana. */
-function RiderRow({
-  rider,
-}: {
-  rider: {
-    riderId: string;
-    riderName: string;
-    weight: number;
-    points: number;
-    breakdown: {
-      q2: number;
-      sprint: number;
-      mainRace: number;
-      bonuses: { code: string; points: number }[];
-      penalties: { code: string; points: number }[];
-      total: number;
-    };
-  };
-}) {
-  return (
-    <li>
-      <strong>{rider.riderName}</strong>{" "}
-      <span className="muted">(peso ×{fmt(rider.weight)})</span> →{" "}
-      <strong>{fmt(rider.points)} pts</strong>
-      <ul>
-        <li>Q2: {fmt(rider.breakdown.q2)}</li>
-        <li>Sprint: {fmt(rider.breakdown.sprint)}</li>
-        <li>Carrera: {fmt(rider.breakdown.mainRace)}</li>
-        <li>Bonos: {codesLabel(rider.breakdown.bonuses)}</li>
-        <li>Penalizaciones: {codesLabel(rider.breakdown.penalties)}</li>
-        <li>Total piloto: {fmt(rider.breakdown.total)}</li>
-      </ul>
-    </li>
-  );
-}
 
 /**
  * Mi puntuación con desglose (US-20): el usuario selecciona temporada y GP y
@@ -143,31 +78,7 @@ export default function PuntuacionPage() {
             </span>
           </p>
 
-          <h3>Oro</h3>
-          <ul>
-            {score.data.gold.map((rider) => (
-              <RiderRow key={rider.riderId} rider={rider} />
-            ))}
-          </ul>
-
-          <h3>Plata</h3>
-          <ul>
-            {score.data.silver.map((rider) => (
-              <RiderRow key={rider.riderId} rider={rider} />
-            ))}
-          </ul>
-
-          <h3>Constructor y equipo</h3>
-          <ul>
-            <li>
-              Constructor: <strong>{score.data.constructor.name}</strong> →{" "}
-              <strong>{fmt(score.data.constructor.points)} pts</strong>
-            </li>
-            <li>
-              Equipo: <strong>{score.data.team.name}</strong> →{" "}
-              <strong>{fmt(score.data.team.points)} pts</strong>
-            </li>
-          </ul>
+          <ScoreBreakdown score={score.data} />
         </div>
       )}
     </div>
