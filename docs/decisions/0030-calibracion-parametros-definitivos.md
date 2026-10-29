@@ -1,6 +1,6 @@
 # ADR-0030: Calibración de parámetros definitivos — D-01 (B/t/cmax) y D-02 (tablas + Pmax)
 
-- **Estado:** Aceptado (2026-10-29) — calibración ejecutada y documentada (búsqueda de parámetros + recalibración de Pmax + tests + docs; todas las puertas en verde: lint 0 issues, typecheck, pureza, unit 681, UI 449, build, integración 420/420, gate de cobertura fusionada 99.9% ≥ 99.9%)
+- **Estado:** Aceptado (2026-10-29) — calibración ejecutada y documentada (búsqueda de parámetros + recalibración de Pmax + tests + docs; todas las puertas en verde: lint 0 issues, typecheck, pureza, unit 681, UI 449, build, integración 420/420, gate de cobertura fusionada 99.9% ≥ 99.9%); **verificado en producción (2026-10-30)**: `PMAX_RIDER=30` desplegado y aplicando la fórmula (ver §Verificación en producción)
 - **Fecha:** 2026-10-29
 - **Relacionado:** D-01, D-02, D-12, D-13 (backlog §D), T-15 (re-simulación económica), ADR-0002 (motor de precios — `economy/pricing.ts`), ADR-0015 (precios por GP — fuente de `puntos(r)` = solo carrera principal), ADR-0013 (afiliaciones por GP), `economy.md` §4.1/§4.3/§6, `scoring.md` §2/§8, invariantes 1–8 (AGENTS.md §4).
 
@@ -85,3 +85,35 @@ No se cambian los valores de las tablas (no hay evidencia de desequilibrio; la r
 - **Integración (Docker/Testcontainers):** 420/420 tests en verde (incl. `prices-formula.test.ts` recalibrado: r1 20 / recálculo 18.83, ctor 14.69/14.25, team 11.75/11.40).
 - **Cobertura fusionada (unit + integración + UI):** 1550 tests, 99.9% de líneas (cumple el gate ≥ 99.9%; módulos puros ≥ 90%).
 - **Golden files:** revisados, sin cambios (no referencean `Pmax`).
+
+## Verificación en producción (2026-10-30)
+
+Se verifica **en vivo** que el motor de precios desplegado usa `PMAX_RIDER=30` (y no el valor obsoleto 60), aplicando la fórmula sobre un GP definitivo como `global_admin`.
+
+**Escenario (creado en producción y conservado):** un piloto que **gana la carrera principal del GP1** (round 1) → 25 pts + 5 bono ganador = **30 puntos**; `P0=20`; primer GP de la temporada (sin histórico de `perf`). Afiliación del piloto en el **GP objetivo** (round 2) para que la fórmula lo incluya en el grid. Tras importar el resultado y marcar el GP1 **definitivo** (`rv-1`), se aplica `market.prices.applyFormula`.
+
+**Prueba concluyente** — el precio del GP2 del ganador discrimina el `Pmax` desplegado:
+
+| `PMAX_RIDER` | `perf` (30 pts) | `W` | objetivo | **precio GP2** |
+|---|---|---|---|---|
+| **30** (calibrado) | 100 | 50 | 20 | **20** |
+| 60 (obsoleto) | 50 | 25 | 17.5 | **18.75** |
+
+**Resultado observado:** `applyFormula` → `created: 1` (el piloto; `skippedNoOpening: 2` = constructor y equipo, sin P0, correcto). Histórico de precios del piloto:
+
+| Fila | GP | Precio | Motivo |
+|---|---|---|---|
+| P0 | — | 20 | manual |
+| Precio | GP2 (round 2) | **20** | **formula** |
+
+El precio real es **20** (no 18.75) → el motor desplegado calcula con **`PMAX_RIDER=30`**. La calibración D-02 queda **confirmada en producción**. El movimiento quedó auditado con motivo `formula` (visible en el histórico de precios y en `audit_log`).
+
+**Datos de la verificación (en producción, conservados a petición del operador):**
+
+| Entidad | Nombre |
+|---|---|
+| Piloto | `Piloto Verificacion Pmax` (dorsal 99) |
+| Equipo | `Equipo Verificacion Pmax` |
+| Constructor | `Constructor Verificacion Pmax` |
+| GP fuente (definitivo) | round 1 (`gp1`) — carrera: victoria del piloto (30 pts) |
+| GP objetivo (precio fijado) | round 2 (`GRAND PRIX OF BRAZIL`) — precio 20 por fórmula |
