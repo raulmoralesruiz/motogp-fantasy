@@ -38,16 +38,17 @@ const FIXTURES_DIR = join(ROOT, "data", "fixtures");
 export const FULL_TIME_MIN_GPS = 10;
 
 /**
- * Pmax de la simulación (rescaleado).
+ * Pmax de la simulación.
  *
  * La simulación usa puntuación reducida: solo carrera principal (25 por
  * victoria + bono de ganador 5 = 30 puntos máx.; no se modelan Q2, sprint,
  * vuelta rápida, pole ni posiciones ganadas — simplificación documentada en
- * el informe, §3.3). El Pmax del motor de precios (60, máximo teórico de la
- * tabla provisional completa, economy.md §4.3) se rescalea a 30 para
- * mantener el punto neutro de la fórmula: W=50 = mitad del máximo
- * alcanzable en la puntuación simulada. `PMAX_GROUP` (30) ya es consistente:
- * un grupo puntúa la media de sus 2 mejores pilotos (máx 30 cada uno).
+ * el informe, §3.3). Tras la calibración D-02 (ADR-0030), el `Pmax` del
+ * motor de precios de producto es **30** (el motor puntúa solo la carrera
+ * principal, ADR-0015), por lo que la simulación usa el **mismo** valor
+ * (sin rescaleo): `PMAX_RIDER_SIM = PMAX_RIDER = 30`. `PMAX_GROUP` (30) es
+ * consistente: un grupo puntúa la media de sus 2 mejores pilotos (máx 30
+ * cada uno).
  */
 export const PMAX_RIDER_SIM = 30;
 

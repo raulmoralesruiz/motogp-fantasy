@@ -28,6 +28,7 @@
     "seed:fiction": "tsx scripts/seed/fiction-local.ts",
     "fetch:data": "tsx scripts/simulate/fetch.ts",
     "simulate": "tsx scripts/simulate/simulate.ts",
+    "calibrate": "tsx scripts/simulate/calibrate.ts",
     "simulate:fiction": "tsx scripts/simulate/fiction.ts",
     "simulate:viz": "tsx scripts/simulate/viz.ts"
   },

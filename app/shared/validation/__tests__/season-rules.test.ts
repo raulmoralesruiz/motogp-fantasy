@@ -27,7 +27,7 @@ describe("seasonRulesSchema — payloads válidos", () => {
     const result = seasonRulesSchema.safeParse({
       rulesVersion: "2026-v1",
       economy: { option: "A", B: 90, t: 0, cmax: 0 },
-      pricing: { pmaxRider: 60, pmaxGroup: 30 },
+      pricing: { pmaxRider: 30, pmaxGroup: 30 },
       scoring: {
         q2: { "1": 12 },
         sprint: { "1": 12 },

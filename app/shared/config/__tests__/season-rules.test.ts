@@ -28,8 +28,9 @@ describe("PROVISIONAL_SEASON_RULES", () => {
     });
   });
 
-  it("precios: Pmax 60 piloto / 30 grupo (economy.md §4.3)", () => {
-    expect(PROVISIONAL_SEASON_RULES.pricing).toEqual({ pmaxRider: 60, pmaxGroup: 30 });
+  it("precios: Pmax 30 piloto / 30 grupo (calibración D-02, economy.md §4.3)", () => {
+    // El motor de precios puntúa solo la carrera principal (ADR-0015), máx 30.
+    expect(PROVISIONAL_SEASON_RULES.pricing).toEqual({ pmaxRider: 30, pmaxGroup: 30 });
   });
 
   it("puntuación: tabla carrera principal según scoring.md §2.3", () => {

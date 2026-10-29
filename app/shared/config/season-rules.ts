@@ -21,7 +21,10 @@ export const PROVISIONAL_SEASON_RULES: SeasonRules = {
     cmax: 8,
   },
   pricing: {
-    pmaxRider: 60,
+    // Calibración D-02 (2026-10-29): el motor de precios puntúa solo la
+    // carrera principal (ADR-0015), máx 30 (25+5). PMAX_RIDER=30 alinea el
+    // punto neutro W=50 con un podio (15 pts); victoria → perf 100.
+    pmaxRider: 30,
     pmaxGroup: 30,
   },
   scoring: {

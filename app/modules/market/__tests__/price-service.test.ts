@@ -485,8 +485,9 @@ describe("PriceService.applyFormulaForGp (US-08)", () => {
 
     const result = await service.applyFormulaForGp({ gpId: "g1" });
 
-    // r1: P0=20, perf(30,60)=50 → 18.75 · r2: P0=15, perf(20,60)=33,33 → 13.75
-    // c1/t1: media top-2 (30,20)=25 → perf(25,30)=83,33 → 9.79 / 7.83 · r3: sin P0
+    // Calibración D-02 (PMAX_RIDER=30): r1: P0=20, perf(30,30)=100 → 20
+    // · r2: P0=15, perf(20,30)=66,67 → 14.38 · c1/t1: media top-2 (30,20)=25 →
+    // perf(25,30)=83,33 → 9.79 / 7.83 · r3: sin P0
     expect(result).toEqual({
       targetGpId: "g2",
       targetGpRound: 2,
@@ -503,7 +504,7 @@ describe("PriceService.applyFormulaForGp (US-08)", () => {
       assetType: "rider",
       assetId: "r1",
       gpId: "g2",
-      price: 18.75,
+      price: 20,
       reason: "formula",
       rulesVersion: "pricing-v1",
       createdBy: null,
@@ -512,7 +513,7 @@ describe("PriceService.applyFormulaForGp (US-08)", () => {
       assetType: "rider",
       assetId: "r2",
       gpId: "g2",
-      price: 13.75,
+      price: 14.38,
       reason: "formula",
       rulesVersion: "pricing-v1",
       createdBy: null,
@@ -574,10 +575,10 @@ describe("PriceService.applyFormulaForGp (US-08)", () => {
           );
         }
         if (where.gpId === "g2") {
-          // Mismos valores que produce la fórmula → todo no-op.
+          // Mismos valores que produce la fórmula (calibración D-02) → todo no-op.
           return Promise.resolve([
-            { id: "x1", assetType: "rider", assetId: "r1", gpId: "g2", price: 18.75 },
-            { id: "x2", assetType: "rider", assetId: "r2", gpId: "g2", price: 13.75 },
+            { id: "x1", assetType: "rider", assetId: "r1", gpId: "g2", price: 20 },
+            { id: "x2", assetType: "rider", assetId: "r2", gpId: "g2", price: 14.38 },
             { id: "x3", assetType: "constructor", assetId: "c1", gpId: "g2", price: 9.79 },
             { id: "x4", assetType: "team", assetId: "t1", gpId: "g2", price: 7.83 },
           ]);
@@ -645,7 +646,7 @@ describe("PriceService.applyFormulaForGp (US-08)", () => {
     expect(fake.price.update).toHaveBeenCalledWith({
       where: { id: "x1" },
       data: {
-        price: 18.75,
+        price: 20,
         reason: "formula",
         rulesVersion: "pricing-v1",
         createdBy: null,
@@ -662,7 +663,7 @@ describe("PriceService.applyFormulaForGp (US-08)", () => {
           assetType: "rider",
           assetId: "r1",
           gpId: "g2",
-          price: 18.75,
+          price: 20,
         },
         ip: undefined,
       },

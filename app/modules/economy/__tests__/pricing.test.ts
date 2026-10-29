@@ -22,6 +22,15 @@ describe("perf", () => {
     expect(perf(120, 60)).toBe(100);
     expect(perf(-5, 60)).toBe(0); // DNF: puntos negativos → perf 0
   });
+
+  it("calibración D-02: Pmax=30 (máx carrera principal 25+5)", () => {
+    // El motor de precios puntúa solo la carrera principal (ADR-0015), máx 30.
+    // Con PMAX_RIDER=30: victoria → perf 100, podio → perf 50 (neutro).
+    expect(perf(30, 30)).toBe(100); // 1º (25+5 bono) → perf 100
+    expect(perf(15, 30)).toBeCloseTo(50); // 15 pts (entre 3º=16 y 4º=13) → perf 50 (neutro)
+    expect(perf(11, 30)).toBeCloseTo(36.67, 1); // 5º (11 pts) → perf ~36.7
+    expect(perf(0, 30)).toBe(0); // DNF/ausente → perf 0
+  });
 });
 
 describe("computeNextPrice — ejemplos verificables (AGENTS.md §7)", () => {

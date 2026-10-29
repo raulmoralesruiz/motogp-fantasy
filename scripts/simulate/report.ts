@@ -203,7 +203,7 @@ export function buildReport(input: ReportInput): string {
     `> **Datos:** temporada 2026 real (PulseLive, fetch ${fetchedAt.slice(0, 10)}): ${nGps} GPs terminados, ${market.riders.length} pilotos full-time en el mercado, ${market.constructors.length} constructores, ${market.teams.length} equipos.`,
   );
   sections.push(
-    `> **Versiones:** scoring-v1 · pricing-v1 · parámetros PROVISIONAL (B=${params.B}, t=${params.t}, cmax=${params.cmax}, Pmax=60/30; en la simulación, rescaleado a 30/30 — §3.3).`,
+    `> **Versiones:** scoring-v1 · pricing-v1 · parámetros definitivos (B=${params.B}, t=${params.t}, cmax=${params.cmax}, Pmax=30/30 — calibración D-01/D-02, ADR-0030; la simulación usa el mismo Pmax — §3.3).`,
   );
   sections.push(
     `> **Población:** ${players.length} jugadores arquetípicos deterministas.`,
@@ -276,7 +276,7 @@ export function buildReport(input: ReportInput): string {
   );
   sections.push("");
   sections.push(
-    "**Pmax rescaleado para la simulación:** la puntuación simulada es reducida (máx 30 puntos por piloto y GP: 25 + 5), mientras que el Pmax de producto es 60 (máximo teórico de la tabla completa con Q2/sprint/bonos, economy.md §4.3). Para mantener el punto neutro de la fórmula (W=50 = mitad del máximo alcanzable), la simulación usa **Pmax=30** para pilotos y **Pmax=30** para grupos (media de 2 pilotos, máx 30 cada uno). Sin este rescaleo, ningún piloto alcanzaría W>50 y el mercado sería deflacionista por construcción.",
+    "**Pmax de la simulación:** la puntuación simulada es reducida (máx 30 puntos por piloto y GP: 25 + 5, solo carrera principal). Tras la calibración D-02 (ADR-0030), el Pmax de producto es **30** (el motor de precios puntúa solo la carrera principal, ADR-0015), por lo que la simulación usa el **mismo** valor (sin rescaleo): **Pmax=30** para pilotos y **Pmax=30** para grupos (media de 2 pilotos, máx 30 cada uno). El punto neutro de la fórmula (W=50) corresponde a ~15 pts (entre 3º y 4º) y una victoria → perf 100.",
   );
   sections.push("");
   sections.push("### 3.4 Población (40 arquetipos)");
@@ -440,7 +440,7 @@ export function buildReport(input: ReportInput): string {
     "- **Lineup reconstruido cada GP:** no se modelan transfers, lockout ni coste de cambio. Es favorable a la igualdad (el jugador se adapta sin fricción); en producción, el lockout añade fricción que podría aumentar ligeramente la divergencia.",
   );
   sections.push(
-    "- **Puntuación reducida:** solo carrera principal (posición + ganador + DNF). Quedan fuera Q2, sprint, vuelta rápida, pole y posiciones ganadas; el motor de precios usa esos mismos puntos y con Pmax rescaleado a 30 (§3.3).",
+    "- **Puntuación reducida:** solo carrera principal (posición + ganador + DNF). Quedan fuera Q2, sprint, vuelta rápida, pole y posiciones ganadas; el motor de precios usa esos mismos puntos y el mismo Pmax=30 que la simulación (calibración D-02, §3.3).",
   );
   sections.push(
     "- **Arquetipos deterministas:** la población modeliza estilos, no decisiones racionales óptimas. No hay aleatoriedad (re-ejecutar da lo mismo).",
@@ -449,7 +449,7 @@ export function buildReport(input: ReportInput): string {
     "- **P0 derivado de 2025:** el precio de apertura aproxima el valor previo; no es un mercado real de subastas.",
   );
   sections.push(
-    "- **Parámetros PROVISIONAL:** B=100, t=0.25, cmax=8, Pmax=60/30, tablas de puntuación. La calibración fina es D-01/D-02; esta simulación valida la **mecánica**, no los valores.",
+    "- **Parámetros definitivos (calibración D-01/D-02, ADR-0030):** B=100, t=0.25, cmax=8, Pmax=30/30, tablas de puntuación `scoring-v1`. Esta simulación valida la **mecánica** y los valores pasan las métricas T-15.",
   );
   sections.push("");
   sections.push("---");

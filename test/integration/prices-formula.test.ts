@@ -20,11 +20,12 @@
  *   null, auditado `price.manual_set` (before/after).
  * - RBAC: `setManual`/`applyFormula` solo `global_admin`.
  *
- * Valores golden (economy.md §4.3; Pmax piloto 60 / grupo 30):
- * - r1 P0=20, gana (25+5=30 pts) → perf 50, W 25 → precio 18.75.
+ * Valores golden (economy.md §4.3; Pmax piloto 30 / grupo 30 — calibración
+ * D-02, ADR-0030):
+ * - r1 P0=20, gana (25+5=30 pts) → perf 100, W 50 → precio 20.
  * - ctor P0=15, grupo (30+20)/2=25 → perf 83.33 → 14.69.
  * - team P0=12, mismo grupo → 11.75.
- * - Recálculo con r1 en P3 (16 pts): 18.17 / 14.25 / 11.40.
+ * - Recálculo con r1 en P3 (16 pts): 18.83 / 14.25 / 11.40.
  */
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -265,7 +266,7 @@ describe("US-08 · Fórmula de precios y ajuste manual (PostgreSQL real)", () =>
       skippedLocked: false,
     });
 
-    // Fila de r1: 18.75, motivo formula, rulesVersion pricing-v1, createdBy null.
+    // Fila de r1: 20, motivo formula, rulesVersion pricing-v1, createdBy null.
     const rowR1 = await priceRow("rider", r1Id, gp2Id);
     expect(rowR1).not.toBeNull();
     expect(rowR1).toMatchObject({
@@ -274,7 +275,7 @@ describe("US-08 · Fórmula de precios y ajuste manual (PostgreSQL real)", () =>
       rulesVersion: "pricing-v1",
       createdBy: null,
     });
-    expect(Number(rowR1!.price)).toBe(18.75);
+    expect(Number(rowR1!.price)).toBe(20);
     // ctor: 14.69 y team: 11.75 (media top-2 del grupo: (30+20)/2=25).
     expect(Number((await priceRow("constructor", world.ctor.id, gp2Id))!.price)).toBe(14.69);
     expect(Number((await priceRow("team", world.team.id, gp2Id))!.price)).toBe(11.75);
@@ -302,8 +303,8 @@ describe("US-08 · Fórmula de precios y ajuste manual (PostgreSQL real)", () =>
     const result = await market.prices.applyFormula({ gpId: gp1Id });
     expect(result).toMatchObject({ created: 0, updated: 3, unchanged: 0 });
 
-    // Valores corregidos: r1 18.17, ctor 14.25, team 11.40.
-    expect(Number((await priceRow("rider", r1Id, gp2Id))!.price)).toBe(18.17);
+    // Valores corregidos: r1 18.83, ctor 14.25, team 11.40.
+    expect(Number((await priceRow("rider", r1Id, gp2Id))!.price)).toBe(18.83);
     expect(Number((await priceRow("constructor", world.ctor.id, gp2Id))!.price)).toBe(14.25);
     expect(Number((await priceRow("team", world.team.id, gp2Id))!.price)).toBe(11.4);
 
@@ -314,8 +315,8 @@ describe("US-08 · Fórmula de precios y ajuste manual (PostgreSQL real)", () =>
     expect(audits[0]).toMatchObject({
       actorId: null,
       entity: "price",
-      beforeData: { price: 18.75 },
-      afterData: expect.objectContaining({ price: 18.17, gpId: gp2Id }),
+      beforeData: { price: 20 },
+      afterData: expect.objectContaining({ price: 18.83, gpId: gp2Id }),
     });
   });
 
@@ -438,7 +439,7 @@ describe("US-08 · Fórmula de precios y ajuste manual (PostgreSQL real)", () =>
     // La auditoría de manual_set referencia la misma fila (entityId).
     const audits = await auditsFor("price.manual_set", row!.id);
     expect(audits).toHaveLength(1);
-    expect(audits[0]).toMatchObject({ beforeData: { price: 18.17 } });
+    expect(audits[0]).toMatchObject({ beforeData: { price: 18.83 } });
   });
 
   // ── RBAC y casos límite ────────────────────────────────────────────────────
