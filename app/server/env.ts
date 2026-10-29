@@ -51,6 +51,11 @@ const serverEnvSchema = z.object({
   // (minúsculas) recibe `global_admin`. Vacío → nadie lo recibe. Debe
   // fijarse antes del primer registro con ese email (BD nueva).
   BOOTSTRAP_ADMIN_EMAIL: z.string().default(""),
+  // US-31 · Alta automática en una liga pública de bienvenida. Es un UUID
+  // operativo del servidor (nunca un dato del cliente). Vacío = desactivado.
+  WELCOME_LEAGUE_ID: z
+    .union([z.string().uuid("WELCOME_LEAGUE_ID debe ser un UUID"), z.literal("")])
+    .default(""),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

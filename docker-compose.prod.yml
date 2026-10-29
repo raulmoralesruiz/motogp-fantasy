@@ -22,6 +22,8 @@ services:
       # Bootstrap de global_admin (T-08, ADR-0010): el primer registro con
       # este email recibe el rol. Vacía → nadie lo recibe.
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      # US-31: alta automática en la liga pública de bienvenida (vacío = off).
+      WELCOME_LEAGUE_ID: ${WELCOME_LEAGUE_ID:-}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
     ports:
       # Solo la web expone puerto a la LAN (Postgres/Redis quedan en red interna).

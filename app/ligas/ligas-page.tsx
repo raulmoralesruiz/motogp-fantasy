@@ -28,6 +28,7 @@ interface LeagueForm {
   minMembers: string;
   maxMembers: string;
   entryMode: "code" | "invite" | "mixed";
+  adjustedRankingEnabled: boolean;
   startDate: string;
   endDate: string;
 }
@@ -40,6 +41,7 @@ const EMPTY_FORM: LeagueForm = {
   minMembers: "2",
   maxMembers: "50",
   entryMode: "code",
+  adjustedRankingEnabled: false,
   startDate: "",
   endDate: "",
 };
@@ -93,6 +95,7 @@ export default function LigasPage() {
       minMembers: Number(form.minMembers),
       maxMembers: Number(form.maxMembers),
       entryMode: form.entryMode,
+      adjustedRankingEnabled: form.adjustedRankingEnabled,
       startDate: form.startDate ? new Date(form.startDate) : undefined,
       endDate: form.endDate ? new Date(form.endDate) : undefined,
     });
@@ -257,6 +260,21 @@ export default function LigasPage() {
             <option value="invite">Solo invitación</option>
             <option value="mixed">Código o invitación</option>
           </select>
+        </div>
+        <div className="field">
+          <label>
+            <input
+              type="checkbox"
+              name="adjustedRankingEnabled"
+              checked={form.adjustedRankingEnabled}
+              onChange={(e) => set("adjustedRankingEnabled", e.target.checked)}
+            />{" "}
+            Ranking ajustado
+          </label>
+          <p className="muted">
+            El ranking general contará solo los GPs desde la entrada del último
+            miembro. Se aplica en la siguiente publicación del ranking.
+          </p>
         </div>
         <div className="field">
           <label htmlFor="startDate">Inicio (opcional)</label>

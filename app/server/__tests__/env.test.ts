@@ -21,6 +21,7 @@ const ENV_KEYS = [
   "RESET_RATE_LIMIT_WINDOW_SEC",
   "NEXT_PUBLIC_APP_URL",
   "BOOTSTRAP_ADMIN_EMAIL",
+  "WELCOME_LEAGUE_ID",
 ] as const;
 
 function setBaseEnv(): void {
@@ -57,6 +58,7 @@ describe("getServerEnv", () => {
     expect(env.RESET_RATE_LIMIT_WINDOW_SEC).toBe(300);
     expect(env.NEXT_PUBLIC_APP_URL).toBe("http://localhost:3000");
     expect(env.BOOTSTRAP_ADMIN_EMAIL).toBe("");
+    expect(env.WELCOME_LEAGUE_ID).toBe("");
     expect(env.SESSION_COOKIE_SECURE).toBeUndefined();
   });
 
@@ -65,11 +67,20 @@ describe("getServerEnv", () => {
     process.env.SESSION_TTL_DAYS = "30";
     process.env.NEXT_PUBLIC_APP_URL = "https://app.ejemplo.com";
     process.env.BOOTSTRAP_ADMIN_EMAIL = "admin@ejemplo.com";
+    process.env.WELCOME_LEAGUE_ID = "550e8400-e29b-41d4-a716-446655440000";
     const { getServerEnv } = await loadEnvModule();
     const env = getServerEnv();
     expect(env.SESSION_TTL_DAYS).toBe(30);
     expect(env.NEXT_PUBLIC_APP_URL).toBe("https://app.ejemplo.com");
     expect(env.BOOTSTRAP_ADMIN_EMAIL).toBe("admin@ejemplo.com");
+    expect(env.WELCOME_LEAGUE_ID).toBe("550e8400-e29b-41d4-a716-446655440000");
+  });
+
+  it("lanza si WELCOME_LEAGUE_ID no es un UUID ni está vacío", async () => {
+    setBaseEnv();
+    process.env.WELCOME_LEAGUE_ID = "no-es-un-uuid";
+    const { getServerEnv } = await loadEnvModule();
+    expect(() => getServerEnv()).toThrowError(/WELCOME_LEAGUE_ID/);
   });
 
   it("lanza con detalle si falta DATABASE_URL", async () => {

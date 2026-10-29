@@ -51,8 +51,8 @@
 
 ### Ligas
 
-- `leagues` — liga (nombre, tipo, visibilidad, min/max miembros, modo entrada, duración, estado).
-- `league_members` — membresía (league, user, rol: admin/member, estado: active/left/kicked, joined_at, left_at).
+- `leagues` — liga (nombre, tipo, visibilidad, min/max miembros, modo entrada, duración, estado, `adjusted_ranking_enabled` (default `false` — ranking ajustado por liga, US-30/ADR-0028, D-10)).
+- `league_members` — membresía (league, user, rol: admin/member, estado: active/left/kicked, joined_at, left_at). **`joined_at` fija la elegibilidad temporal (US-30/ADR-0028):** un miembro solo cuenta en los GPs cuyo inicio efectivo (`lockoutAt ?? date`) es posterior a su entrada; la **re-entrada lo reseta** (no recupera GPs previos — ADR-0027/ADR-0028).
 - `league_invites` — invitaciones/códigos (league, código, creado_por, estado: active/revoked, expires, usos).
 
 ### Resultados

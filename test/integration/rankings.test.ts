@@ -483,4 +483,197 @@ describe("US-21 · Rankings por GP y general (PostgreSQL real)", () => {
     expect(Number(overallL3!.points)).toBe(80);
     expect(Number(overallL4!.points)).toBe(80);
   });
+
+  // ── US-30 · Entrada a mitad de temporada (leagues.md §7) ────────────────
+
+  it("US-30: un recién llegado no hereda GPs previos y el ranking ajustado es por liga", async () => {
+    const veteran = (
+      await prisma.user.create({
+        data: { email: `v30-${suffix}@test.local`, passwordHash: "h", username: `v30_${suffix}` },
+      })
+    ).id;
+    const newcomer = (
+      await prisma.user.create({
+        data: { email: `n30-${suffix}@test.local`, passwordHash: "h", username: `n30_${suffix}` },
+      })
+    ).id;
+    const normalLeague = (
+      await prisma.league.create({ data: { name: `Liga US30 ${suffix}`, type: "private" } })
+    ).id;
+    const adjustedLeague = (
+      await prisma.league.create({
+        data: { name: `Liga US30 ajustada ${suffix}`, type: "private", adjustedRankingEnabled: true },
+      })
+    ).id;
+
+    await prisma.leagueMember.createMany({
+      data: [
+        { leagueId: normalLeague, userId: veteran, joinedAt: new Date("2098-01-01T00:00:00Z") },
+        { leagueId: normalLeague, userId: newcomer, joinedAt: new Date("2098-05-15T00:00:00Z") },
+        { leagueId: adjustedLeague, userId: veteran, joinedAt: new Date("2098-01-01T00:00:00Z") },
+        { leagueId: adjustedLeague, userId: newcomer, joinedAt: new Date("2098-05-15T00:00:00Z") },
+      ],
+    });
+
+    const scores: [string, string, number][] = [
+      [veteran, gp1, 100],
+      [veteran, gp2, 50],
+      [newcomer, gp1, 200],
+      [newcomer, gp2, 100],
+    ];
+    for (const [userId, gpId, points] of scores) {
+      const lineup = await prisma.lineup.create({ data: { userId, gpId } });
+      await prisma.score.create({
+        data: {
+          lineupId: lineup.id,
+          userId,
+          gpId,
+          pointsTotal: points,
+          breakdown: {},
+          rulesVersion: "scoring-v1",
+          resultsVersion: "rv-1",
+        },
+      });
+    }
+
+    await service.recalculateRankings(gp2, "rv-us30");
+
+    // GP1: el recién llegado no aparece aunque tenga un score previo.
+    const gp1Normal = await latestRankings({ gpId: gp1 }, normalLeague);
+    expect(gp1Normal.map((r) => r.userId)).toEqual([veteran]);
+    expect(Number(gp1Normal[0]!.points)).toBe(100);
+    const gp1Adjusted = await latestRankings({ gpId: gp1 }, adjustedLeague);
+    expect(gp1Adjusted.map((r) => r.userId)).toEqual([veteran]);
+
+    // GP2: ambos son elegibles.
+    const gp2Normal = await latestRankings({ gpId: gp2 }, normalLeague);
+    expect(gp2Normal.map((r) => r.userId)).toEqual([newcomer, veteran]);
+    expect(gp2Normal.map((r) => Number(r.points))).toEqual([100, 50]);
+
+    // General normal: el recién llegado solo cuenta desde su entrada.
+    const overallNormal = await latestRankings({ gpId: null }, normalLeague);
+    expect(overallNormal.map((r) => r.userId)).toEqual([veteran, newcomer]);
+    expect(Number(overallNormal.find((r) => r.userId === veteran)!.points)).toBe(150);
+    expect(Number(overallNormal.find((r) => r.userId === newcomer)!.points)).toBe(100);
+
+    // General ajustado: ambos cuentan solo desde la última entrada.
+    const overallAdjusted = await latestRankings({ gpId: null }, adjustedLeague);
+    expect(overallAdjusted.map((r) => r.userId)).toEqual([newcomer, veteran]);
+    expect(Number(overallAdjusted.find((r) => r.userId === newcomer)!.points)).toBe(100);
+    expect(Number(overallAdjusted.find((r) => r.userId === veteran)!.points)).toBe(50);
+  });
+
+  it("US-30: los desempates no heredan GPs previos a la entrada del miembro", async () => {
+    const veteran = (
+      await prisma.user.create({
+        data: { email: `vc30-${suffix}@test.local`, passwordHash: "h", username: `vc30_${suffix}` },
+      })
+    ).id;
+    const newcomer = (
+      await prisma.user.create({
+        data: { email: `nc30-${suffix}@test.local`, passwordHash: "h", username: `nc30_${suffix}` },
+      })
+    ).id;
+    const league = (
+      await prisma.league.create({ data: { name: `Liga US30 coste ${suffix}`, type: "private" } })
+    ).id;
+    await prisma.leagueMember.createMany({
+      data: [
+        { leagueId: league, userId: veteran, joinedAt: new Date("2098-01-01T00:00:00Z") },
+        { leagueId: league, userId: newcomer, joinedAt: new Date("2098-05-15T00:00:00Z") },
+      ],
+    });
+
+    for (const userId of [veteran, newcomer]) {
+      for (const gpId of [gp1, gp2]) {
+        const lineup = await prisma.lineup.create({ data: { userId, gpId } });
+        await prisma.score.create({
+          data: {
+            lineupId: lineup.id,
+            userId,
+            gpId,
+            pointsTotal: 100,
+            breakdown: {},
+            rulesVersion: "scoring-v1",
+            resultsVersion: "rv-1",
+          },
+        });
+      }
+    }
+
+    // Costes distintos SOLO en GP1 (previo a la entrada del recién llegado).
+    const mkRider = (n: string) => prisma.rider.create({ data: { name: `${n} ${suffix}` } }).then((r) => r.id);
+    const mkCtor = (n: string) => prisma.constructor.create({ data: { name: `${n} ${suffix}` } }).then((c) => c.id);
+    const mkTeam = (n: string, ctorId: string) =>
+      prisma.team.create({ data: { name: `${n} ${suffix}`, constructorId: ctorId } }).then((t) => t.id);
+    const [vr1, vr2, vs1, vs2, vc1, vn1, vn2, vn3, vn4, vc2] = await Promise.all([
+      mkRider("V1"),
+      mkRider("V2"),
+      mkRider("VS1"),
+      mkRider("VS2"),
+      mkCtor("VC1"),
+      mkRider("N1"),
+      mkRider("N2"),
+      mkRider("NS1"),
+      mkRider("NS2"),
+      mkCtor("NC1"),
+    ]);
+    const [vt1, nt1] = await Promise.all([mkTeam("VT1", vc1), mkTeam("NT1", vc2)]);
+    const price = (assetType: AssetType, assetId: string, p: number) => ({
+      assetType,
+      assetId,
+      gpId: gp1,
+      price: p,
+    });
+    await prisma.price.createMany({
+      data: [
+        price("rider", vr1, 20),
+        price("rider", vr2, 20),
+        price("rider", vs1, 20),
+        price("rider", vs2, 20),
+        price("constructor", vc1, 20),
+        price("team", vt1, 20),
+        price("rider", vn1, 10),
+        price("rider", vn2, 10),
+        price("rider", vn3, 10),
+        price("rider", vn4, 10),
+        price("constructor", vc2, 10),
+        price("team", nt1, 10),
+      ],
+    });
+    type Slot = { slotType: SlotType; assetType: AssetType; assetId: string };
+    const veteranSlots: Slot[] = [
+      { slotType: "gold", assetType: "rider", assetId: vr1 },
+      { slotType: "gold", assetType: "rider", assetId: vr2 },
+      { slotType: "silver", assetType: "rider", assetId: vs1 },
+      { slotType: "silver", assetType: "rider", assetId: vs2 },
+      { slotType: "constructor", assetType: "constructor", assetId: vc1 },
+      { slotType: "team", assetType: "team", assetId: vt1 },
+    ];
+    const newcomerSlots: Slot[] = [
+      { slotType: "gold", assetType: "rider", assetId: vn1 },
+      { slotType: "gold", assetType: "rider", assetId: vn2 },
+      { slotType: "silver", assetType: "rider", assetId: vn3 },
+      { slotType: "silver", assetType: "rider", assetId: vn4 },
+      { slotType: "constructor", assetType: "constructor", assetId: vc2 },
+      { slotType: "team", assetType: "team", assetId: nt1 },
+    ];
+    const veteranLineup = await prisma.lineup.findFirstOrThrow({ where: { userId: veteran, gpId: gp1 } });
+    const newcomerLineup = await prisma.lineup.findFirstOrThrow({ where: { userId: newcomer, gpId: gp1 } });
+    await prisma.lineupSlot.createMany({
+      data: veteranSlots.map((s) => ({ ...s, lineupId: veteranLineup.id })),
+    });
+    await prisma.lineupSlot.createMany({
+      data: newcomerSlots.map((s) => ({ ...s, lineupId: newcomerLineup.id })),
+    });
+
+    await service.recalculateRankings(gp2, "rv-us30-cost");
+
+    const overall = await latestRankings({ gpId: null }, league);
+    // Ambos empatan en puntos/GPs ganados/último GP. El coste de GP1 NO cuenta
+    // para el recién llegado, así que el desempate es la antigüedad: veteran > newcomer.
+    expect(overall.map((r) => r.userId)).toEqual([veteran, newcomer]);
+    const newcomerRow = overall.find((r) => r.userId === newcomer)!;
+    expect(newcomerRow.tiebreakers).toMatchObject({ gpsWon: 0, lastGpScore: 100, totalCost: 0 });
+  });
 });

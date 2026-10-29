@@ -292,3 +292,225 @@ describe("US-01 · registro y login (PostgreSQL real)", () => {
     expect(retried.email).toBe(email("ana"));
   });
 });
+
+describe("US-31 · liga de bienvenida (PostgreSQL real)", () => {
+  let prisma: ReturnType<typeof createPrisma>;
+  let store: InstanceType<typeof InMemoryRateLimitStore>;
+  let emailSender: CapturingEmailSender;
+
+  beforeAll(() => {
+    prisma = createPrisma();
+    store = new InMemoryRateLimitStore();
+    emailSender = new CapturingEmailSender();
+  });
+
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  function makeRouter(welcomeLeagueId?: string, bootstrapAdminEmail?: string) {
+    return createAuthRouter({
+      prisma,
+      rateLimit: store,
+      sessionTtlSec: SESSION_TTL_SEC,
+      secureCookie: true,
+      rateLimitCfg: RATE_CFG,
+      emailSender,
+      appUrl: "http://localhost:3000",
+      resetCfg: { tokenTtlSec: 3600, maxPerWindow: 5, windowSec: 300 },
+      welcomeLeagueId,
+      bootstrapAdminEmail,
+    });
+  }
+
+  async function callerFor(router: ReturnType<typeof makeRouter>, ip: string) {
+    const req = new Request("http://localhost/api/trpc/auth", {
+      method: "POST",
+      headers: { "x-forwarded-for": ip },
+    });
+    const ctx = await createContext(req, prisma);
+    return { ctx, caller: router.createCaller(ctx) };
+  }
+
+  /** Seudónimo único de ≤20 caracteres (esquema: [a-zA-Z0-9_], sin guiones). */
+  const uname = (tag: string) => `${tag}_${randomUUID().slice(0, 8)}`;
+
+  async function makeWelcomeLeague(overrides: Record<string, unknown> = {}) {
+    const admin = (
+      await prisma.user.create({
+        data: {
+          email: `welcome-admin-${randomUUID().slice(0, 8)}@test.local`,
+          passwordHash: "h",
+          username: uname("weladmin"),
+        },
+      })
+    ).id;
+    const league = await prisma.league.create({
+      data: {
+        name: `Bienvenida ${randomUUID().slice(0, 8)}`,
+        type: "public",
+        visibility: "public",
+        status: "active",
+        maxMembers: 10,
+        ...overrides,
+      },
+    });
+    await prisma.leagueMember.create({
+      data: { leagueId: league.id, userId: admin, role: "admin" },
+    });
+    return { league, admin };
+  }
+
+  it("alta: el usuario queda como miembro activo de la bienvenida y recibe sesión", async () => {
+    const { league } = await makeWelcomeLeague();
+    const router = makeRouter(league.id);
+    const account = email(`welcome-${randomUUID().slice(0, 8)}`);
+    const { ctx, caller } = await callerFor(router, "198.51.100.1");
+
+    const result = await caller.register({
+      email: account,
+      username: uname("welcome"),
+      password: PASSWORD,
+      termsAccepted: true,
+    });
+
+    expect(result.user.email).toBe(account);
+    expect(ctx.pendingCookies).toHaveLength(1);
+    const user = await prisma.user.findUniqueOrThrow({ where: { email: account } });
+    const membership = await prisma.leagueMember.findUniqueOrThrow({
+      where: { leagueId_userId: { leagueId: league.id, userId: user.id } },
+    });
+    expect(membership.status).toBe("active");
+    expect(membership.role).toBe("member");
+    expect(membership.leftAt).toBeNull();
+
+    const audit = await prisma.auditLog.findFirst({
+      where: { action: "league.joined", entityId: league.id },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(audit?.actorId).toBe(user.id);
+    expect(audit?.afterData).toMatchObject({ via: "welcome" });
+  });
+
+  it("sin bienvenida configurada: el registro no crea membresías", async () => {
+    const router = makeRouter();
+    const account = email(`no-welcome-${randomUUID().slice(0, 8)}`);
+    const { caller } = await callerFor(router, "198.51.100.2");
+
+    await caller.register({
+      email: account,
+      username: uname("nowelcome"),
+      password: PASSWORD,
+      termsAccepted: true,
+    });
+
+    const user = await prisma.user.findUniqueOrThrow({ where: { email: account } });
+    const memberships = await prisma.leagueMember.count({ where: { userId: user.id } });
+    expect(memberships).toBe(0);
+  });
+
+  it("bienvenida llena: el registro falla y no deja usuario, sesión ni membresía", async () => {
+    const { league, admin } = await makeWelcomeLeague({ maxMembers: 1 });
+    const router = makeRouter(league.id);
+    const account = email(`full-${randomUUID().slice(0, 8)}`);
+    const { ctx, caller } = await callerFor(router, "198.51.100.3");
+
+    await expect(
+      caller.register({
+        email: account,
+        username: uname("full"),
+        password: PASSWORD,
+        termsAccepted: true,
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST", message: "La liga está llena." });
+
+    expect(await prisma.user.findUnique({ where: { email: account } })).toBeNull();
+    expect(ctx.pendingCookies).toHaveLength(0);
+    expect(await prisma.leagueMember.count({ where: { leagueId: league.id } })).toBe(1);
+    expect(
+      await prisma.leagueMember.findUnique({
+        where: { leagueId_userId: { leagueId: league.id, userId: admin } },
+      }),
+    ).toMatchObject({ status: "active" });
+  });
+
+  it("bienvenida privada o inactiva: el registro falla y hace rollback del usuario", async () => {
+    for (const overrides of [
+      { type: "private", visibility: "private" },
+      { status: "finished" },
+    ] as const) {
+      const { league } = await makeWelcomeLeague(overrides);
+      const router = makeRouter(league.id);
+      const account = email(`invalid-${randomUUID().slice(0, 8)}`);
+      const { caller } = await callerFor(router, "198.51.100.4");
+
+      await expect(
+        caller.register({
+          email: account,
+          username: uname("invalid"),
+          password: PASSWORD,
+          termsAccepted: true,
+        }),
+      ).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+        message: "La liga de bienvenida no está disponible.",
+      });
+      expect(await prisma.user.findUnique({ where: { email: account } })).toBeNull();
+    }
+  });
+
+  it("concurrencia por la última plaza: solo un registro confirma la membresía", async () => {
+    const { league } = await makeWelcomeLeague({ maxMembers: 2 });
+    const router = makeRouter(league.id);
+    const accounts = [
+      email(`race-a-${randomUUID().slice(0, 8)}`),
+      email(`race-b-${randomUUID().slice(0, 8)}`),
+    ];
+
+    const results = await Promise.allSettled(
+      accounts.map(async (account, i) => {
+        const { caller } = await callerFor(router, `198.51.100.${10 + i}`);
+        return caller.register({
+          email: account,
+          username: uname(`race${i}`),
+          password: PASSWORD,
+          termsAccepted: true,
+        });
+      }),
+    );
+
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    const rejected = results.find((r) => r.status === "rejected") as PromiseRejectedResult;
+    expect(rejected.reason).toMatchObject({ code: "BAD_REQUEST", message: "La liga está llena." });
+    expect(await prisma.leagueMember.count({ where: { leagueId: league.id, status: "active" } })).toBe(2);
+    const created = (
+      await Promise.all(
+        accounts.map((account) =>
+          prisma.user.findUnique({ where: { email: account } }),
+        ),
+      )
+    ).filter((u) => u !== null);
+    expect(created).toHaveLength(1);
+  });
+
+  it("bootstrap de admin + bienvenida: conserva el rol y añade la membresía", async () => {
+    const { league } = await makeWelcomeLeague();
+    const account = email(`bootstrap-${randomUUID().slice(0, 8)}`);
+    const router = makeRouter(league.id, account);
+    const { caller } = await callerFor(router, "198.51.100.30");
+
+    const { user } = await caller.register({
+      email: account,
+      username: uname("bootstrap"),
+      password: PASSWORD,
+      termsAccepted: true,
+    });
+
+    expect(user.roles).toEqual(expect.arrayContaining(["user", "global_admin"]));
+    const row = await prisma.user.findUniqueOrThrow({ where: { email: account } });
+    const membership = await prisma.leagueMember.findUnique({
+      where: { leagueId_userId: { leagueId: league.id, userId: row.id } },
+    });
+    expect(membership).toMatchObject({ status: "active", role: "member" });
+  });
+});

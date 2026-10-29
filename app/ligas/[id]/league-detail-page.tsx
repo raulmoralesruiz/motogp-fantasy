@@ -57,6 +57,7 @@ export default function LeagueDetailPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [visibility, setVisibility] = useState("");
+  const [adjustedRankingEnabled, setAdjustedRankingEnabled] = useState(false);
   const [configReady, setConfigReady] = useState(false);
 
   useEffect(() => {
@@ -64,6 +65,7 @@ export default function LeagueDetailPage() {
       setName(league.data.name);
       setDescription(league.data.description ?? "");
       setVisibility(league.data.visibility);
+      setAdjustedRankingEnabled(Boolean(league.data.adjustedRankingEnabled));
       setConfigReady(true);
     }
   }, [league.data, configReady]);
@@ -347,6 +349,12 @@ export default function LeagueDetailPage() {
       )}
 
       <h3>Ranking general</h3>
+      <p className="muted">
+        {l.adjustedRankingEnabled
+          ? "Ranking ajustado activo: el general cuenta los GPs desde la entrada del último miembro."
+          : "Ranking ajustado desactivado: cada miembro suma los GPs desde su propia entrada."}{" "}
+        Los cambios de esta opción se aplican en la siguiente publicación.
+      </p>
       {ranking.isPending && <p className="muted">Consultando…</p>}
       {ranking.isError && (
         <Alert variant="error">No se pudo cargar el ranking.</Alert>
@@ -432,6 +440,20 @@ export default function LeagueDetailPage() {
                 <option value="private">Privada</option>
               </select>
             </div>
+            <div className="field">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={adjustedRankingEnabled}
+                  onChange={(e) => setAdjustedRankingEnabled(e.target.checked)}
+                />{" "}
+                Ranking ajustado
+              </label>
+              <p className="muted">
+                Cuenta el general solo desde la entrada del último miembro. Se
+                aplica en la siguiente publicación del ranking.
+              </p>
+            </div>
             <Button
               type="button"
               onClick={() =>
@@ -440,6 +462,7 @@ export default function LeagueDetailPage() {
                   name,
                   description,
                   visibility: visibility as "public" | "unlisted" | "private",
+                  adjustedRankingEnabled,
                 })
               }
               disabled={update.isPending}

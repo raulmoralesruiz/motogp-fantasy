@@ -41,6 +41,7 @@ const LEAGUE = {
   maxMembers: 50,
   entryMode: "code",
   allowMemberInvites: false,
+  adjustedRankingEnabled: false,
   startDate: null,
   endDate: null,
   activeMembers: 2,
@@ -152,6 +153,30 @@ describe("LeagueDetailPage (US-24)", () => {
     expect(screen.getByText(/Privada ·/)).toBeInTheDocument();
     expect(screen.getByText(/2\/50 miembros/)).toBeInTheDocument();
     expect(screen.getByText(/por código/)).toBeInTheDocument();
+  });
+
+  it("muestra el ranking ajustado desactivado por defecto (US-30, D-10)", () => {
+    mockLeague({ ...LEAGUE, adjustedRankingEnabled: false });
+    mockRanking(RANKING);
+    renderDetail(<LeagueDetailPage />);
+
+    expect(
+      screen.getByText(
+        /Ranking ajustado desactivado: cada miembro suma los GPs desde su propia entrada/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("muestra el ranking ajustado activo si la liga lo tiene (US-30)", () => {
+    mockLeague({ ...LEAGUE, adjustedRankingEnabled: true });
+    mockRanking(RANKING);
+    renderDetail(<LeagueDetailPage />);
+
+    expect(
+      screen.getByText(
+        /Ranking ajustado activo: el general cuenta los GPs desde la entrada del último miembro/,
+      ),
+    ).toBeInTheDocument();
   });
 
   it("muestra el modo de entrada legible (invite y mixed)", () => {
@@ -468,6 +493,7 @@ describe("LeagueDetailPage (US-24)", () => {
       expect(screen.getByLabelText("Nombre")).toBeInTheDocument();
       expect(screen.getByLabelText("Descripción")).toBeInTheDocument();
       expect(screen.getByLabelText("Visibilidad")).toBeInTheDocument();
+      expect(screen.getByLabelText(/Ranking ajustado/)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Guardar cambios" })).toBeInTheDocument();
     });
 
@@ -615,6 +641,7 @@ describe("LeagueDetailPage (US-24)", () => {
         name: "Liga renombreada",
         description: "Solo para la familia",
         visibility: "private",
+        adjustedRankingEnabled: false,
       });
     });
 
@@ -657,6 +684,24 @@ describe("LeagueDetailPage (US-24)", () => {
         name: "Liga de los amigos",
         description: "Nueva descripción",
         visibility: "unlisted",
+        adjustedRankingEnabled: false,
+      });
+    });
+
+    it("activar el ranking ajustado: envía adjustedRankingEnabled = true (US-30)", async () => {
+      mockLeague({ ...ADMIN_LEAGUE, adjustedRankingEnabled: false });
+      mockRanking(RANKING);
+      mockMeAs("user-1");
+      const mutate = mockMutation(trpc.leagues.update.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      const user = userEvent.setup();
+      await user.click(screen.getByLabelText(/Ranking ajustado/));
+      await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+      expect(mutate.mock.calls[0]?.[0]).toMatchObject({
+        leagueId: "league-1",
+        adjustedRankingEnabled: true,
       });
     });
 

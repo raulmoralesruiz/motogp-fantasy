@@ -46,6 +46,8 @@ export const createLeagueInputSchema = z
       .int("Los miembros máximos deben ser un entero")
       .positive("Los miembros máximos deben ser positivos"),
     entryMode: leagueEntryModeSchema,
+    // US-30 (D-10): ausente = desactivado en todos los tipos de liga.
+    adjustedRankingEnabled: z.boolean().default(false),
     // `.nullish()` (no `.optional()`): `z.coerce.date()` convertiría un
     // `null` explícito en la fecha epoch (1970-01-01); con `.nullish()`
     // `null`/`undefined` significan "sin fecha" (AGENTS.md §8: el servidor
@@ -127,11 +129,16 @@ export const updateLeagueInputSchema = z
       .max(500, "La descripción de la liga no puede superar los 500 caracteres")
       .nullish(),
     visibility: leagueVisibilitySchema.optional(),
+    adjustedRankingEnabled: z.boolean().optional(),
   })
   .refine(
-    (v) => v.name !== undefined || v.description !== undefined || v.visibility !== undefined,
+    (v) =>
+      v.name !== undefined ||
+      v.description !== undefined ||
+      v.visibility !== undefined ||
+      v.adjustedRankingEnabled !== undefined,
     {
-      message: "Indica al menos un campo a cambiar (nombre, descripción o visibilidad)",
+      message: "Indica al menos un campo a cambiar (nombre, descripción, visibilidad o ranking ajustado)",
       path: ["name"],
     },
   );

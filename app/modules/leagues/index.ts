@@ -21,4 +21,5 @@
  * `results_version`).
  */
 export * from "./core";
+export * from "./league-membership";
 export * from "./league-service";

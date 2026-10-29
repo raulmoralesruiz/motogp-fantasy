@@ -19,6 +19,7 @@ import {
   type EmailSender,
   type RateLimitStore,
 } from "@/modules/identity";
+import { addLeagueMemberInTransaction } from "@/modules/leagues";
 import {
   loginInputSchema,
   registerInputSchema,
@@ -56,10 +57,16 @@ export interface AuthRouterDeps {
    * recibe `global_admin`. Vacío/ausente → nadie lo recibe.
    */
   bootstrapAdminEmail?: string;
+  /**
+   * US-31: liga pública de bienvenida configurada por el servidor. Nunca viene
+   * del payload del cliente; ausente = registro sin alta automática.
+   */
+  welcomeLeagueId?: string;
 }
 
 /** Router inyectable: los tests de integración lo montan con su propia BD y store. */
 export function createAuthRouter(deps: AuthRouterDeps) {
+  const welcomeLeagueId = deps.welcomeLeagueId;
   const service = new AuthService({
     prisma: deps.prisma,
     rateLimit: deps.rateLimit,
@@ -73,6 +80,16 @@ export function createAuthRouter(deps: AuthRouterDeps) {
       appUrl: deps.appUrl,
       bootstrapAdminEmail: deps.bootstrapAdminEmail,
     },
+    onRegistered: welcomeLeagueId
+      ? (tx, user, meta) =>
+          addLeagueMemberInTransaction(tx, {
+            leagueId: welcomeLeagueId,
+            userId: user.id,
+            actorId: user.id,
+            ip: meta.ip,
+            via: "welcome",
+          })
+      : undefined,
   });
 
   function issueSessionCookie(ctx: Context, token: string): void {
@@ -168,6 +185,7 @@ export function getDefaultAuthRouter() {
         windowSec: env.RESET_RATE_LIMIT_WINDOW_SEC,
       },
       bootstrapAdminEmail: env.BOOTSTRAP_ADMIN_EMAIL || undefined,
+      welcomeLeagueId: env.WELCOME_LEAGUE_ID || undefined,
     });
   })();
   return defaultRouter;

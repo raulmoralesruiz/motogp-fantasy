@@ -10,7 +10,7 @@
  * prueba sin los singletons de la app.
  */
 import { TRPCError } from "@trpc/server";
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { appendAudit } from "@/modules/admin";
 import type { EmailSender } from "./email";
@@ -49,6 +49,16 @@ export interface AuthServiceDeps {
   /** Enviador de emails (US-02; provisional: `logEmailSender`, ADR-0009). */
   emailSender: EmailSender;
   cfg: AuthServiceConfig;
+  /**
+   * US-31: hook BFF dentro de la transacción de registro (p. ej. membresía de
+   * bienvenida). `identity` no importa `leagues`; el router inyecta la acción.
+   * Si falla, usuario/perfil/roles y membresía hacen rollback juntos.
+   */
+  onRegistered?: (
+    tx: Prisma.TransactionClient,
+    user: { id: string },
+    meta: { ip: string },
+  ) => Promise<void>;
 }
 
 export interface AuthResult {
@@ -67,7 +77,8 @@ export class AuthService {
 
   /**
    * Registro (US-01): email + contraseña + nombre de usuario.
-   * La liga de bienvenida (US-31) y el onboarding quedan fuera de alcance.
+   * US-31: el hook `onRegistered` puede añadir la bienvenida en la misma
+   * transacción; la sesión solo se crea después de confirmar todo.
    *
    * Si el email coincide con el admin de bootstrap (T-08, ADR-0010), la
    * concesión de `global_admin` se registra en `audit_log` (T-09).
@@ -123,29 +134,35 @@ export class AuthService {
       // configurado, se otorga también `global_admin` (atómico: misma
       // transacción). El email ya viene minúsculas por el esquema Zod.
       const bootstrap = cfg.bootstrapAdminEmail?.trim().toLowerCase();
-      if (!bootstrap || input.email !== bootstrap) return created;
-      const adminRole = await tx.role.upsert({
-        where: { name: "global_admin" },
-        update: {},
-        create: {
-          name: "global_admin",
-          description: "Administrador global (panel de admin)",
-        },
-      });
-      await tx.userRole.create({
-        data: { userId: created.id, roleId: adminRole.id },
-      });
-      // Auditoría (T-09): el bootstrap es una acción sensible (roles) y se
-      // registra en la misma transacción (append-only, trigger de BD).
-      await appendAudit(tx, {
-        actorId: created.id,
-        action: "role.bootstrap_admin",
-        entity: "role",
-        entityId: adminRole.id,
-        afterData: { userId: created.id, roleId: adminRole.id, email: input.email },
-        ip: meta.ip,
-      });
-      // Relectura para incluir el rol nuevo en la respuesta.
+      if (bootstrap && input.email === bootstrap) {
+        const adminRole = await tx.role.upsert({
+          where: { name: "global_admin" },
+          update: {},
+          create: {
+            name: "global_admin",
+            description: "Administrador global (panel de admin)",
+          },
+        });
+        await tx.userRole.create({
+          data: { userId: created.id, roleId: adminRole.id },
+        });
+        // Auditoría (T-09): el bootstrap es una acción sensible (roles) y se
+        // registra en la misma transacción (append-only, trigger de BD).
+        await appendAudit(tx, {
+          actorId: created.id,
+          action: "role.bootstrap_admin",
+          entity: "role",
+          entityId: adminRole.id,
+          afterData: { userId: created.id, roleId: adminRole.id, email: input.email },
+          ip: meta.ip,
+        });
+      }
+
+      // US-31: el alta de bienvenida (si el BFF la configuró) es atómica con
+      // el usuario. Un error aquí revierte también el bootstrap de admin.
+      await this.deps.onRegistered?.(tx, { id: created.id }, meta);
+
+      // Relectura para incluir cualquier rol añadido en la respuesta.
       return tx.user.findUniqueOrThrow({
         where: { id: created.id },
         include: USER_INCLUDE,

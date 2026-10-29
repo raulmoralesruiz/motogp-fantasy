@@ -54,12 +54,15 @@ import {
   canViewLeague,
   evaluateLeagueJoin,
   generateLeagueCode,
+  isMemberEligibleForGp,
+  latestMembershipJoinedAt,
   shouldLockLeagueJoin,
   sortRanking,
   type LeagueAdminAction,
   type LeagueJoinReason,
   type LeagueMemberRole,
 } from "./core";
+import { addLeagueMemberInTransaction } from "./league-membership";
 
 /**
  * Motivos de RECHAZO de la unión (US-25): todo `LeagueJoinReason` salvo
@@ -159,6 +162,8 @@ export interface LeagueView {
    * invitación (US-26, leagues.md §5: "invitar solo si el admin lo habilita").
    */
   allowMemberInvites: boolean;
+  /** US-30: general desde la entrada del último miembro (D-10: off por defecto). */
+  adjustedRankingEnabled: boolean;
   startDate: Date | null;
   endDate: Date | null;
   /** Miembros activos (status = active). */
@@ -308,6 +313,7 @@ export class LeagueService {
           minMembers: validated.minMembers,
           maxMembers: validated.maxMembers,
           entryMode: validated.entryMode,
+          adjustedRankingEnabled: validated.adjustedRankingEnabled,
           startDate: validated.startDate,
           endDate: validated.endDate,
           // La liga queda operativa al crearse (ADR-0023): el creador es el
@@ -333,6 +339,7 @@ export class LeagueService {
           entryMode: created.entryMode,
           minMembers: created.minMembers,
           maxMembers: created.maxMembers,
+          adjustedRankingEnabled: created.adjustedRankingEnabled,
           // El código NO se registra (secreto): solo si se generó uno.
           codeGenerated: code !== null,
         },
@@ -443,10 +450,14 @@ export class LeagueService {
       name?: string;
       description?: string | null;
       visibility?: LeagueVisibility;
+      adjustedRankingEnabled?: boolean;
     } = {};
     if (v.name !== undefined) data.name = v.name;
     if (v.description !== undefined) data.description = v.description;
     if (v.visibility !== undefined) data.visibility = v.visibility;
+    if (v.adjustedRankingEnabled !== undefined) {
+      data.adjustedRankingEnabled = v.adjustedRankingEnabled;
+    }
 
     await this.deps.prisma.$transaction(async (tx) => {
       await tx.league.update({ where: { id: leagueId }, data });
@@ -459,6 +470,7 @@ export class LeagueService {
           name: league.name,
           description: league.description,
           visibility: league.visibility,
+          adjustedRankingEnabled: league.adjustedRankingEnabled,
         },
         afterData: data,
         ip: meta.ip,
@@ -909,56 +921,18 @@ export class LeagueService {
       });
     }
 
-    // 4) Transacción (CA: "unirse es transaccional"): lock FOR UPDATE de la
-    //    fila de la liga (patrón results US-18/US-19) → recontar miembros
-    //    (última plaza) → membresía → auditoría.
-    const maxMembers = league.maxMembers;
+    // 4) Transacción (CA: "unirse es transaccional"): la operación común
+    //    bloquea la liga, revalida estado/plaza, reactiva o crea la membresía
+    //    y audita. En reentrada reinicia `joinedAt` (US-30: no se recuperan
+    //    los GPs jugados fuera de la liga).
     await this.deps.prisma.$transaction(async (tx) => {
-      const rows = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT id FROM leagues WHERE id = ${resolvedLeagueId}::uuid FOR UPDATE
-      `;
-      if (rows.length === 0) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "La liga no existe." });
-      }
-      // Recontar bajo lock: dos uniones concurrentes por la última plaza,
-      // la segunda ve al miembro de la primera (Read Committed) y se rechaza.
-      const count = await tx.leagueMember.count({
-        where: { leagueId: resolvedLeagueId, status: "active" },
-      });
-      if (count >= maxMembers) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "La liga está llena.",
-        });
-      }
-      // Re-entrada (US-27, ADR-0027): si ya existe una membresía previa
-      // (`left`/`kicked`), se REACTIVA en vez de insertar (la unique
-      // `(leagueId, userId)` haría fallar el `create` con P2002); si no
-      // existe, se crea. Siempre reingresa como `member` (un admin no puede
-      // salir ni ser expulsado, US-26/ADR-0027).
-      await tx.leagueMember.upsert({
-        where: {
-          leagueId_userId: { leagueId: resolvedLeagueId, userId: actorId },
-        },
-        update: { role: "member", status: "active", leftAt: null },
-        create: {
-          leagueId: resolvedLeagueId,
-          userId: actorId,
-          role: "member",
-          status: "active",
-        },
-      });
-      await appendAudit(tx, {
-        actorId: meta.actorId,
-        action: "league.joined",
-        entity: "league",
-        entityId: resolvedLeagueId,
-        afterData: {
-          userId: actorId,
-          // El código NO se registra (secreto, ADR-0023): solo el canal.
-          via: code !== undefined ? "code" : "open",
-        },
-        ip: meta.ip,
+      await addLeagueMemberInTransaction(tx, {
+        leagueId: resolvedLeagueId,
+        userId: actorId,
+        actorId,
+        ip,
+        // El código NO se registra (secreto, ADR-0023): solo el canal.
+        via: code !== undefined ? "code" : "open",
       });
     });
 
@@ -1178,16 +1152,17 @@ export class LeagueService {
       throw new TRPCError({ code: "NOT_FOUND", message: "El GP no existe." });
     }
 
-    // 1. GPs de la temporada (orden por round; el último da "último GP").
+    // 1. GPs de la temporada: round ordena y lockoutAt/date fija el corte de
+    //    entrada (US-30; nunca se usa el reloj actual para decidir elegibilidad).
     const seasonGps = await this.deps.prisma.gp.findMany({
       where: { seasonId: gp.seasonId },
-      select: { id: true },
+      select: { id: true, date: true, lockoutAt: true },
       orderBy: { round: "asc" },
     });
     const gpIds = seasonGps.map((g) => g.id);
-    const lastGpId = seasonGps[seasonGps.length - 1]?.id ?? null;
 
-    // 2. Scores de la temporada (gpId → userId → puntos). Solo GPs puntuados.
+    // 2. Scores y costes por GP. Los scores siguen siendo globales (multi-liga);
+    //    la elegibilidad solo filtra el DERIVADO de cada liga.
     const scores = await this.deps.prisma.score.findMany({
       where: { gpId: { in: gpIds } },
       select: { userId: true, gpId: true, pointsTotal: true },
@@ -1198,24 +1173,18 @@ export class LeagueService {
       gpMap.set(s.userId, Number(s.pointsTotal));
       scoreByGpUser.set(s.gpId, gpMap);
     }
+    const costByUserGp = await this.lineupCostByUserAndGp(gpIds);
 
-    // Usuarios que puntuaron en al menos un GP de la temporada. El ranking
-    // es DERIVADO de `scores` (data-model.md §5): solo se publican filas para
-    // los miembros con datos — una liga donde nadie puntuó no recibe ranking
-    // (vacío elegante, US-15).
-    const scoredUsers = new Set<string>();
-    for (const gpMap of scoreByGpUser.values()) {
-      for (const uid of gpMap.keys()) scoredUsers.add(uid);
-    }
-
-    // 3. Coste total de lineups por usuario (desempate 3).
-    const costByUser = await this.totalCostByUser(gpIds);
-
-    // 4. Miembros activos, agrupados por liga.
-    const memberships = await this.deps.prisma.leagueMember.findMany({
-      where: { status: "active" },
-      select: { leagueId: true, userId: true, joinedAt: true },
-    });
+    // 3. Miembros activos y opción de ranking ajustado por liga.
+    const [memberships, leagues] = await Promise.all([
+      this.deps.prisma.leagueMember.findMany({
+        where: { status: "active" },
+        select: { leagueId: true, userId: true, joinedAt: true },
+      }),
+      this.deps.prisma.league.findMany({
+        select: { id: true, adjustedRankingEnabled: true },
+      }),
+    ]);
     const membersByLeague = new Map<string, { userId: string; joinedAt: Date }[]>();
     for (const m of memberships) {
       const list = membersByLeague.get(m.leagueId) ?? [];
@@ -1223,59 +1192,105 @@ export class LeagueService {
       membersByLeague.set(m.leagueId, list);
     }
     if (membersByLeague.size === 0) return { leagues: 0, rankings: 0 };
+    const adjustedByLeague = new Map(
+      leagues.map((league) => [league.id, league.adjustedRankingEnabled]),
+    );
 
-    // 5. Por liga: rankings por GP + general (orden: fórmula pura `sortRanking`).
-    //    Solo se publican ligas donde algún miembro puntuó (derivado de scores).
     const now = new Date();
     const perGpRows: Prisma.RankingCreateManyInput[] = [];
     const overallRows: Prisma.RankingCreateManyInput[] = [];
     const publishedLeagues = new Set<string>();
 
     for (const [leagueId, members] of membersByLeague) {
+      const rowsBefore = perGpRows.length + overallRows.length;
       const memberIds = members.map((m) => m.userId);
       const joinedAtByUser = new Map(members.map((m) => [m.userId, m.joinedAt]));
 
-      // Liga sin miembros que puntuaron → no se publica (vacío elegante).
-      if (!memberIds.some((uid) => scoredUsers.has(uid))) continue;
-      publishedLeagues.add(leagueId);
+      // Conjunto de GPs elegibles por miembro. En el ranking normal es su
+      // propio joinedAt; en el ajustado se sustituye por el corte común.
+      const eligibilityFrom = (cutoffByUser: Map<string, Date>) =>
+        new Map(
+          members.map((member) => [
+            member.userId,
+            new Set(
+              seasonGps
+                .filter((g) =>
+                  isMemberEligibleForGp(cutoffByUser.get(member.userId)!, g),
+                )
+                .map((g) => g.id),
+            ),
+          ]),
+        );
+      const normalEligibility = eligibilityFrom(joinedAtByUser);
 
-      // GPs ganados por usuario (1º por puntos, sin empate, entre miembros).
-      const gpsWonByUser = new Map<string, number>();
-      for (const g of seasonGps) {
-        const gpMap = scoreByGpUser.get(g.id);
-        if (!gpMap) continue;
-        let maxPoints = -Infinity;
-        for (const uid of memberIds) {
-          const pts = gpMap.get(uid);
-          if (pts !== undefined && pts > maxPoints) maxPoints = pts;
+      // Puntos y TODOS los desempates salen del mismo conjunto de GPs. Así un
+      // recién llegado no hereda ventaja por victorias, último GP o costes.
+      const buildStats = (eligibleByUser: Map<string, Set<string>>) => {
+        const stats = new Map(
+          memberIds.map((uid) => {
+            const eligible = eligibleByUser.get(uid)!;
+            let points = 0;
+            let totalCost = 0;
+            let hasScores = false;
+            for (const eligibleGpId of eligible) {
+              const score = scoreByGpUser.get(eligibleGpId)?.get(uid);
+              if (score !== undefined) {
+                points += score;
+                hasScores = true;
+              }
+              totalCost += costByUserGp.get(`${uid}:${eligibleGpId}`) ?? 0;
+            }
+            const lastEligibleGp = [...seasonGps].reverse().find((g) => eligible.has(g.id));
+            const value = {
+              points,
+              gpsWon: 0,
+              lastGpScore: lastEligibleGp
+                ? (scoreByGpUser.get(lastEligibleGp.id)?.get(uid) ?? 0)
+                : 0,
+              totalCost,
+              hasScores,
+            };
+            return [uid, value] as const;
+          }),
+        );
+
+        // Un GP solo lo puede ganar quien era elegible en ese GP; empate en el
+        // primer puesto no concede victoria (regla existente de US-21).
+        for (const g of seasonGps) {
+          const gpMap = scoreByGpUser.get(g.id);
+          if (!gpMap) continue;
+          const participants = memberIds.filter(
+            (uid) => eligibleByUser.get(uid)!.has(g.id) && gpMap.has(uid),
+          );
+          if (participants.length === 0) continue;
+          const maxPoints = Math.max(...participants.map((uid) => gpMap.get(uid)!));
+          const winners = participants.filter((uid) => gpMap.get(uid) === maxPoints);
+          if (winners.length === 1) stats.get(winners[0]!)!.gpsWon += 1;
         }
-        if (maxPoints === -Infinity) continue;
-        const winners = memberIds.filter((uid) => gpMap.get(uid) === maxPoints);
-        const winner = winners.length === 1 ? winners[0] : undefined;
-        if (winner !== undefined) {
-          gpsWonByUser.set(winner, (gpsWonByUser.get(winner) ?? 0) + 1);
-        }
-      }
+        return stats;
+      };
 
-      // Puntos del último GP (desempate 2; 0 si aún no puntuado).
-      const lastGpMap = lastGpId ? scoreByGpUser.get(lastGpId) : undefined;
-      const lastGpScore = (uid: string): number => lastGpMap?.get(uid) ?? 0;
+      const normalStats = buildStats(normalEligibility);
 
-      // Ranking por GP (solo GPs con `scores`).
+      // Ranking por GP: solo miembros que ya habían entrado antes del inicio
+      // efectivo de ESE GP y que tienen score en él.
       for (const g of seasonGps) {
         const gpMap = scoreByGpUser.get(g.id);
         if (!gpMap) continue;
         const sorted = sortRanking(
           memberIds
-            .filter((uid) => gpMap.has(uid))
-            .map((uid) => ({
-              userId: uid,
-              points: gpMap.get(uid)!,
-              gpsWon: gpsWonByUser.get(uid) ?? 0,
-              lastGpScore: lastGpScore(uid),
-              totalCost: costByUser.get(uid) ?? 0,
-              joinedAt: joinedAtByUser.get(uid)!,
-            })),
+            .filter((uid) => normalEligibility.get(uid)!.has(g.id) && gpMap.has(uid))
+            .map((uid) => {
+              const stats = normalStats.get(uid)!;
+              return {
+                userId: uid,
+                points: gpMap.get(uid)!,
+                gpsWon: stats.gpsWon,
+                lastGpScore: stats.lastGpScore,
+                totalCost: stats.totalCost,
+                joinedAt: joinedAtByUser.get(uid)!,
+              };
+            }),
         );
         sorted.forEach((r, i) => {
           perGpRows.push({
@@ -1295,26 +1310,29 @@ export class LeagueService {
         });
       }
 
-      // Ranking general (suma de puntos de la temporada).
-      const totalPoints = (uid: string): number => {
-        let total = 0;
-        for (const g of seasonGps) {
-          const pts = scoreByGpUser.get(g.id)?.get(uid);
-          if (pts !== undefined) total += pts;
-        }
-        return total;
-      };
+      // General ajustado (opción por liga, off por defecto): todos comparten
+      // el corte de la entrada más reciente. El ranking por GP no se ajusta.
+      let overallStats = normalStats;
+      if (adjustedByLeague.get(leagueId) === true) {
+        const latestJoinedAt = latestMembershipJoinedAt(members.map((m) => m.joinedAt))!;
+        overallStats = buildStats(
+          eligibilityFrom(new Map(memberIds.map((uid) => [uid, latestJoinedAt]))),
+        );
+      }
       const overallSorted = sortRanking(
         memberIds
-          .filter((uid) => scoredUsers.has(uid))
-          .map((uid) => ({
-            userId: uid,
-            points: totalPoints(uid),
-            gpsWon: gpsWonByUser.get(uid) ?? 0,
-            lastGpScore: lastGpScore(uid),
-            totalCost: costByUser.get(uid) ?? 0,
-            joinedAt: joinedAtByUser.get(uid)!,
-          })),
+          .filter((uid) => overallStats.get(uid)!.hasScores)
+          .map((uid) => {
+            const stats = overallStats.get(uid)!;
+            return {
+              userId: uid,
+              points: stats.points,
+              gpsWon: stats.gpsWon,
+              lastGpScore: stats.lastGpScore,
+              totalCost: stats.totalCost,
+              joinedAt: joinedAtByUser.get(uid)!,
+            };
+          }),
       );
       overallSorted.forEach((r, i) => {
         overallRows.push({
@@ -1332,10 +1350,13 @@ export class LeagueService {
           computedAt: now,
         });
       });
+
+      if (perGpRows.length + overallRows.length > rowsBefore) {
+        publishedLeagues.add(leagueId);
+      }
     }
 
-    // 6. Publicar (atómico): los rankings son versionados; la lectura (US-15)
-    //    toma la más reciente por `computedAt`.
+    // Publicar por append: las versiones anteriores nunca se mutan.
     await this.deps.prisma.$transaction(async (tx) => {
       if (perGpRows.length > 0) await tx.ranking.createMany({ data: perGpRows });
       if (overallRows.length > 0) await tx.ranking.createMany({ data: overallRows });
@@ -1352,7 +1373,7 @@ export class LeagueService {
    * de sus activos (slots) a los precios del GP (invariante 2). Sin precio
    * para un activo → no cuenta (el lineup no se habría podido guardar).
    */
-  private async totalCostByUser(gpIds: string[]): Promise<Map<string, number>> {
+  private async lineupCostByUserAndGp(gpIds: string[]): Promise<Map<string, number>> {
     const lineups = await this.deps.prisma.lineup.findMany({
       where: { gpId: { in: gpIds } },
       select: { id: true, userId: true, gpId: true },
@@ -1381,16 +1402,17 @@ export class LeagueService {
       slotsByLineup.set(s.lineupId, list);
     }
 
-    const costByUser = new Map<string, number>();
+    const costByUserGp = new Map<string, number>();
     for (const l of lineups) {
       let cost = 0;
       for (const s of slotsByLineup.get(l.id) ?? []) {
         const price = priceOf.get(`${s.assetType}:${s.assetId}:${l.gpId}`);
         if (price !== undefined) cost += price;
       }
-      costByUser.set(l.userId, (costByUser.get(l.userId) ?? 0) + cost);
+      const key = `${l.userId}:${l.gpId}`;
+      costByUserGp.set(key, (costByUserGp.get(key) ?? 0) + cost);
     }
-    return costByUser;
+    return costByUserGp;
   }
 
   /**
@@ -1410,6 +1432,7 @@ export class LeagueService {
     minMembers: number;
     maxMembers: number;
     entryMode: LeagueEntryMode;
+    adjustedRankingEnabled: boolean;
     startDate: Date | null;
     endDate: Date | null;
   } {
@@ -1459,6 +1482,7 @@ export class LeagueService {
       minMembers: v.minMembers,
       maxMembers: v.maxMembers,
       entryMode: v.entryMode,
+      adjustedRankingEnabled: v.adjustedRankingEnabled,
       startDate: v.startDate ?? null,
       endDate: v.endDate ?? null,
     };
@@ -1673,6 +1697,7 @@ export class LeagueService {
       maxMembers: league.maxMembers,
       entryMode: league.entryMode,
       allowMemberInvites: league.allowMemberInvites,
+      adjustedRankingEnabled: league.adjustedRankingEnabled,
       startDate: league.startDate,
       endDate: league.endDate,
       activeMembers,

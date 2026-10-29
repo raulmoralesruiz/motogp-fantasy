@@ -45,6 +45,7 @@ interface CreateLeaguePayload {
   minMembers: number;
   maxMembers: number;
   entryMode: "code" | "invite" | "mixed";
+  adjustedRankingEnabled?: boolean;
   startDate?: Date | null;
   endDate?: Date | null;
 }
@@ -613,10 +614,10 @@ describe("US-24 · Liga pública y directorio (PostgreSQL real)", () => {
   it("listPublic: solo públicas activas, orden por nombre, con miembros", async () => {
     const creator = await makeUser("dir");
 
-    // 1 pública activa (aparece), 1 privada (no), 1 pública finished (no),
-    // 1 pública unlisted (no — la validación exige pública ⇒ visibilidad pública,
-    // así que se crea una pública y se fuerza visibility=unlisted en BD).
+    // 2 públicas activas (aparecen, ordenadas por nombre), 1 privada (no) y
+    // 1 pública finished (no).
     const pubA = await makePublicLeague(creator, `A pública ${suffix}`);
+    const pubZ = await makePublicLeague(creator, `Z pública ${suffix}`);
     const pubB = await makePublicLeague(creator, `B pública ${suffix}`);
     const priv = await service.createLeague(
       validInput({ name: `C privada ${suffix}` }),
@@ -626,36 +627,41 @@ describe("US-24 · Liga pública y directorio (PostgreSQL real)", () => {
       where: { id: pubB.id },
       data: { status: "finished" },
     });
-    await prisma.league.update({
-      where: { id: pubA.id },
-      data: { visibility: "unlisted" },
-    });
-    // pubA vuelve a public para que solo pubB (finished) y priv queden fuera.
-    await prisma.league.update({
-      where: { id: pubA.id },
-      data: { visibility: "public" },
-    });
 
-    // Un miembro extra en pubB (aunque esté finished, no cuenta: no está en el
-    // directorio). En pubA (la única pública activa) un segundo miembro.
+    // Un miembro extra en pubA (la pública activa) para contar 2 miembros.
     const extra = await makeUser("dir-extra");
     await prisma.leagueMember.create({
       data: { leagueId: pubA.id, userId: extra, role: "member" },
     });
 
     const dir = await service.listPublic();
-    expect(dir.map((l) => l.name)).toEqual([`A pública ${suffix}`]);
-    expect(dir[0]).toMatchObject({
+    const names = dir.map((l) => l.name);
+    // La BD de tests es compartida (p. ej. las ligas de bienvenida de los
+    // tests de US-31): no se afirma el listado exacto global, sino la
+    // presencia/ausencia de las nuestras y su orden relativo.
+    const ids = dir.map((l) => l.id);
+    expect(names).toContain(`A pública ${suffix}`);
+    expect(names).toContain(`Z pública ${suffix}`);
+    expect(ids).toContain(pubA.id);
+    expect(ids).toContain(pubZ.id);
+    // Ni la privada ni la finished aparecen.
+    expect(names).not.toContain(`B pública ${suffix}`);
+    expect(names).not.toContain(`C privada ${suffix}`);
+    expect(ids).not.toContain(priv.id);
+    expect(ids).not.toContain(pubB.id);
+    // Orden por nombre: A antes de Z (ambas nuestras, orden relativo estable).
+    expect(names.indexOf(`A pública ${suffix}`)).toBeLessThan(
+      names.indexOf(`Z pública ${suffix}`),
+    );
+    const row = dir.find((l) => l.id === pubA.id);
+    expect(row).toMatchObject({
       id: pubA.id,
       type: "public",
       activeMembers: 2,
     });
-    // Ni la privada ni la finished aparecen.
-    expect(dir.map((l) => l.id)).not.toContain(priv.id);
-    expect(dir.map((l) => l.id)).not.toContain(pubB.id);
     // El código NUNCA sale del directorio (secreto, solo admin).
-    expect(dir[0]).not.toHaveProperty("code");
-    expect(dir[0]).not.toHaveProperty("members");
+    expect(row).not.toHaveProperty("code");
+    expect(row).not.toHaveProperty("members");
   });
 
   it("listPublic: vacío si no hay públicas activas", async () => {
@@ -1627,8 +1633,9 @@ describe("US-27 · Salir de la liga (PostgreSQL real)", () => {
     const admin = await makeUser("rejoin-a");
     const member = await makeUser("rejoin-m");
     const league = await makePublic(admin, `Liga re-entrada ${suffix}`);
+    const oldJoinedAt = new Date("2020-01-01T00:00:00Z");
     await prisma.leagueMember.create({
-      data: { leagueId: league.id, userId: member, role: "member" },
+      data: { leagueId: league.id, userId: member, role: "member", joinedAt: oldJoinedAt },
     });
 
     // Sale…
@@ -1646,6 +1653,8 @@ describe("US-27 · Salir de la liga (PostgreSQL real)", () => {
     expect(membership.status).toBe("active");
     expect(membership.leftAt).toBeNull();
     expect(membership.role).toBe("member");
+    // US-30: el reingreso abre un periodo nuevo y no recupera GPs previos.
+    expect(membership.joinedAt.getTime()).toBeGreaterThan(oldJoinedAt.getTime());
 
     // Solo una fila de membresía (no se duplicó — la unique se respeta).
     const count = await prisma.leagueMember.count({
@@ -2359,6 +2368,58 @@ describe("US-26 · Permisos de liga (admin/miembro) (PostgreSQL real)", () => {
         { ...META, actorId: admin },
       ),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("updateLeague: el admin activa/desactiva el ranking ajustado + auditoría (US-30)", async () => {
+    const { leagueId, admin } = await makeLeagueWithMember("upadj");
+    const league = await prisma.league.findUniqueOrThrow({ where: { id: leagueId } });
+    expect(league.adjustedRankingEnabled).toBe(false);
+
+    const enabled = await service.updateLeague(
+      leagueId,
+      { leagueId, adjustedRankingEnabled: true },
+      admin,
+      { ...META, actorId: admin },
+    );
+    expect(enabled.adjustedRankingEnabled).toBe(true);
+    const audit = await prisma.auditLog.findFirst({
+      where: { action: "league.updated", entityId: leagueId },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(audit?.beforeData).toMatchObject({ adjustedRankingEnabled: false });
+    expect(audit?.afterData).toMatchObject({ adjustedRankingEnabled: true });
+
+    const disabled = await service.updateLeague(
+      leagueId,
+      { leagueId, adjustedRankingEnabled: false },
+      admin,
+      { ...META, actorId: admin },
+    );
+    expect(disabled.adjustedRankingEnabled).toBe(false);
+  });
+
+  it("updateLeague: un miembro no puede activar el ranking ajustado (US-30)", async () => {
+    const { leagueId, member } = await makeLeagueWithMember("upadjm");
+    await expect(
+      service.updateLeague(
+        leagueId,
+        { leagueId, adjustedRankingEnabled: true },
+        member,
+        { ...META, actorId: member },
+      ),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("createLeague: el admin puede crear una liga con ranking ajustado activo (US-30)", async () => {
+    const admin = await makeUser("upadjc");
+    const view = await service.createLeague(
+      validInput({
+        name: `Liga ajustada ${suffix}`,
+        adjustedRankingEnabled: true,
+      }),
+      { ...META, actorId: admin },
+    );
+    expect(view.adjustedRankingEnabled).toBe(true);
   });
 
   it("updateLeague: un extraño en una liga privada → NOT_FOUND (no revela)", async () => {

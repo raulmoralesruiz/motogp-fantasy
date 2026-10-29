@@ -54,6 +54,7 @@ Una **liga** es un grupo de usuarios que comparten un ranking. Un usuario puede 
 | Invitar usuarios (si el modo lo permite) | ✅            | ⚠️ solo si el admin lo habilita |
 | Expulsar miembro                         | ✅            | ❌                              |
 | Cambiar nombre/descripción/visibilidad   | ✅            | ❌                              |
+| Activar/desactivar el ranking ajustado   | ✅            | ❌                              |
 | Revocar código / generar nuevo           | ✅            | ❌                              |
 | Cerrar la liga                           | ✅            | ❌                              |
 | Transferir admin                         | ✅            | ❌                              |
@@ -73,12 +74,15 @@ Una **liga** es un grupo de usuarios que comparten un ranking. Un usuario puede 
 - Un usuario que se une a mitad de temporada **empieza con 0 puntos** desde su primer GP jugado en esa liga.
 - No recibe puntos de GPs previos a su entrada (no hay "herencia" de puntos).
 - Su ranking se calcula sobre los GPs en los que estuvo activo.
-- **Opción (configurable por liga):** "ranking ajustado" que solo cuenta GPs desde la entrada del último miembro (para ligas que quieren igualdad). PROVISIONAL: desactivado por defecto.
+- **Elegibilidad por GP:** un miembro cuenta en un GP solo si el **inicio efectivo** del GP (`lockoutAt`, o la fecha del GP si no hay lockout) es **estrictamente posterior** a su entrada. Entrar en el cierre ya no da acceso a ese GP.
+- **Re-entrada:** si un miembro sale y vuelve a unirse, **no recupera** los GPs jugados mientras estuvo fuera (la re-entrada abre un periodo nuevo — ADR-0027/ADR-0028).
+- **Opción (configurable por liga, solo admin):** "ranking ajustado" que, en el **ranking general**, solo cuenta GPs desde la **entrada del último miembro** (corte común, para ligas que quieren igualdad). El ranking **por GP no se ajusta** (cada miembro sigue siendo elegible por su propia entrada). **Desactivado por defecto** en todos los tipos de liga (D-10, ADR-0028).
+- **Desempates coherentes:** los desempates (GPs ganados, último GP, coste total) se calculan sobre el **mismo** conjunto de GPs elegibles, para que un recién llegado no herede ventaja por GPs previos.
 
 ## 8. Rankings
 
-- **Por GP:** quién sumó más puntos en ese GP (entre miembros activos en ese GP).
-- **General (temporada):** suma de puntos de todos los GPs en los que el miembro estuvo activo.
+- **Por GP:** quién sumó más puntos en ese GP (entre los miembros **elegibles** en ese GP — §7).
+- **General (temporada):** suma de puntos de todos los GPs en los que el miembro estuvo activo (elegibles — §7). Si la liga tiene activado el **ranking ajustado** (§7), el general cuenta solo los GPs desde la entrada del último miembro (corte común).
 - **Desempates** (en orden):
   1. Más GPs ganados (por GP).
   2. Mejor puntuación en el último GP.
@@ -108,7 +112,16 @@ Una **liga** es un grupo de usuarios que comparten un ranking. Un usuario puede 
 
 ## 12. Decisiones pendientes
 
-- Si el "ranking ajustado" (solo GPs desde la última entrada) se activa por defecto en algún tipo.
+- ~~Si el "ranking ajustado" (solo GPs desde la última entrada) se activa por defecto en algún tipo.~~ → **Cerrado (D-10, ADR-0028):** desactivado por defecto en **todos** los tipos de liga; es una opción que el admin activa explícitamente por liga.
 - Límite exacto de miembros por tipo de liga.
 - Política exacta de multi-cuenta y self-play.
 - Si las ligas temporales tienen reglas de puntuación propias (no, por el principio de reglas globales — confirmación pendiente).
+
+## 13. Liga de bienvenida (US-31)
+
+- Al **registrarse**, el usuario queda en una **liga pública de bienvenida** (creada/operada por el admin) para no empezar solo.
+- **La liga la configura el servidor** (UUID por env, `WELCOME_LEAGUE_ID`); el cliente **nunca** la elige (AGENTS.md §8). Vacío = bienvenida desactivada (registro normal).
+- Es una **liga pública normal** (US-23/US-24): el admin la crea y la opera como cualquier otra (puede llenarse, cerrarse, etc.).
+- **Atómica con el registro:** el alta en la bienvenida se hace en la **misma transacción** que la creación del usuario. Si la bienvenida no está disponible (liga inexistente, no pública/visible/activa, o **llena**), el registro **rechaza** y **revierte** el usuario (no queda usuario colgado, no se crea sesión).
+- **Concurrencia:** dos registros por la **última plaza** no pueden confirmar ambas (plaza revalidada con `FOR UPDATE`); solo uno confirma la membresía.
+- **Auditoría:** `league.joined` con `via = "welcome"` (distingue el canal de la unión voluntaria).

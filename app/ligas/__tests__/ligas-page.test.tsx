@@ -37,6 +37,7 @@ const LEAGUE = {
   minMembers: 2,
   maxMembers: 50,
   entryMode: "code",
+  adjustedRankingEnabled: false,
   startDate: null,
   endDate: null,
   activeMembers: 3,
@@ -234,6 +235,20 @@ describe("LigasPage (US-23/US-24)", () => {
     expect(screen.getByRole("button", { name: "Crear liga" })).toBeInTheDocument();
   });
 
+  it("muestra el ranking ajustado desactivado por defecto (US-30, D-10)", () => {
+    mockMyLeagues([]);
+    renderLigas(<LigasPage />);
+
+    const checkbox = screen.getByLabelText(/Ranking ajustado/);
+    expect(checkbox).toBeInTheDocument();
+    expect(checkbox).not.toBeChecked();
+    expect(
+      screen.getByText(
+        /El ranking general contará solo los GPs desde la entrada del último miembro/,
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("desactiva el botón de creación sin nombre", () => {
     mockMyLeagues([]);
     renderLigas(<LigasPage />);
@@ -265,6 +280,23 @@ describe("LigasPage (US-23/US-24)", () => {
       minMembers: 3,
       maxMembers: 20,
       entryMode: "invite",
+      adjustedRankingEnabled: false,
+    });
+  });
+
+  it("envía el ranking ajustado activado si el admin lo marca (US-30)", async () => {
+    mockMyLeagues([]);
+    const mutate = mockMutation(trpc.leagues.create.useMutation);
+    renderLigas(<LigasPage />);
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Nombre"), "Liga ajustada");
+    await user.click(screen.getByLabelText(/Ranking ajustado/));
+    await user.click(screen.getByRole("button", { name: "Crear liga" }));
+
+    expect(mutate.mock.calls[0]?.[0]).toMatchObject({
+      name: "Liga ajustada",
+      adjustedRankingEnabled: true,
     });
   });
 

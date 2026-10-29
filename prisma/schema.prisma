@@ -590,6 +590,8 @@ model League {
   // US-26 (leagues.md §5): el admin puede habilitar que los miembros vean/
   // compartan el código de invitación ("invitar solo si el admin lo habilita").
   allowMemberInvites Boolean   @default(false) @map("allow_member_invites")
+  // US-30 (leagues.md §7, D-10): general desde la última entrada; off por defecto.
+  adjustedRankingEnabled Boolean @default(false) @map("adjusted_ranking_enabled")
   startDate   DateTime?        @map("start_date") @db.Timestamptz
   endDate     DateTime?        @map("end_date") @db.Timestamptz
   status      LeagueStatus     @default(planned)
