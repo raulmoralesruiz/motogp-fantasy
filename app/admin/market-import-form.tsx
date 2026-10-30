@@ -118,7 +118,7 @@ export default function MarketImportForm({
           <ul className="status">
             {preview.teams.map((team) => (
               <li key={team.name}>
-                <strong>{team.name}</strong> — constructor: {team.constructor.name}
+                <strong>{team.name}</strong> — constructor: {team.manufacturer.name}
               </li>
             ))}
           </ul>

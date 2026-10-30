@@ -29,7 +29,8 @@ export interface NormalizedTeam {
   /** ID en la fuente (auditoría, mapeo rider_mappings futuro). */
   sourceId: string | null;
   name: string;
-  constructor: NormalizedConstructor;
+  /** Constructor (fabricante de la moto). */
+  manufacturer: NormalizedConstructor;
 }
 
 /** Piloto (mapa a `Rider`: único por `name` en BD). */
@@ -206,7 +207,7 @@ export function normalizePulseLiveMarket(
       teamMap.set(team.name, {
         sourceId: team.id,
         name: team.name,
-        constructor: {
+        manufacturer: {
           sourceId: team.constructor.id,
           name: team.constructor.name,
         },

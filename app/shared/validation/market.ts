@@ -210,7 +210,7 @@ const normalizedTeamSchema = z.object({
     .string()
     .min(1, "El nombre del equipo es obligatorio")
     .max(160, "El nombre del equipo no puede superar los 160 caracteres"),
-  constructor: normalizedConstructorSchema,
+  manufacturer: normalizedConstructorSchema,
 });
 
 /**

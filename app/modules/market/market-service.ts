@@ -691,10 +691,10 @@ export class MarketService {
           teamsSkipped += 1;
           continue;
         }
-        const constructorId = constructorByName.get(team.constructor.name);
+        const constructorId = constructorByName.get(team.manufacturer.name);
         if (!constructorId) {
           throw new MarketNormalizationError(
-            `El equipo «${team.name}» referencia un constructor desconocido «${team.constructor.name}».`,
+            `El equipo «${team.name}» referencia un constructor desconocido «${team.manufacturer.name}».`,
           );
         }
         const created = await tx.team.create({
