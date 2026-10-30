@@ -41,6 +41,8 @@ export default function PricesPanel() {
   const [manualGpId, setManualGpId] = useState("");
   const [manualPrice, setManualPrice] = useState("");
   const [formulaGpId, setFormulaGpId] = useState("");
+  // P0 heurística (ADR-0014): temporada para la clasificación del campeonato.
+  const [p0SeasonId, setP0SeasonId] = useState("");
 
   const assets = trpc.market.prices.list.useQuery({ assetType });
   const history = trpc.market.prices.history.useQuery(
@@ -68,6 +70,14 @@ export default function PricesPanel() {
   });
   const applyFormula = trpc.market.prices.applyFormula.useMutation({
     onSuccess: () => {
+      void history.refetch();
+    },
+  });
+  // P0 heurística desde la clasificación (ADR-0014): recalcula los P0 de
+  // todos los activos y refresca la lista de activos (para ver los nuevos P0).
+  const p0Heuristic = trpc.market.market.p0Heuristic.useMutation({
+    onSuccess: () => {
+      void assets.refetch();
       void history.refetch();
     },
   });
@@ -105,6 +115,51 @@ export default function PricesPanel() {
         en cualquier momento). Abajo ves el histórico de precios del activo elegido.
       </p>
 
+      <h4>P0 automático (heurística de siembra)</h4>
+      <p className="muted">
+        Calcula los P0 de todos los activos a partir de la clasificación del campeonato
+        (posición → precio lineal 30→10; cada posición tiene un precio único; equipos y
+        constructores = media de sus riders). Requiere que el mercado esté importado
+        antes (pilotos, equipos, constructores y afiliaciones). Idempotente:
+        re-ejecutarlo actualiza los P0 (auditado).
+      </p>
+      <div className="field">
+        <label htmlFor="p0Season">Temporada (clasificación)</label>
+        <select
+          id="p0Season"
+          value={p0SeasonId}
+          onChange={(event) => setP0SeasonId(event.target.value)}
+        >
+          <option value="">— Elige una temporada —</option>
+          {seasons.data?.map((season) => (
+            <option key={season.id} value={season.id}>
+              {season.name} ({season.year})
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <Button
+          type="button"
+          disabled={p0SeasonId === "" || p0Heuristic.isPending}
+          onClick={() => p0Heuristic.mutate({ seasonId: p0SeasonId })}
+        >
+          {p0Heuristic.isPending ? "Calculando…" : "Calcular P0 automático"}
+        </Button>
+      </div>
+      {p0Heuristic.isError && (
+        <p className="bad">No se pudo calcular el P0: {p0Heuristic.error.message}</p>
+      )}
+      {p0Heuristic.isSuccess && (
+        <p className="ok">
+          P0 calculado: {p0Heuristic.data.ridersPriced} pilotos,{" "}
+          {p0Heuristic.data.teamsPriced} equipos,{" "}
+          {p0Heuristic.data.constructorsPriced} constructores
+          {" "}(rango {p0Heuristic.data.minPrice}–{p0Heuristic.data.maxPrice}).
+        </p>
+      )}
+
+      <h4>P0 manual</h4>
       <div className="field">
         <label htmlFor="priceAssetType">Tipo de activo</label>
         <select

@@ -34,6 +34,7 @@ import {
   listAssetPricesInputSchema,
   marketDetailInputSchema,
   marketListInputSchema,
+  p0HeuristicInputSchema,
   priceHistoryInputSchema,
   riderIdInputSchema,
   setManualPriceInputSchema,
@@ -254,6 +255,38 @@ export function createMarketRouter(deps: MarketRouterDeps) {
             { actorId: ctx.user.id, ip: ctx.ip },
           ),
         ),
+
+      /**
+       * P0 heurística desde la clasificación del campeonato (ADR-0014):
+       * calcula los precios de apertura (P0) de todos los activos a partir
+       * de la clasificación de la temporada (posición → precio lineal 30→10;
+       * equipos/constructores = media de sus riders). Idempotente (re-ejecutar
+       * actualiza los P0) y auditada (`price.p0_heuristic`). Requiere que el
+       * mercado (activos + afiliaciones) esté importado antes (admin).
+       */
+      p0Heuristic: adminProcedure
+        .input(p0HeuristicInputSchema)
+        .mutation(async ({ ctx, input }) => {
+          try {
+            const season = await prisma.season.findUnique({
+              where: { id: input.seasonId },
+            });
+            if (!season) {
+              throw new TRPCError({
+                code: "NOT_FOUND",
+                message: "La temporada no existe.",
+              });
+            }
+            const standings = await marketSource.fetchStandings(season.year);
+            return await service.calculateP0FromClassification(
+              input.seasonId,
+              standings,
+              { actorId: ctx.user.id, ip: ctx.ip },
+            );
+          } catch (error) {
+            toMarketTrpcError(error);
+          }
+        }),
     }),
   });
 }

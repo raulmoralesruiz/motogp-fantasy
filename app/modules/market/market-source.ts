@@ -71,6 +71,8 @@ export interface NormalizedMarket {
 export interface MarketSource {
   readonly meta: { name: string; version: string };
   fetchSeasonMarket(seasonYear: number): Promise<NormalizedMarket>;
+  /** Clasificación del campeonato (para la heurística de P0, ADR-0014). */
+  fetchStandings(seasonYear: number): Promise<StandingsEntry[]>;
 }
 
 /** Fallo al comunicarse con la fuente (red, HTTP, formato inesperado). */
@@ -341,6 +343,54 @@ export class PulseLiveMarketSource implements MarketSource {
     return normalizePulseLiveMarket(riders, seasonYear, season.id, this.meta);
   }
 
+  /**
+   * Fetch de la clasificación del campeonato (para P0 heurística).
+   *
+   * - `/results/seasons` → temporada por año.
+   * - `/results/categories` → categoría MotoGP.
+   * - `/results/standings?seasonUuid=X&categoryUuid=Y` → clasificación.
+   */
+  async fetchStandings(seasonYear: number): Promise<StandingsEntry[]> {
+    const seasons = await this.getJson<PulseLiveSeason[]>(
+      `${this.baseUrl}/results/seasons`,
+    );
+    const season = seasons.find((candidate) => candidate.year === seasonYear);
+    if (!season) {
+      throw new MarketSourceError(
+        `La fuente no tiene temporada para el año ${seasonYear}.`,
+      );
+    }
+
+    const categories = await this.getJson<PulseLiveCategory[]>(
+      `${this.baseUrl}/results/categories?seasonUuid=${season.id}`,
+    );
+    const motogpCategory = categories.find((c) => c.legacy_id === 3);
+    if (!motogpCategory) {
+      throw new MarketSourceError(
+        "La fuente no tiene la categoría MotoGP para la temporada.",
+      );
+    }
+
+    const standings = await this.getJson<PulseLiveStandingsResponse>(
+      `${this.baseUrl}/results/standings?seasonUuid=${season.id}&categoryUuid=${motogpCategory.id}`,
+    );
+
+    if (!standings.classification || standings.classification.length === 0) {
+      throw new MarketSourceError(
+        `La fuente no tiene clasificación para la temporada ${seasonYear}.`,
+      );
+    }
+
+    return standings.classification.map((entry) => ({
+      position: entry.position,
+      riderFullName: entry.rider.full_name,
+      riderNumber: entry.rider.number,
+      teamName: entry.team?.name ?? "",
+      constructorName: entry.constructor?.name ?? "",
+      points: entry.points ?? 0,
+    }));
+  }
+
   private async getJson<T>(url: string): Promise<T> {
     let response: Response;
     try {
@@ -373,4 +423,39 @@ interface PulseLiveCategory {
   id: string;
   name: string;
   legacy_id: number;
+}
+
+/** Entrada de la clasificación del campeonato. */
+export interface StandingsEntry {
+  position: number;
+  riderFullName: string;
+  riderNumber: number;
+  teamName: string;
+  constructorName: string;
+  points: number;
+}
+
+/** Respuesta cruda de `/results/standings`. */
+interface PulseLiveStandingsResponse {
+  file: string;
+  classification: Array<{
+    id: string;
+    position: number;
+    rider: {
+      id: string;
+      full_name: string;
+      number: number;
+      riders_api_uuid: string;
+    };
+    team?: {
+      id: string;
+      name: string;
+    } | null;
+    constructor?: {
+      id: string;
+      name: string;
+    } | null;
+    points?: number;
+  }>;
+  xmlFile: string;
 }

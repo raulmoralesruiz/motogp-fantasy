@@ -342,6 +342,101 @@ describe("PricesPanel", () => {
   });
 });
 
+describe("PricesPanel · P0 automático (heurística, ADR-0014)", () => {
+  beforeEach(() => resetTrpcMocks());
+
+  it("muestra la sección con el botón desactivado sin temporada", () => {
+    mockSeasons([season]);
+    render(<PricesPanel />);
+
+    expect(screen.getByText("P0 automático (heurística de siembra)")).toBeInTheDocument();
+    expect(screen.getByLabelText("Temporada (clasificación)")).toHaveValue("");
+    expect(
+      screen.getByRole("button", { name: "Calcular P0 automático" }),
+    ).toBeDisabled();
+  });
+
+  it("calcula el P0 automático al elegir temporada y pulsar el botón", async () => {
+    mockSeasons([season]);
+    const mutate = vi.fn();
+    mockResult(trpc.market.market.p0Heuristic.useMutation, {
+      mutate,
+      isPending: false,
+      isError: false,
+    });
+    render(<PricesPanel />);
+
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText("Temporada (clasificación)"), "s1");
+    expect(screen.getByRole("button", { name: "Calcular P0 automático" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Calcular P0 automático" }));
+
+    expect(mutate).toHaveBeenCalledWith({ seasonId: "s1" });
+  });
+
+  it("muestra el resumen del P0 calculado", () => {
+    mockResult(trpc.market.market.p0Heuristic.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      data: {
+        ridersPriced: 32,
+        teamsPriced: 12,
+        constructorsPriced: 5,
+        minPrice: 10,
+        maxPrice: 30,
+      },
+    });
+    render(<PricesPanel />);
+
+    expect(
+      screen.getByText(/P0 calculado: 32 pilotos, 12 equipos, 5 constructores \(rango 10–30\)/),
+    ).toBeInTheDocument();
+  });
+
+  it("muestra el error al no poder calcular el P0", () => {
+    mockResult(trpc.market.market.p0Heuristic.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error: new Error("La fuente no tiene clasificación."),
+    });
+    render(<PricesPanel />);
+
+    expect(
+      screen.getByText("No se pudo calcular el P0: La fuente no tiene clasificación."),
+    ).toBeInTheDocument();
+  });
+
+  it("refresca la lista y el histórico tras calcular (onSuccess → refetch)", async () => {
+    const assetsRefetch = vi.fn();
+    mockAssets([riderAsset], assetsRefetch);
+    const historyRefetch = vi.fn();
+    mockHistory(historyRows, historyRefetch);
+    mockSeasons([season]);
+    mockResult(trpc.market.market.p0Heuristic.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+    });
+    render(<PricesPanel />);
+
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText("Temporada (clasificación)"), "s1");
+    await user.click(screen.getByRole("button", { name: "Calcular P0 automático" }));
+
+    const options =
+      asMockFn(trpc.market.market.p0Heuristic.useMutation).mock.calls[0]?.[0] as {
+        onSuccess?: () => void;
+      };
+    options.onSuccess?.();
+
+    expect(assetsRefetch).toHaveBeenCalledTimes(1);
+    expect(historyRefetch).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("PricesPanel · Precios por GP (US-08)", () => {
   beforeEach(() => resetTrpcMocks());
 

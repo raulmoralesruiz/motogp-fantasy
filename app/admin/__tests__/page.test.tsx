@@ -25,6 +25,16 @@ vi.mock("../calendar-import-form", () => ({
     </button>
   ),
 }));
+// El import de mercado (2 pasos, ADR-0013) se cubre en su propio test file
+// (`market-import-form.test.tsx`): aquí solo interesa el callback `onImported`
+// (refrescar temporadas).
+vi.mock("../market-import-form", () => ({
+  default: ({ onImported }: { onImported: () => void }) => (
+    <button type="button" onClick={onImported}>
+      importar mercado
+    </button>
+  ),
+}));
 
 const admin = {
   username: "admin1",
@@ -250,5 +260,28 @@ describe("AdminPage", () => {
 
     expect(seasonsRefetch).toHaveBeenCalledTimes(1);
     expect(circuitsRefetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("refresca temporadas al importar el mercado", async () => {
+    mockMe(admin);
+    const seasonsRefetch = vi.fn();
+    mockResult(trpc.seasons.list.useQuery, {
+      data: [],
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      refetch: seasonsRefetch,
+    });
+    mockList(trpc.seasons.circuits.list.useQuery, []);
+    mockList(trpc.market.riders.list.useQuery, []);
+    mockList(trpc.market.constructors.list.useQuery, []);
+    mockList(trpc.market.teams.list.useQuery, []);
+    mockList(trpc.market.prices.list.useQuery, []);
+    render(<AdminPage />);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "importar mercado" }));
+
+    expect(seasonsRefetch).toHaveBeenCalledTimes(1);
   });
 });

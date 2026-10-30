@@ -36,3 +36,21 @@ Opción 2. `setRiderAffiliationFrom({ riderId, fromGpId, teamId })`:
 - La operación es **idempotente**: re-ejecutarla no crea ni sobreescribe nada (lo que no existía ya existe; lo que existía se salta).
 - El ajuste fino por GP sigue disponible y es la vía para cambios puntuales, incluido corregir un GP que `setFrom` saltó.
 - Patrón de "relleno idempotente con informe" compartido con el import de calendario (ADR-0012): mismo tratamiento de las entradas parciales (informe, no error).
+
+## Addendum (2026-10-30): afiliaciones automáticas en el import de mercado
+
+**Contexto.** El import de mercado (ADR-0012/US-06) creaba pilotos, equipos y constructores, pero las afiliaciones (rider→equipo por GP) se dejaban para una operación manual "desde el GP X en adelante" por piloto. Para probar la app con amigos, el admin necesita que las afiliaciones se creen **automáticamente** en el import (los pilotos no cambian de equipo a mitad de temporada; el dato ya viene en la API).
+
+**Decisión.** `MarketService.importMarket` ahora crea las afiliaciones de todos los riders importados para **todos los GPs de la temporada**:
+
+- Para cada afiliación normalizada (`riderSourceId → teamSourceId`), resuelve el `riderId` y el `teamId` en BD (por nombre) y crea una fila `riderAffiliation` por cada GP de la temporada (unique `(rider, gp)`; se salta si ya existe).
+- El `constructorId` se deriva del equipo en el servidor (invariante 5: el cliente nunca lo envía).
+- **Idempotente:** re-ejecutar el import no duplica afiliaciones (lo que ya existía se salta y se cuenta en `affiliationsSkipped`).
+- **Auditoría:** el resumen `market.imported` incluye ahora `affiliationsCreated` y `affiliationsSkipped` (además de constructores/equipos/pilotos).
+- El ajuste fino por GP (`setRiderAffiliation`) y "desde el GP X" (`setRiderAffiliationFrom`) siguen disponibles para cambios puntuales (fichajes, correcciones).
+
+**Consecuencias.**
+
+- El import de mercado queda completo en un solo paso: activos + afiliaciones por GP (informe con creados/saltados de cada tipo).
+- La operación es idempotente y auditable; el admin puede corregir cualquier afiliación después con el ajuste fino.
+- Prepara el terreno para la P0 heurística (ADR-0014 addendum), que agrupa los P0 de equipos/constructores por la afiliación en BD.

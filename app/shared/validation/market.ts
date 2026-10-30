@@ -282,6 +282,17 @@ export const importMarketInputSchema = z.object({
   market: normalizedMarketSchema,
 });
 
+/**
+ * P0 heurística desde la clasificación del campeonato (ADR-0014): el admin
+ * dispara el cálculo de los precios de apertura (P0) de todos los activos a
+ * partir de la clasificación de la temporada (posición → precio lineal 30→10,
+ * equipos/constructores = media de sus riders). `seasonId` identifica la
+ * temporada (de la que se toma el año para la clasificación).
+ */
+export const p0HeuristicInputSchema = z.object({
+  seasonId: z.string().uuid("El identificador de temporada no es válido"),
+});
+
 export type NormalizedConstructorInput = z.infer<typeof normalizedConstructorSchema>;
 export type NormalizedTeamInput = z.infer<typeof normalizedTeamSchema>;
 export type NormalizedRiderInput = z.infer<typeof normalizedRiderSchema>;
@@ -289,3 +300,4 @@ export type NormalizedAffiliationInput = z.infer<typeof normalizedAffiliationSch
 export type NormalizedMarketInput = z.infer<typeof normalizedMarketSchema>;
 export type FetchMarketInput = z.infer<typeof fetchMarketInputSchema>;
 export type ImportMarketInput = z.infer<typeof importMarketInputSchema>;
+export type P0HeuristicInput = z.infer<typeof p0HeuristicInputSchema>;

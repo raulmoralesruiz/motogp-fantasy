@@ -46,3 +46,23 @@ Opción 2. `setOpeningPrice({ assetType, assetId, price })` (solo `global_admin`
 - La semántica "mismo valor = no-op sin auditar" es consistente con US-05/US-06 (idempotencia sin ruido de auditoría).
 - US-08 se apoya en este modelo: la fórmula produce filas por GP (unique `(asset, gp)`) y el ajuste manual reutiliza el mismo patrón de auditoría.
 - US-14 (mercado público) reutiliza `getPriceHistory` sin cambios.
+
+## Addendum (2026-10-30): P0 heurística desde la clasificación del campeonato
+
+**Contexto.** Para probar la app con amigos antes de la carrera sprint, el admin necesita fijar el P0 de todos los activos (pilotos, equipos, constructores) sin hacerlo uno a uno. Se añade una **heurística de siembra** que calcula los P0 a partir de la clasificación del campeonato (la temporada está casi al final y se conocen los resultados de casi todas las carreras).
+
+**Decisión.** `MarketService.calculateP0FromClassification(seasonId, standings, meta)` (solo `global_admin`, en transacción):
+
+- El router obtiene la clasificación vía `MarketSource.fetchStandings(year)` (nuevo método del contrato `MarketSource`; `PulseLiveMarketSource` lo implementa contra `/results/standings`) y la pasa al servicio (mismo patrón que `importMarket`: el router hace el I/O de la fuente, el servicio escribe en BD).
+- **Mapeo posición → precio (lineal, 30 → 10):** `P0 = 30 - (posición - 1) * (20 / (n - 1))`, donde `n` = nº de riders en la clasificación. Cada posición tiene un **precio único** (ningún piloto comparte posición; requisito del usuario). Pos 1 → 30, pos `n` → 10.
+- **P0 de equipos/constructores:** media de los P0 de sus riders, agrupados por su **afiliación en BD** (`riderAffiliation`), no por el nombre de la fuente (los nombres de equipo difieren entre `/riders` y `/results/standings`, p. ej. "Honda LCR" vs "Castrol Honda LCR"/"Pro Honda LCR"). Un rider sin afiliación fija su P0 pero no cuenta para su equipo/constructor.
+- **Upsert** de cada P0 (fila `gpId = null`): no existe → crea; existe con otro valor → actualiza. `reason = formula` (lo produce una heurística determinística, no una entrada manual), `createdBy = actor`, `rulesVersion = null`.
+- **Idempotente:** re-ejecutarla actualiza los P0 (no duplica filas; el índice parcial único garantiza ≤1 fila de P0 por activo).
+- **Auditoría:** una única entrada `price.p0_heuristic` (entidad `price`, `entityId` = `seasonId`) con resumen `{ ridersPriced, teamsPriced, constructorsPriced, maxPrice, minPrice }`.
+- **Requisito previo:** el mercado (activos + afiliaciones) debe estar importado antes (los P0 de equipos/constructores dependen de las afiliaciones).
+
+**Consecuencias.**
+
+- Cero migraciones: reutiliza la tabla `prices` y el índice parcial único de P0.
+- El P0 heurístico es una **siembra inicial**: el admin puede corregir cualquier P0 después con `setOpeningPrice` (manual, auditado) sin conflicto.
+- La heurística es transparente y reproducible (posición → precio lineal; media de riders para grupos), y queda registrada en el `audit_log` con el actor y el resumen.

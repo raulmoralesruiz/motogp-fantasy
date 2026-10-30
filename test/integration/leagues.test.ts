@@ -27,7 +27,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 
 import { InMemoryRateLimitStore } from "../../app/modules/identity";
-import { LeagueService } from "../../app/modules/leagues";
+import {
+  LeagueService,
+  addLeagueMemberInTransaction,
+} from "../../app/modules/leagues";
 import { INVITE_CODE_ALPHABET } from "../../app/modules/leagues/core";
 import { createPrisma, integrationDbUrl } from "./helpers";
 
@@ -2656,5 +2659,98 @@ describe("US-26 · Permisos de liga (admin/miembro) (PostgreSQL real)", () => {
     await expect(
       service.rotateCode(leagueId, member, { ...META, actorId: member }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+});
+
+describe("US-25 · addLeagueMemberInTransaction (guardas defensivas bajo lock)", () => {
+  let prisma: PrismaClient;
+  let service: LeagueService;
+  const suffix = randomUUID().slice(0, 8);
+
+  beforeAll(() => {
+    prisma = createPrisma();
+    service = new LeagueService({ prisma });
+  });
+
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  it("leaveLeague: liga inexistente → NOT_FOUND", async () => {
+    const user = (
+      await prisma.user.create({
+        data: {
+          email: `lv-${suffix}@test.local`,
+          passwordHash: "h",
+          username: `lv_${suffix}`,
+        },
+      })
+    ).id;
+
+    await expect(
+      service.leaveLeague(randomUUID(), user, { ...META, actorId: user }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND", message: "La liga no existe." });
+  });
+
+  it("liga inexistente → NOT_FOUND (revalidación bajo lock)", async () => {
+    const user = (
+      await prisma.user.create({
+        data: {
+          email: `am-${suffix}@test.local`,
+          passwordHash: "h",
+          username: `am_${suffix}`,
+        },
+      })
+    ).id;
+
+    await expect(
+      prisma.$transaction(async (tx) =>
+        addLeagueMemberInTransaction(tx, {
+          leagueId: randomUUID(),
+          userId: user,
+          actorId: user,
+          ip: "127.0.0.1",
+          via: "open",
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "NOT_FOUND", message: "La liga no existe." });
+  });
+
+  it("liga finalizada (status ≠ active) → 'La liga no acepta entradas.'", async () => {
+    const league = await prisma.league.create({
+      data: {
+        name: `Liga finalizada ${suffix}`,
+        type: "public",
+        visibility: "public",
+        status: "finished",
+        minMembers: 2,
+        maxMembers: 50,
+        entryMode: "code",
+      },
+    });
+    const joiner = (
+      await prisma.user.create({
+        data: {
+          email: `amj-${suffix}@test.local`,
+          passwordHash: "h",
+          username: `amj_${suffix}`,
+        },
+      })
+    ).id;
+
+    await expect(
+      prisma.$transaction(async (tx) =>
+        addLeagueMemberInTransaction(tx, {
+          leagueId: league.id,
+          userId: joiner,
+          actorId: joiner,
+          ip: "127.0.0.1",
+          via: "open",
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "La liga no acepta entradas.",
+    });
   });
 });

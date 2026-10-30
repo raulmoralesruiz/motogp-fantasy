@@ -22,6 +22,14 @@ function makePrisma() {
   const gp = { findUnique: vi.fn(), findMany: vi.fn() };
   const riderAffiliation = {
     findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+  };
+  const season = { findUnique: vi.fn() };
+  const price = {
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
   };
@@ -32,6 +40,8 @@ function makePrisma() {
     team,
     gp,
     riderAffiliation,
+    season,
+    price,
     auditLog,
     $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(prisma)),
   };
@@ -42,6 +52,8 @@ function makePrisma() {
     team,
     gp,
     riderAffiliation,
+    season,
+    price,
     auditLog,
   };
 }
@@ -255,5 +267,212 @@ describe("MarketService.setRiderAffiliationFrom (T-24)", () => {
         meta,
       ),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+});
+
+// ── P0 heurística desde clasificación (ADR-0014) ────────────────────────────
+
+const seasonRow = { id: "s1", year: 2026, name: "Temporada 2026" };
+
+/** Clasificación de 3 riders (posiciones 1, 2, 3). */
+const standings3 = [
+  {
+    position: 1,
+    riderFullName: "Rider One",
+    riderNumber: 1,
+    teamName: "Team A",
+    constructorName: "Ctor A",
+    points: 300,
+  },
+  {
+    position: 2,
+    riderFullName: "Rider Two",
+    riderNumber: 2,
+    teamName: "Team A",
+    constructorName: "Ctor A",
+    points: 200,
+  },
+  {
+    position: 3,
+    riderFullName: "Rider Three",
+    riderNumber: 3,
+    teamName: "Team B",
+    constructorName: "Ctor B",
+    points: 100,
+  },
+];
+
+describe("MarketService.calculateP0FromClassification (ADR-0014)", () => {
+  it("temporada inexistente → NOT_FOUND", async () => {
+    const fake = makePrisma();
+    fake.season.findUnique.mockResolvedValue(null);
+    const service = new MarketService({ prisma: fake.prisma });
+
+    await expect(
+      service.calculateP0FromClassification("nope", standings3, meta),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("clasificación vacía → error de normalización", async () => {
+    const fake = makePrisma();
+    fake.season.findUnique.mockResolvedValue(seasonRow);
+    const service = new MarketService({ prisma: fake.prisma });
+
+    await expect(
+      service.calculateP0FromClassification("s1", [], meta),
+    ).rejects.toThrow(/clasificación/);
+  });
+
+  it(
+    "calcula P0 de riders (lineal 30→10), equipos y constructores (media), " +
+      "y audita `price.p0_heuristic`",
+    async () => {
+      const fake = makePrisma();
+      fake.season.findUnique.mockResolvedValue(seasonRow);
+      // Riders en BD (por nombre).
+      fake.rider.findUnique.mockImplementation(async ({ where }) => {
+        const byName = new Map([
+          ["Rider One", { id: "r1", name: "Rider One" }],
+          ["Rider Two", { id: "r2", name: "Rider Two" }],
+          ["Rider Three", { id: "r3", name: "Rider Three" }],
+        ]);
+        return byName.get(where.name) ?? null;
+      });
+      // Sin P0 existente → se crea.
+      fake.price.findFirst.mockResolvedValue(null);
+      fake.price.create.mockResolvedValue({ id: "p1" });
+      // Afiliaciones: r1/r2 en Team A (Ctor A), r3 en Team B (Ctor B).
+      fake.riderAffiliation.findFirst.mockImplementation(async ({ where }) => {
+        const byRider = new Map([
+          ["r1", { teamId: "t1", constructorId: "c1" }],
+          ["r2", { teamId: "t1", constructorId: "c1" }],
+          ["r3", { teamId: "t2", constructorId: "c2" }],
+        ]);
+        return byRider.get(where.riderId) ?? null;
+      });
+      const service = new MarketService({ prisma: fake.prisma });
+
+      const result = await service.calculateP0FromClassification(
+        "s1",
+        standings3,
+        meta,
+      );
+
+      // Riders: pos 1 → 30, pos 2 → 20, pos 3 → 10.
+      expect(result).toMatchObject({
+        ridersPriced: 3,
+        teamsPriced: 2,
+        constructorsPriced: 2,
+        maxPrice: 30,
+        minPrice: 10,
+      });
+      // P0 de riders.
+      const riderCreates = fake.price.create.mock.calls
+        .map((call) => call[0].data)
+        .filter((d) => d.assetType === "rider");
+      expect(riderCreates).toEqual([
+        expect.objectContaining({ assetId: "r1", price: 30, reason: "formula" }),
+        expect.objectContaining({ assetId: "r2", price: 20, reason: "formula" }),
+        expect.objectContaining({ assetId: "r3", price: 10, reason: "formula" }),
+      ]);
+      // P0 de equipos (media de sus riders): Team A = (30+20)/2 = 25, Team B = 10.
+      const teamCreates = fake.price.create.mock.calls
+        .map((call) => call[0].data)
+        .filter((d) => d.assetType === "team");
+      expect(teamCreates).toEqual([
+        expect.objectContaining({ assetId: "t1", price: 25 }),
+        expect.objectContaining({ assetId: "t2", price: 10 }),
+      ]);
+      // P0 de constructores: Ctor A = 25, Ctor B = 10.
+      const ctorCreates = fake.price.create.mock.calls
+        .map((call) => call[0].data)
+        .filter((d) => d.assetType === "constructor");
+      expect(ctorCreates).toEqual([
+        expect.objectContaining({ assetId: "c1", price: 25 }),
+        expect.objectContaining({ assetId: "c2", price: 10 }),
+      ]);
+      // Auditoría `price.p0_heuristic` con resumen (los campos van en `data`).
+      expect(fake.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action: "price.p0_heuristic",
+            afterData: expect.objectContaining({
+              ridersPriced: 3,
+              teamsPriced: 2,
+              constructorsPriced: 2,
+            }),
+          }),
+        }),
+      );
+    },
+  );
+
+  it("rider sin afiliación → su P0 se fija pero no cuenta para equipo/constructor", async () => {
+    const fake = makePrisma();
+    fake.season.findUnique.mockResolvedValue(seasonRow);
+    fake.rider.findUnique.mockImplementation(async ({ where }) => {
+      const byName = new Map([
+        ["Rider One", { id: "r1", name: "Rider One" }],
+        ["Rider Two", { id: "r2", name: "Rider Two" }],
+      ]);
+      return byName.get(where.name) ?? null;
+    });
+    fake.price.findFirst.mockResolvedValue(null);
+    fake.price.create.mockResolvedValue({ id: "p1" });
+    // Solo r1 tiene afiliación; r2 no.
+    fake.riderAffiliation.findFirst.mockImplementation(async ({ where }) => {
+      if (where.riderId === "r1") return { teamId: "t1", constructorId: "c1" };
+      return null;
+    });
+    const service = new MarketService({ prisma: fake.prisma });
+
+    const result = await service.calculateP0FromClassification(
+      "s1",
+      [standings3[0]!, standings3[1]!],
+      meta,
+    );
+
+    expect(result).toMatchObject({
+      ridersPriced: 2,
+      teamsPriced: 1,
+      constructorsPriced: 1,
+    });
+    // Team A solo cuenta r1 (30) → P0 = 30 (no la media de 30 y 20).
+    const teamCreates = fake.price.create.mock.calls
+      .map((call) => call[0].data)
+      .filter((d) => d.assetType === "team");
+    expect(teamCreates).toEqual([
+      expect.objectContaining({ assetId: "t1", price: 30 }),
+    ]);
+  });
+
+  it("P0 existente con otro valor → se actualiza (no se duplica)", async () => {
+    const fake = makePrisma();
+    fake.season.findUnique.mockResolvedValue(seasonRow);
+    fake.rider.findUnique.mockImplementation(async ({ where }) => {
+      const byName = new Map([["Rider One", { id: "r1", name: "Rider One" }]]);
+      return byName.get(where.name) ?? null;
+    });
+    // P0 existente con otro valor.
+    fake.price.findFirst.mockResolvedValue({ id: "p1", price: 15 });
+    fake.price.update.mockResolvedValue({ id: "p1" });
+    fake.riderAffiliation.findFirst.mockResolvedValue(null);
+    const service = new MarketService({ prisma: fake.prisma });
+
+    const result = await service.calculateP0FromClassification(
+      "s1",
+      [standings3[0]!],
+      meta,
+    );
+
+    expect(result).toMatchObject({ ridersPriced: 1 });
+    // Se actualiza (no se crea).
+    expect(fake.price.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "p1" },
+        data: expect.objectContaining({ price: 30, reason: "formula" }),
+      }),
+    );
+    expect(fake.price.create).not.toHaveBeenCalled();
   });
 });

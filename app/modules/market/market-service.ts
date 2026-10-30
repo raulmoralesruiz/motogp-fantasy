@@ -41,6 +41,7 @@ import type {
 import { appendAudit } from "@/modules/admin";
 import {
   type NormalizedMarket,
+  type StandingsEntry,
   MarketNormalizationError,
 } from "./market-source";
 
@@ -657,8 +658,6 @@ export class MarketService {
       let teamsSkipped = 0;
       let ridersCreated = 0;
       let ridersSkipped = 0;
-      const affiliationsCreated = 0;
-      const affiliationsSkipped = 0;
 
       // Mapeo: name → id (BD) para constructores y equipos.
       const constructorByName = new Map<string, string>();
@@ -704,25 +703,84 @@ export class MarketService {
         teamsCreated += 1;
       }
 
-      // 3) Pilotos (únicos por name).
+      // 3) Pilotos (únicos por name). Mapeo: fullName → id (BD).
+      const riderByName = new Map<string, string>();
       for (const rider of normalized.riders) {
         const fullName = `${rider.name} ${rider.surname}`.trim();
         const existing = await tx.rider.findUnique({
           where: { name: fullName },
         });
         if (existing) {
+          riderByName.set(fullName, existing.id);
           ridersSkipped += 1;
           continue;
         }
-        await tx.rider.create({
+        const created = await tx.rider.create({
           data: { name: fullName, number: rider.number ?? null },
         });
+        riderByName.set(fullName, created.id);
         ridersCreated += 1;
       }
 
-      // 4) Afiliaciones (rider→equipo por GP — pero aquí no tenemos GPs).
-      //    Las afiliaciones se crean "desde el GP X en adelante" (setRiderAffiliationFrom).
-      //    Por ahora, solo reportamos: el admin debe ejecutar "desde GP 1" manualmente.
+      // 4) Afiliaciones (rider→equipo para todos los GPs de la temporada).
+      const gps = await tx.gp.findMany({
+        where: { seasonId },
+        orderBy: { round: "asc" },
+      });
+
+      // Mapeo: riderSourceId → fullName (para buscar en riderByName).
+      const riderSourceToName = new Map<string, string>();
+      for (const rider of normalized.riders) {
+        if (rider.sourceId) {
+          const fullName = `${rider.name} ${rider.surname}`.trim();
+          riderSourceToName.set(rider.sourceId, fullName);
+        }
+      }
+
+      // Mapeo: teamSourceId → teamName (para buscar en teamByName).
+      const teamSourceToName = new Map<string, string>();
+      for (const team of normalized.teams) {
+        if (team.sourceId) {
+          teamSourceToName.set(team.sourceId, team.name);
+        }
+      }
+
+      let affiliationsCreated = 0;
+      let affiliationsSkipped = 0;
+
+      for (const aff of normalized.affiliations) {
+        const riderName = riderSourceToName.get(aff.riderSourceId);
+        const teamName = teamSourceToName.get(aff.teamSourceId);
+        if (!riderName || !teamName) continue;
+
+        const riderId = riderByName.get(riderName);
+        const teamId = teamByName.get(teamName);
+        if (!riderId || !teamId) continue;
+
+        const teamRow = await tx.team.findUnique({
+          where: { id: teamId },
+        });
+        if (!teamRow) continue;
+
+        for (const gp of gps) {
+          const existing = await tx.riderAffiliation.findUnique({
+            where: { riderId_gpId: { riderId, gpId: gp.id } },
+          });
+          if (existing) {
+            affiliationsSkipped += 1;
+            continue;
+          }
+          await tx.riderAffiliation.create({
+            data: {
+              riderId,
+              teamId,
+              constructorId: teamRow.constructorId,
+              gpId: gp.id,
+            },
+          });
+          affiliationsCreated += 1;
+        }
+      }
 
       await appendAudit(tx, {
         actorId: meta.actorId,
@@ -739,6 +797,8 @@ export class MarketService {
           teamsSkipped,
           ridersCreated,
           ridersSkipped,
+          affiliationsCreated,
+          affiliationsSkipped,
         },
         ip: meta.ip,
       });
@@ -754,6 +814,211 @@ export class MarketService {
         ridersSkipped,
         affiliationsCreated,
         affiliationsSkipped,
+      };
+    });
+  }
+
+  // ── P0 heurística desde clasificación (ADR-0014) ─────────────────────────
+
+  /**
+   * Calcula P0 (precio de apertura) basado en la clasificación del campeonato
+   * (heurística de siembra, ADR-0014):
+   *
+   * - `standings` (clasificación de la temporada, ya normalizada por la
+   *   fuente — la obtiene el router vía `MarketSource.fetchStandings`).
+   * - Mapeo posición → precio (lineal, 30 → 10):
+   *   `P0 = 30 - (posición - 1) * (20 / (n - 1))`, donde `n` = nº de riders.
+   *   Cada posición tiene un precio único (ningún piloto comparte posición).
+   * - P0 de equipos/constructores: media de los P0 de sus riders, agrupados
+   *   por su afiliación en BD (más robusto que mapear por nombre de fuente,
+   *   que difiere entre los endpoints `/riders` y `/results/standings`).
+   * - Crea/actualiza los precios P0 en BD (idempotente, `reason = formula`).
+   *
+   * Auditoría: `price.p0_heuristic` con resumen (entityId = seasonId).
+   */
+  async calculateP0FromClassification(
+    seasonId: string,
+    standings: StandingsEntry[],
+    meta: AuditMeta,
+  ): Promise<{
+    ridersPriced: number;
+    teamsPriced: number;
+    constructorsPriced: number;
+    maxPrice: number;
+    minPrice: number;
+  }> {
+    const season = await this.deps.prisma.season.findUnique({
+      where: { id: seasonId },
+    });
+    if (!season) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "La temporada no existe.",
+      });
+    }
+
+    if (standings.length === 0) {
+      throw new MarketNormalizationError(
+        `La clasificación de la temporada ${season.year} está vacía.`,
+      );
+    }
+
+    // Mapeo posición → precio (lineal, 30 → 10).
+    const n = standings.length;
+    const maxPrice = 30;
+    const minPrice = 10;
+    const step = n > 1 ? (maxPrice - minPrice) / (n - 1) : 0;
+
+    // Mapeo: riderName → P0.
+    const riderP0 = new Map<string, number>();
+    for (const entry of standings) {
+      const price = Math.round((maxPrice - (entry.position - 1) * step) * 100) / 100;
+      riderP0.set(entry.riderFullName, price);
+    }
+
+    return this.deps.prisma.$transaction(async (tx) => {
+      let ridersPriced = 0;
+      // Agrupación por equipo/constructor (vía afiliación en BD, robusta).
+      const teamP0 = new Map<string, number[]>(); // teamId → [P0]
+      const constructorP0 = new Map<string, number[]>(); // ctorId → [P0]
+
+      // 1) P0 de riders (+ agrupación para equipos/constructores).
+      for (const [riderName, price] of riderP0) {
+        const rider = await tx.rider.findUnique({
+          where: { name: riderName },
+        });
+        if (!rider) continue;
+
+        // Upsert P0 (gp_id = NULL). `findFirst` (no `findUnique`): el `where`
+        // compuesto de Prisma no acepta `gpId: null`; el índice parcial único
+        // garantiza ≤1 fila (mismo patrón que `PriceService.setOpeningPrice`).
+        const existing = await tx.price.findFirst({
+          where: {
+            assetType: "rider",
+            assetId: rider.id,
+            gpId: null,
+          },
+        });
+        if (existing) {
+          await tx.price.update({
+            where: { id: existing.id },
+            data: { price, reason: "formula", createdBy: meta.actorId },
+          });
+        } else {
+          await tx.price.create({
+            data: {
+              assetType: "rider",
+              assetId: rider.id,
+              gpId: null,
+              price,
+              reason: "formula",
+              rulesVersion: null,
+              createdBy: meta.actorId,
+            },
+          });
+        }
+        ridersPriced += 1;
+
+        // Agrupar el P0 por equipo/constructor del rider (afiliación en BD).
+        const affiliation = await tx.riderAffiliation.findFirst({
+          where: { riderId: rider.id },
+        });
+        if (affiliation) {
+          const teamPrices = teamP0.get(affiliation.teamId) ?? [];
+          teamPrices.push(price);
+          teamP0.set(affiliation.teamId, teamPrices);
+          const ctorPrices =
+            constructorP0.get(affiliation.constructorId) ?? [];
+          ctorPrices.push(price);
+          constructorP0.set(affiliation.constructorId, ctorPrices);
+        }
+      }
+
+      // 2) P0 de equipos (media de los P0 de sus riders).
+      let teamsPriced = 0;
+      for (const [teamId, prices] of teamP0) {
+        const avgPrice =
+          Math.round(
+            (prices.reduce((sum, p) => sum + p, 0) / prices.length) * 100,
+          ) / 100;
+        const existing = await tx.price.findFirst({
+          where: { assetType: "team", assetId: teamId, gpId: null },
+        });
+        if (existing) {
+          await tx.price.update({
+            where: { id: existing.id },
+            data: { price: avgPrice, reason: "formula", createdBy: meta.actorId },
+          });
+        } else {
+          await tx.price.create({
+            data: {
+              assetType: "team",
+              assetId: teamId,
+              gpId: null,
+              price: avgPrice,
+              reason: "formula",
+              rulesVersion: null,
+              createdBy: meta.actorId,
+            },
+          });
+        }
+        teamsPriced += 1;
+      }
+
+      // 3) P0 de constructores (media de los P0 de sus riders).
+      let constructorsPriced = 0;
+      for (const [constructorId, prices] of constructorP0) {
+        const avgPrice =
+          Math.round(
+            (prices.reduce((sum, p) => sum + p, 0) / prices.length) * 100,
+          ) / 100;
+        const existing = await tx.price.findFirst({
+          where: { assetType: "constructor", assetId: constructorId, gpId: null },
+        });
+        if (existing) {
+          await tx.price.update({
+            where: { id: existing.id },
+            data: { price: avgPrice, reason: "formula", createdBy: meta.actorId },
+          });
+        } else {
+          await tx.price.create({
+            data: {
+              assetType: "constructor",
+              assetId: constructorId,
+              gpId: null,
+              price: avgPrice,
+              reason: "formula",
+              rulesVersion: null,
+              createdBy: meta.actorId,
+            },
+          });
+        }
+        constructorsPriced += 1;
+      }
+
+      await appendAudit(tx, {
+        actorId: meta.actorId,
+        action: "price.p0_heuristic",
+        entity: "price",
+        entityId: seasonId,
+        beforeData: null,
+        afterData: {
+          seasonId,
+          ridersPriced,
+          teamsPriced,
+          constructorsPriced,
+          maxPrice,
+          minPrice,
+        },
+        ip: meta.ip,
+      });
+
+      return {
+        ridersPriced,
+        teamsPriced,
+        constructorsPriced,
+        maxPrice,
+        minPrice,
       };
     });
   }
