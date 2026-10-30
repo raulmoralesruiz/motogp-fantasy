@@ -50,6 +50,15 @@ export default function AffiliationsPanel({
   const busy = setFrom.isPending || set.isPending;
   const canAssign = riderId !== "" && teamId !== "" && gpId !== "";
 
+  // Las afiliaciones se muestran en el contexto de la temporada seleccionada
+  // (los pilotos son globales y acumulan afiliaciones por temporada; sin el
+  // filtro, la lista mezclaría temporadas y parecería "duplicada").
+  const scopedAffiliations = riderDetail.data
+    ? riderDetail.data.affiliations.filter(
+        (affiliation) => affiliation.gp.seasonId === seasonId,
+      )
+    : [];
+
   function onSeasonChange(value: string) {
     setSeasonId(value);
     setGpId("");
@@ -195,11 +204,17 @@ export default function AffiliationsPanel({
             <p className="bad">
               No se pudieron cargar las afiliaciones: {riderDetail.error.message}
             </p>
-          ) : riderDetail.data.affiliations.length === 0 ? (
-            <p className="muted">Este piloto aún no tiene afiliaciones.</p>
+          ) : seasonId === "" ? (
+            <p className="muted">
+              Elige una temporada para ver las afiliaciones del piloto.
+            </p>
+          ) : scopedAffiliations.length === 0 ? (
+            <p className="muted">
+              Este piloto aún no tiene afiliaciones para esta temporada.
+            </p>
           ) : (
             <ul className="status">
-              {riderDetail.data.affiliations.map((affiliation) => (
+              {scopedAffiliations.map((affiliation) => (
                 <li key={affiliation.id}>
                   Ronda {affiliation.gp.round} — {affiliation.gp.name}:{" "}
                   <strong>{affiliation.team.name}</strong> (

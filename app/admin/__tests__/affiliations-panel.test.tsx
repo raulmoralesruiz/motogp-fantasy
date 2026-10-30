@@ -284,7 +284,88 @@ describe("AffiliationsPanel", () => {
     ).toBeInTheDocument();
   });
 
-  it("muestra las afiliaciones actuales del piloto", async () => {
+  it("muestra las afiliaciones actuales del piloto (de la temporada elegida)", async () => {
+    mockGps();
+    mockResult(trpc.market.riders.get.useQuery, {
+      data: riderDetail,
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      refetch: vi.fn(),
+    });
+    render(<AffiliationsPanel riders={[rider]} teams={[team]} seasons={[season]} />);
+
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText("Temporada"), "s1");
+    await user.selectOptions(screen.getByLabelText("Piloto"), "r1");
+
+    expect(screen.getByText("Afiliaciones actuales")).toBeInTheDocument();
+    expect(screen.getByText(/Ronda 1 — GP de España:/)).toBeInTheDocument();
+    expect(screen.getByText("Ducati Lenovo Team")).toBeInTheDocument();
+  });
+
+  it("filtra las afiliaciones por la temporada elegida (no mezcla otras temporadas)", async () => {
+    // El piloto tiene afiliaciones en s1 y s2 (otro año): el panel solo debe
+    // mostrar las de la temporada seleccionada (regresión: antes se veían
+    // todas, lo que parecía una "duplicación" por temporada).
+    mockGps();
+    mockResult(trpc.market.riders.get.useQuery, {
+      data: {
+        rider,
+        affiliations: [
+          {
+            id: "a1",
+            riderId: "r1",
+            teamId: "t1",
+            constructorId: "c1",
+            gpId: "g1",
+            gp: {
+              id: "g1",
+              seasonId: "s1",
+              round: 1,
+              name: "GP de España",
+              date: new Date("2026-04-19T14:00:00Z"),
+            },
+            team: { id: "t1", name: "Ducati Lenovo Team" },
+            manufacturer: { id: "c1", name: "Ducati" },
+          },
+          {
+            id: "a2",
+            riderId: "r1",
+            teamId: "t1",
+            constructorId: "c1",
+            gpId: "g9",
+            gp: {
+              id: "g9",
+              seasonId: "s2",
+              round: 1,
+              name: "GP de España 2027",
+              date: new Date("2027-04-19T14:00:00Z"),
+            },
+            team: { id: "t1", name: "Ducati Lenovo Team" },
+            manufacturer: { id: "c1", name: "Ducati" },
+          },
+        ],
+      },
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      refetch: vi.fn(),
+    });
+    render(
+      <AffiliationsPanel riders={[rider]} teams={[team]} seasons={[season, secondSeason]} />,
+    );
+
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText("Temporada"), "s1");
+    await user.selectOptions(screen.getByLabelText("Piloto"), "r1");
+
+    // Solo la afiliación de s1; la de s2 (otro año) no se muestra.
+    expect(screen.getByText(/Ronda 1 — GP de España:/)).toBeInTheDocument();
+    expect(screen.queryByText(/GP de España 2027/)).not.toBeInTheDocument();
+  });
+
+  it("pide elegir temporada antes de mostrar las afiliaciones", async () => {
     mockGps();
     mockResult(trpc.market.riders.get.useQuery, {
       data: riderDetail,
@@ -298,9 +379,9 @@ describe("AffiliationsPanel", () => {
     const user = userEvent.setup();
     await user.selectOptions(screen.getByLabelText("Piloto"), "r1");
 
-    expect(screen.getByText("Afiliaciones actuales")).toBeInTheDocument();
-    expect(screen.getByText(/Ronda 1 — GP de España:/)).toBeInTheDocument();
-    expect(screen.getByText("Ducati Lenovo Team")).toBeInTheDocument();
+    expect(
+      screen.getByText("Elige una temporada para ver las afiliaciones del piloto."),
+    ).toBeInTheDocument();
   });
 
   it("muestra «Consultando…» mientras carga las afiliaciones", async () => {
@@ -313,7 +394,7 @@ describe("AffiliationsPanel", () => {
     expect(screen.getByText("Consultando…")).toBeInTheDocument();
   });
 
-  it("muestra el estado vacío de afiliaciones", async () => {
+  it("muestra el estado vacío de afiliaciones (temporada elegida, sin afiliaciones)", async () => {
     mockGps();
     mockResult(trpc.market.riders.get.useQuery, {
       data: { rider, affiliations: [] },
@@ -325,9 +406,12 @@ describe("AffiliationsPanel", () => {
     render(<AffiliationsPanel riders={[rider]} teams={[team]} seasons={[season]} />);
 
     const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText("Temporada"), "s1");
     await user.selectOptions(screen.getByLabelText("Piloto"), "r1");
 
-    expect(screen.getByText("Este piloto aún no tiene afiliaciones.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Este piloto aún no tiene afiliaciones para esta temporada."),
+    ).toBeInTheDocument();
   });
 
   it("muestra el error al cargar las afiliaciones", async () => {
