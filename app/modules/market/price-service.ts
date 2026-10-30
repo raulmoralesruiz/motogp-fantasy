@@ -48,12 +48,12 @@ import type {
 
 import { appendAudit } from "@/modules/admin";
 import {
-  PMAX_GROUP,
-  PMAX_RIDER,
   PRICING_VERSION,
   computeNextPrice,
   perf,
+  type PricingRules,
 } from "@/modules/economy";
+import { seasonRulesSchema } from "@/shared/validation/season-rules";
 import {
   WINNER_BONUS,
   groupTopTwoAverage,
@@ -725,6 +725,9 @@ export class PriceService {
             "El GP no tiene resultados definitivos; la fórmula se aplica tras el cierre definitivo del GP.",
         });
       }
+      // Reglas de precios de la temporada (Pmax — `season_rules`, ADR-0030/T-25).
+      const pricingRules = await this.getSeasonPricingRules(tx, gp.seasonId);
+
       // GPs fuente: r, r−1, r−2 (solo los que existen en la temporada).
       const sourceRounds = [gp.round, gp.round - 1, gp.round - 2].filter(
         (round) => round >= 1,
@@ -829,7 +832,9 @@ export class PriceService {
           skippedNoOpening += 1;
           continue;
         }
-        const pmax = asset.type === "rider" ? PMAX_RIDER : PMAX_GROUP;
+        const pmax = asset.type === "rider"
+          ? pricingRules.pmaxRider
+          : pricingRules.pmaxGroup;
         const pointsMap =
           asset.type === "rider"
             ? pointsByGp
@@ -1025,6 +1030,28 @@ export class PriceService {
   }
 
   // ── Interno ──
+
+  /**
+   * Lee las reglas de precios (Pmax) de la temporada: la versión más reciente
+   * de `season_rules` (mismo patrón que `ResultsService.recalculateGp`).
+   */
+  private async getSeasonPricingRules(
+    tx: Prisma.TransactionClient,
+    seasonId: string,
+  ): Promise<PricingRules> {
+    const rule = await tx.seasonRule.findFirst({
+      where: { seasonId },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!rule) {
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "La temporada no tiene reglas publicadas.",
+      });
+    }
+    const parsed = seasonRulesSchema.parse(rule.rules);
+    return parsed.pricing;
+  }
 
   /** El activo del tipo dado existe. */
   private async findAsset(

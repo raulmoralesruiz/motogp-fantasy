@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { Prisma } from "@prisma/client";
 import { PrismaClient } from "@prisma/client";
 import type {
   Constructor,
@@ -14,6 +15,7 @@ import type {
   WeekendEvent,
 } from "@prisma/client";
 
+import type { SeasonRules } from "../../app/shared/validation/season-rules";
 import type { EmailSender } from "../../app/modules/identity";
 
 /**
@@ -65,6 +67,38 @@ export async function seedWorld(prisma: PrismaClient): Promise<World> {
   const suffix = randomUUID().slice(0, 8);
   const season = await prisma.season.create({
     data: { name: `Temporada ${suffix}`, year: 2099 },
+  });
+  // Reglas de la temporada (T-25: Pmax desde season_rules).
+  const rules: SeasonRules = {
+    rulesVersion: "test-v1",
+    economy: { option: "E", B: 100, t: 0.25, cmax: 8 },
+    pricing: { pmaxRider: 30, pmaxGroup: 30 },
+    scoring: {
+      q2: { "1": 12, "2": 8, "3": 8, "4": 5, "5": 5, "6": 5, "7": 3, "8": 3, "9": 3, "10": 3, "11": 3, "12": 3, "13": 1, "14": 1, "15": 1, "16": 1, "17": 1, "18": 1, "19": 1, "20": 1 },
+      sprint: { "1": 12, "2": 9, "3": 7, "4": 6, "5": 5, "6": 4, "7": 3, "8": 2, "9": 1 },
+      mainRace: { "1": 25, "2": 20, "3": 16, "4": 13, "5": 11, "6": 10, "7": 9, "8": 8, "9": 7, "10": 6, "11": 5, "12": 4, "13": 3, "14": 2, "15": 1 },
+      winnerBonus: 5,
+      fastestLapBonus: 3,
+      poleBonus: 2,
+      positionsGainedBonus: 1,
+      positionsGainedMax: 3,
+      extraordinaryBonus: 5,
+      dnfPenalty: 5,
+      dqPenalty: 10,
+      timePenalty: 2,
+      goldWeight: 1.0,
+      silverWeight: 0.5,
+    },
+    limits: { maxPerConstructor: 2, maxPerTeam: 2 },
+    transfers: { perGp: 2, injuryExemption: true, wildcardsPerSeason: 1 },
+    league: { minMembers: 2, maxMembers: 50 },
+  };
+  await prisma.seasonRule.create({
+    data: {
+      seasonId: season.id,
+      version: "test-v1",
+      rules: rules as Prisma.InputJsonValue,
+    },
   });
   const circuit = await prisma.circuit.create({
     data: { name: `Circuito ${suffix}`, country: "Ficticia" },

@@ -51,7 +51,10 @@
 - **Construir y guardar lineup** (con validación de presupuesto visible).
 - **Ver resultados y ranking** tras un GP (con fixture de resultados).
 - **Admin:** crear temporada, importar resultados, marcar definitivo, ver recálculo.
-- **Mobile:** el constructor de lineup es usable en viewport de móvil.
+- **Mobile (T-16):** `test/e2e/responsive.test.ts` — Playwright en 3 viewports (iPhone SE 375px, Pixel 5 390px, Galaxy S21 430px):
+  - No overflow horizontal en lineup, ligas, resultados, puntuación, mercado, login, registro.
+  - Touch targets ≥ 44px en todos los campos del builder.
+  - Botón "Guardar lineup" presente en el DOM en los 3 viewports.
 
 ### 2.5 Regresión (cambios de reglas)
 

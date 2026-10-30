@@ -18,17 +18,20 @@
 export const PRICING_VERSION = "pricing-v1" as const;
 
 /**
- * Pmax = puntuación máxima de referencia de un activo en un GP.
+ * Reglas de precios (provenientes de `season_rules.pricing`).
+ *
+ * `Pmax` vive en `season_rules` (JSONB versionado, una fila por temporada y
+ * versión): es la fuente de verdad, nunca hardcodeada.
  *
  * Calibración D-02 (2026-10-29): el motor de precios puntúa solo la carrera
  * principal (ADR-0015), cuyo máximo es 30 (25 por victoria + 5 bono ganador).
- * PMAX_RIDER=30 y PMAX_GROUP=30 (media top-2, máx 30 cada uno) hacen que el
+ * `pmaxRider=30` y `pmaxGroup=30` (media top-2, máx 30 cada uno) hacen que el
  * punto neutro W=50 corresponda a un podio (15 pts) y una victoria → perf 100.
- * Antes (PMAX_RIDER=60, máx de fin de semana completo) ningún piloto
- * alcanzaba perf > 50 y el mercado era deflacionista por construcción.
  */
-export const PMAX_RIDER = 30;
-export const PMAX_GROUP = 30; // constructor/equipo (media de 2 pilotos)
+export interface PricingRules {
+  pmaxRider: number;
+  pmaxGroup: number;
+}
 
 /** perf(r) = clamp(puntos/Pmax × 100, 0, 100). */
 export function perf(puntos: number, Pmax: number): number {

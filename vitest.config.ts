@@ -13,7 +13,7 @@ export default defineConfig({
   },
   test: {
     include: ["**/*.test.ts"],
-    exclude: ["**/node_modules/**", "test/integration/**"],
+    exclude: ["**/node_modules/**", "test/integration/**", "test/e2e/**"],
     // Coverage (T-02, WP4): solo unit (los tests de integración corren aparte).
     // Puerta de testing.md: ≥90% en economy/scoring; global PROVISIONAL (D-08).
     // Nota: en vitest 2.x los umbrales por globo deben ser OBJETO ({lines, ...});

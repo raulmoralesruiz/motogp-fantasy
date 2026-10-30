@@ -23,7 +23,7 @@ export default defineConfig({
     // Todos los tests del repo: unitarios (app/**, __tests__/, scripts/,
     // test/fixtures/) + integración (test/integration/**) + UI (jsdom).
     include: ["**/*.test.ts", "**/*.test.tsx"],
-    exclude: ["**/node_modules/**", "**/.next/**"],
+    exclude: ["**/node_modules/**", "**/.next/**", "test/e2e/**"],
     globalSetup: "test/integration/global-setup.ts",
     testTimeout: 30_000,
     hookTimeout: 30_000,

@@ -42,7 +42,7 @@ Esa cadena se llama **ratchet** (mecanismo de "solo hacia arriba para el rico, s
 | **Equipo**                  | El box que compite (el "squad"). **No es intercambiable con el constructor.**                                                                                                   |
 | **Lockout**                 | Cierre de cambios. Una vez cerrado el GP, no puedes tocar el lineup ni cambian los precios.                                                                                     |
 | **Lesión**                  | Baja confirmada de un piloto. En el oficial hunde su precio y el cap de su dueño.                                                                                               |
-| **Pmax**                    | Puntuación máxima de referencia de un piloto en un GP (para normalizar). Provisional: 60.                                                                                       |
+| **Pmax**                    | Puntuación máxima de referencia de un piloto en un GP (para normalizar). Definitivo: 30 (carrera principal, ADR-0015).                                                   |
 | **perf**                    | Índice de rendimiento 0–100 de un piloto en un GP (sus puntos ÷ Pmax, topado a 100).                                                                                            |
 | **W**                       | Índice ponderado de los últimos 3 GPs (50% actual, 30% anterior, 20% el de antes). Mide la "tendencia".                                                                         |
 | **Piso de precio**          | Un precio nunca baja de `0.25·P0`. Nadie se vuelve gratis.                                                                                                                      |
@@ -215,7 +215,7 @@ precio(r+1)  ← acotado a [0.85·precio(r), 1.15·precio(r)] y [0.25·P0, 2.00�
 
 ### Ejemplo 1 — Piloto en racha (sube el precio)
 
-Piloto "Lucía", `P0 = 20`, `Pmax = 60`. Saca **54 puntos** en GP1, GP2 y GP3 (forma constante). `perf = min(100, 54/60×100) = 90` en cada GP. Precio de apertura (GP1) = `P0 = 20`.
+Piloto "Lucía", `P0 = 20`, `Pmax = 30`. Saca **27 puntos** en GP1, GP2 y GP3 (forma constante). `perf = min(100, 27/30×100) = 90` en cada GP. Precio de apertura (GP1) = `P0 = 20`.
 
 | Paso                  | Cálculo                                                                                                    | Resultado |
 | --------------------- | ---------------------------------------------------------------------------------------------------------- | --------- |

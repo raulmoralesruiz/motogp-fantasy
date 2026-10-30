@@ -1,6 +1,6 @@
 # Simulación 2026 — Comparación de opciones económicas (A / B / C / E)
 
-> **Generado por:** `npm run simulate` el 2026-10-29
+> **Generado por:** `npm run simulate` el 2026-10-30
 > **Datos:** temporada 2026 real (PulseLive, fetch 2026-10-13): 17 GPs terminados, 22 pilotos full-time en el mercado, 5 constructores, 12 equipos.
 > **Versiones:** scoring-v1 · pricing-v1 · parámetros definitivos (B=100, t=0.25, cmax=8, Pmax=30/30 — calibración D-01/D-02, ADR-0030; la simulación usa el mismo Pmax — §3.3).
 > **Población:** 40 jugadores arquetípicos deterministas.

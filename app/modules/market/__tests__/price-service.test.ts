@@ -32,6 +32,7 @@ function makePrisma() {
   const result = { count: vi.fn(), findMany: vi.fn() };
   const riderAffiliation = { findMany: vi.fn(), findFirst: vi.fn() };
   const lineupSlot = { findMany: vi.fn() };
+  const seasonRule = { findFirst: vi.fn() };
   const prisma = {
     rider,
     constructor,
@@ -43,6 +44,7 @@ function makePrisma() {
     result,
     riderAffiliation,
     lineupSlot,
+    seasonRule,
     $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(prisma)),
   };
   return {
@@ -57,6 +59,7 @@ function makePrisma() {
     result,
     riderAffiliation,
     lineupSlot,
+    seasonRule,
   };
 }
 
@@ -168,6 +171,38 @@ function mountFormulaScenario(
   );
   fake.result.count.mockResolvedValue(definitiveResults.length);
   fake.result.findMany.mockResolvedValue(definitiveResults);
+  // Reglas de la temporada (Pmax — T-25).
+  fake.seasonRule.findFirst.mockResolvedValue({
+    id: "sr1",
+    seasonId: "s1",
+    version: "provisional-v1",
+    rules: {
+      rulesVersion: "provisional-v1",
+      economy: { option: "E", B: 100, t: 0.25, cmax: 8 },
+      pricing: { pmaxRider: 30, pmaxGroup: 30 },
+      scoring: {
+        q2: { "1": 12, "2": 8, "3": 8, "4": 5, "5": 5, "6": 5, "7": 3, "8": 3, "9": 3, "10": 3, "11": 3, "12": 3, "13": 1, "14": 1, "15": 1, "16": 1, "17": 1, "18": 1, "19": 1, "20": 1 },
+        sprint: { "1": 12, "2": 9, "3": 7, "4": 6, "5": 5, "6": 4, "7": 3, "8": 2, "9": 1 },
+        mainRace: { "1": 25, "2": 20, "3": 16, "4": 13, "5": 11, "6": 10, "7": 9, "8": 8, "9": 7, "10": 6, "11": 5, "12": 4, "13": 3, "14": 2, "15": 1 },
+        winnerBonus: 5,
+        fastestLapBonus: 3,
+        poleBonus: 2,
+        positionsGainedBonus: 1,
+        positionsGainedMax: 3,
+        extraordinaryBonus: 5,
+        dnfPenalty: 5,
+        dqPenalty: 10,
+        timePenalty: 2,
+        goldWeight: 1.0,
+        silverWeight: 0.5,
+      },
+      limits: { maxPerConstructor: 2, maxPerTeam: 2 },
+      transfers: { perGp: 2, injuryExemption: true, wildcardsPerSeason: 1 },
+      league: { minMembers: 2, maxMembers: 50 },
+    },
+    createdAt: new Date("2026-01-01T00:00:00Z"),
+    updatedAt: new Date("2026-01-01T00:00:00Z"),
+  });
   // Dos llamadas: afiliaciones de los GPs fuente (gpId: { in: [...] }) y
   // grid del GP objetivo (gpId: "g2").
   fake.riderAffiliation.findMany.mockImplementation(

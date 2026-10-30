@@ -23,7 +23,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { buildPriceSeries, perf, PMAX_GROUP } from "../../app/modules/economy/index.js";
+import { buildPriceSeries, perf } from "../../app/modules/economy/index.js";
 import { groupTopTwoAverage, riderMainPoints } from "../../app/modules/scoring/index.js";
 import type {
   Gp,
@@ -46,11 +46,13 @@ export const FULL_TIME_MIN_GPS = 10;
  * el informe, §3.3). Tras la calibración D-02 (ADR-0030), el `Pmax` del
  * motor de precios de producto es **30** (el motor puntúa solo la carrera
  * principal, ADR-0015), por lo que la simulación usa el **mismo** valor
- * (sin rescaleo): `PMAX_RIDER_SIM = PMAX_RIDER = 30`. `PMAX_GROUP` (30) es
+ * (sin rescaleo): `PMAX_RIDER_SIM = 30`. `PMAX_GROUP_SIM` (30) es
  * consistente: un grupo puntúa la media de sus 2 mejores pilotos (máx 30
  * cada uno).
  */
 export const PMAX_RIDER_SIM = 30;
+/** Pmax de grupo para la simulación (constructor/equipo: media de 2 pilotos, máx 30 cada uno). */
+export const PMAX_GROUP_SIM = 30;
 
 /** Rango de P0 de pilotos: [P0_RIDER_MIN, P0_RIDER_MIN + P0_RIDER_SPAN]. */
 export const P0_RIDER_MIN = 4;
@@ -259,7 +261,7 @@ export async function loadMarket(year = 2026, prevYear = 2025): Promise<Market> 
         perf(
           (kind === "constructor" ? ctorPointsByGp[i] : teamPointsByGp[i])!.get(g.name) ??
             0,
-          PMAX_GROUP,
+          PMAX_GROUP_SIM,
         ),
       );
       g.p0 = p0;
