@@ -7,11 +7,12 @@
  * parte de I/O (`PulseLiveMarketSource`) es fina y se prueba con un
  * `fetchImpl` inyectado (sin red).
  *
- * Fuente PulseLive:
- * - `GET /motogp/v1/teams?seasonYear={year}&categoryUuid={motogp_uuid}`
- *   devuelve 12 equipos con sus `riders` y `constructor`.
- * - El `categoryUuid` de MotoGP se descubre en `/results/categories` por
- *   `legacy_id: 3`.
+ * Fuente PulseLive (estrategia):
+ * - `/results/seasons` → temporada por año (UUID).
+ * - `/results/events?seasonUuid=X` → eventos de la temporada.
+ * - `/riders?eventUuid=X&categoryUuid=Y` → riders con `current_career_step.team`
+ *   y `team.constructor` para cada evento.
+ * - Agregamos constructores, equipos y afiliaciones por temporada.
  */
 
 // ── Contrato normalizado ───────────────────────────────────────────────────
@@ -79,45 +80,70 @@ export class MarketNormalizationError extends Error {}
 
 // ── Payloads crudos de PulseLive (solo los campos que usa el normalizador) ─
 
-export interface PulseLiveTeam {
+export interface PulseLiveSeason {
   id: string;
-  name: string;
-  legacy_id: number;
-  type: string;
-  color: string;
-  text_color: string;
-  picture: string | null;
-  constructor: {
-    id: string;
-    name: string;
-    legacy_id: number;
-  };
-  category: {
-    id: string;
-    name: string;
-    legacy_id: number;
-  };
-  riders: Array<{
-    id: string;
-    name: string;
-    surname: string;
-    nickname: string | null;
-    number: number | null;
-    country: {
-      iso: string;
-      name: string;
-    };
-    birth_date: string;
-    birth_city: string;
-    retired: boolean;
-    published: boolean;
-  }>;
+  year: number;
 }
 
-export interface PulseLiveCategory {
+export interface PulseLiveEvent {
   id: string;
   name: string;
-  legacy_id: number;
+  date_start: string;
+  date_end: string;
+  test?: boolean;
+  circuit: {
+    name: string;
+    place?: string | null;
+  };
+  country: {
+    name: string;
+  };
+}
+
+/** Rider con su equipo actual (current_career_step.team). */
+export interface PulseLiveRider {
+  id: string;
+  name: string;
+  surname: string;
+  nickname: string | null;
+  number: number | null;
+  country: {
+    iso: string;
+    name: string;
+  };
+  current_career_step: {
+    season: number;
+    number: number;
+    sponsored_team: string;
+    team: {
+      id: string;
+      name: string;
+      legacy_id: number;
+      type: string;
+      color: string;
+      text_color: string;
+      picture: string | null;
+      constructor: {
+        id: string;
+        name: string;
+        legacy_id: number;
+      };
+      category: {
+        id: string;
+        name: string;
+        legacy_id: number;
+      };
+    } | null;
+    category: {
+      id: string;
+      name: string;
+      legacy_id: number;
+    };
+    in_grid: boolean;
+    current: boolean;
+  };
+  retired: boolean;
+  published: boolean;
 }
 
 // ── Normalización pura ─────────────────────────────────────────────────────
@@ -125,28 +151,43 @@ export interface PulseLiveCategory {
 /**
  * Normaliza un payload crudo de PulseLive (pura — sin I/O).
  *
- * - Constructores: únicos por `name` (orden de aparición en `teams`).
+ * - Constructores: únicos por `name` (orden de aparición).
  * - Equipos: únicos por `name`.
- * - Pilotos: únicos por `sourceId` (el ID de PulseLive).
- * - Afiliaciones: rider→equipo para cada rider de cada equipo.
+ * - Pilotos: únicos por `sourceId`.
+ * - Afiliaciones: rider→equipo para cada rider con equipo válido.
+ * - Solo se incluyen riders cuyo `current_career_step.team.category.name`
+ *   es "MotoGP" (se filtran los de Moto2/Moto3).
  *
  * Lanza `MarketNormalizationError` si los datos no se pueden mapear.
  */
 export function normalizePulseLiveMarket(
-  teams: PulseLiveTeam[],
+  riders: PulseLiveRider[],
   seasonYear: number,
   seasonRef: string,
   source: { name: string; version: string },
 ): NormalizedMarket {
-  if (teams.length === 0) {
+  if (riders.length === 0) {
     throw new MarketNormalizationError(
-      `La fuente no tiene equipos para la temporada ${seasonYear}.`,
+      `La fuente no tiene riders para la temporada ${seasonYear}.`,
+    );
+  }
+
+  // Filtrar solo riders de MotoGP (equipo con categoría MotoGP).
+  const motogpRiders = riders.filter(
+    (r) =>
+      r.current_career_step?.team?.category?.name === "MotoGP" &&
+      r.current_career_step?.team?.id !== undefined,
+  );
+  if (motogpRiders.length === 0) {
+    throw new MarketNormalizationError(
+      `La fuente no tiene riders de MotoGP para la temporada ${seasonYear}.`,
     );
   }
 
   // Constructores únicos por nombre (orden de aparición).
   const constructorMap = new Map<string, NormalizedConstructor>();
-  for (const team of teams) {
+  for (const rider of motogpRiders) {
+    const team = rider.current_career_step.team!;
     const ctor = team.constructor;
     if (!constructorMap.has(ctor.name)) {
       constructorMap.set(ctor.name, {
@@ -159,7 +200,8 @@ export function normalizePulseLiveMarket(
 
   // Equipos únicos por nombre.
   const teamMap = new Map<string, NormalizedTeam>();
-  for (const team of teams) {
+  for (const rider of motogpRiders) {
+    const team = rider.current_career_step.team!;
     if (!teamMap.has(team.name)) {
       teamMap.set(team.name, {
         sourceId: team.id,
@@ -171,37 +213,33 @@ export function normalizePulseLiveMarket(
       });
     }
   }
-  const teamsNormalized = Array.from(teamMap.values());
+  const teams = Array.from(teamMap.values());
 
   // Pilotos únicos por sourceId.
   const riderMap = new Map<string, NormalizedRider>();
-  for (const team of teams) {
-    for (const rider of team.riders) {
-      if (!riderMap.has(rider.id)) {
-        riderMap.set(rider.id, {
-          sourceId: rider.id,
-          name: rider.name,
-          surname: rider.surname,
-          number: rider.number,
-          countryIso: rider.country?.iso ?? null,
-        });
-      }
+  for (const rider of motogpRiders) {
+    if (!riderMap.has(rider.id)) {
+      riderMap.set(rider.id, {
+        sourceId: rider.id,
+        name: rider.name,
+        surname: rider.surname,
+        number: rider.number,
+        countryIso: rider.country?.iso ?? null,
+      });
     }
   }
-  const riders = Array.from(riderMap.values());
+  const ridersNormalized = Array.from(riderMap.values());
 
   // Afiliaciones: riderSourceId → teamSourceId.
   const affiliationMap = new Map<string, NormalizedAffiliation>();
-  for (const team of teams) {
-    for (const rider of team.riders) {
-      const key = rider.id;
-      if (!affiliationMap.has(key)) {
-        affiliationMap.set(key, {
-          riderSourceId: rider.id,
-          teamSourceId: team.id,
-          seasonYear,
-        });
-      }
+  for (const rider of motogpRiders) {
+    const team = rider.current_career_step.team!;
+    if (!affiliationMap.has(rider.id)) {
+      affiliationMap.set(rider.id, {
+        riderSourceId: rider.id,
+        teamSourceId: team.id,
+        seasonYear,
+      });
     }
   }
   const affiliations = Array.from(affiliationMap.values());
@@ -211,8 +249,8 @@ export function normalizePulseLiveMarket(
     seasonRef,
     source,
     constructors,
-    teams: teamsNormalized,
-    riders,
+    teams,
+    riders: ridersNormalized,
     affiliations,
   };
 }
@@ -220,11 +258,6 @@ export function normalizePulseLiveMarket(
 // ── Implementación PulseLive (I/O fina, fetch inyectable) ─────────────────
 
 const PULSELIVE_BASE_URL = "https://api.motogp.pulselive.com/motogp/v1";
-/**
- * Categoría MotoGP en PulseLive (`legacy_id: 3`): se descubre en
- * `/results/categories` por ese identificador, no se hardcodea el UUID.
- */
-const MOTO_GP_LEGACY_CATEGORY_ID = 3;
 
 export interface PulseLiveMarketSourceOptions {
   /** Para tests o proxies. */
@@ -234,10 +267,15 @@ export interface PulseLiveMarketSourceOptions {
 }
 
 /**
- * Fuente de mercado PulseLive (ADR-0013): GET sin auth.
+ * Fuente de mercado PulseLive.
  *
- * Flujo: 1) temporada por año → 2) categoría MotoGP → 3) equipos de la
- * temporada. 2 peticiones (~24 por temporada para el calendario, aquí solo 2).
+ * Estrategia:
+ * 1. `/results/seasons` → temporada por año.
+ * 2. `/results/events?seasonUuid=X` → eventos (GPs).
+ * 3. `/riders?eventUuid=X&categoryUuid=Y` → riders con equipo.
+ *    Usamos el primer evento (GP más antiguo) para obtener todos los riders
+ *    de la temporada con su equipo actual.
+ * 4. Agregamos constructores, equipos y afiliaciones.
  */
 export class PulseLiveMarketSource implements MarketSource {
   readonly meta = { name: "pulselive", version: "v1" };
@@ -262,23 +300,44 @@ export class PulseLiveMarketSource implements MarketSource {
       );
     }
 
-    // 2) Categoría MotoGP por legacy_id.
+    // 2) Eventos de la temporada.
+    const events = await this.getJson<PulseLiveEvent[]>(
+      `${this.baseUrl}/results/events?seasonUuid=${season.id}`,
+    );
+    if (events.length === 0) {
+      throw new MarketSourceError(
+        `La fuente no tiene eventos para la temporada ${seasonYear}.`,
+      );
+    }
+
+    // 3) Riders con equipo del primer evento (GP más antiguo de la temporada).
+    //    Usamos el primer evento porque todos los riders están en la grid.
+    const firstEvent = events[0]!;
+
+    // Necesitamos el categoryUuid de MotoGP para el endpoint /riders.
+    // Lo descubrimos probando con el category legacy_id 3 (MotoGP).
+    // El endpoint /results/categories devuelve la categoría MotoGP.
     const categories = await this.getJson<PulseLiveCategory[]>(
       `${this.baseUrl}/results/categories?seasonUuid=${season.id}`,
     );
-    const category = categories.find((c) => c.legacy_id === MOTO_GP_LEGACY_CATEGORY_ID);
-    if (!category) {
+    const motogpCategory = categories.find((c) => c.legacy_id === 3);
+    if (!motogpCategory) {
       throw new MarketSourceError(
         "La fuente no tiene la categoría MotoGP para la temporada.",
       );
     }
 
-    // 3) Equipos de la temporada.
-    const teams = await this.getJson<PulseLiveTeam[]>(
-      `${this.baseUrl}/teams?seasonYear=${seasonYear}&categoryUuid=${category.id}`,
+    const riders = await this.getJson<PulseLiveRider[]>(
+      `${this.baseUrl}/riders?eventUuid=${firstEvent.id}&categoryUuid=${motogpCategory.id}`,
     );
 
-    return normalizePulseLiveMarket(teams, seasonYear, season.id, this.meta);
+    if (riders.length === 0) {
+      throw new MarketSourceError(
+        `La fuente no tiene riders para el evento «${firstEvent.name}».`,
+      );
+    }
+
+    return normalizePulseLiveMarket(riders, seasonYear, season.id, this.meta);
   }
 
   private async getJson<T>(url: string): Promise<T> {
@@ -309,7 +368,8 @@ export class PulseLiveMarketSource implements MarketSource {
 
 // ── Tipos auxiliares ───────────────────────────────────────────────────────
 
-interface PulseLiveSeason {
+interface PulseLiveCategory {
   id: string;
-  year: number;
+  name: string;
+  legacy_id: number;
 }
