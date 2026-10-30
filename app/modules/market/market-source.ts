@@ -224,7 +224,7 @@ export function normalizePulseLiveMarket(
         sourceId: rider.id,
         name: rider.name,
         surname: rider.surname,
-        number: rider.number,
+        number: rider.number ?? null,
         countryIso: rider.country?.iso ?? null,
       });
     }
