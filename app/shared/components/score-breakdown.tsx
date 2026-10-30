@@ -74,8 +74,8 @@ export function ScoreBreakdown({ score }: { score: MyScoreView }) {
       <h3>Constructor y equipo</h3>
       <ul>
         <li>
-          Constructor: <strong>{score.constructor.name}</strong> →{" "}
-          <strong>{fmt(score.constructor.points)} pts</strong>
+          Constructor: <strong>{score.manufacturer.name}</strong> →{" "}
+          <strong>{fmt(score.manufacturer.points)} pts</strong>
         </li>
         <li>
           Equipo: <strong>{score.team.name}</strong> →{" "}

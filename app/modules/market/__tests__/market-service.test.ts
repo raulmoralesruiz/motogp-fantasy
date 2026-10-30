@@ -270,6 +270,75 @@ describe("MarketService.setRiderAffiliationFrom (T-24)", () => {
   });
 });
 
+// ── getRider (detalle del piloto + afiliaciones) ────────────────────────────
+
+describe("MarketService.getRider", () => {
+  /** Piloto con una afiliación que incluye las relaciones (como las devuelve Prisma). */
+  const riderWithAffiliation = {
+    ...riderRow,
+    affiliations: [
+      {
+        id: "a1",
+        riderId: "r1",
+        teamId: "t1",
+        constructorId: "c1",
+        gpId: "g1",
+        gp: gpRow,
+        team: teamRow,
+        constructor: constructorRow,
+      },
+    ],
+  };
+
+  it("piloto inexistente → NOT_FOUND", async () => {
+    const fake = makePrisma();
+    fake.rider.findUnique.mockResolvedValue(null);
+    const service = new MarketService({ prisma: fake.prisma });
+
+    await expect(service.getRider("nope")).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+  });
+
+  it("mapea las afiliaciones con `manufacturer` (NO `constructor`)", async () => {
+    const fake = makePrisma();
+    fake.rider.findUnique.mockResolvedValue(riderWithAffiliation);
+    const service = new MarketService({ prisma: fake.prisma });
+
+    const detail = await service.getRider("r1");
+
+    expect(detail.rider).toMatchObject({ id: "r1", name: riderRow.name });
+    expect(detail.affiliations).toHaveLength(1);
+    const affiliation = detail.affiliations[0]!;
+    expect(affiliation).toMatchObject({
+      id: "a1",
+      teamId: "t1",
+      constructorId: "c1",
+      gp: { round: gpRow.round, name: gpRow.name },
+      team: { id: "t1", name: teamRow.name },
+      manufacturer: { id: "c1", name: "Ducati" },
+    });
+    // La key propia `constructor` NO debe estar en la vista (ver test
+    // siguiente): superjson itera propiedades propias (`Object.entries`).
+    expect(Object.hasOwn(affiliation, "constructor")).toBe(false);
+  });
+
+  it("REGRESIÓN: la respuesta se serializa con superjson (sin key peligrosa `constructor`)", async () => {
+    // superjson (transformer de tRPC) lanza "Detected property constructor"
+    // si un objeto de la respuesta tiene key propia `constructor`: el
+    // endpoint `market.riders.get` fallaba en producción (500). Esta prueba
+    // garantiza que la vista de `getRider` siempre es serializable.
+    const superjson = await import("superjson");
+    const fake = makePrisma();
+    fake.rider.findUnique.mockResolvedValue(riderWithAffiliation);
+    const service = new MarketService({ prisma: fake.prisma });
+
+    const detail = await service.getRider("r1");
+
+    expect(() => superjson.serialize(detail)).not.toThrow();
+  });
+});
+
 // ── P0 heurística desde clasificación (ADR-0014) ────────────────────────────
 
 const seasonRow = { id: "s1", year: 2026, name: "Temporada 2026" };

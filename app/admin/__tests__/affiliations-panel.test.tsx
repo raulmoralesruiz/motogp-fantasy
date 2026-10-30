@@ -81,7 +81,7 @@ const riderDetail = {
         date: new Date("2026-04-19T14:00:00Z"),
       },
       team: { id: "t1", name: "Ducati Lenovo Team" },
-      constructor: { id: "c1", name: "Ducati" },
+      manufacturer: { id: "c1", name: "Ducati" },
     },
   ],
 };

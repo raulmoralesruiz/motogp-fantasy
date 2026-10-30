@@ -203,7 +203,7 @@ export default function AffiliationsPanel({
                 <li key={affiliation.id}>
                   Ronda {affiliation.gp.round} — {affiliation.gp.name}:{" "}
                   <strong>{affiliation.team.name}</strong> (
-                  {affiliation.constructor.name})
+                  {affiliation.manufacturer.name})
                 </li>
               ))}
             </ul>

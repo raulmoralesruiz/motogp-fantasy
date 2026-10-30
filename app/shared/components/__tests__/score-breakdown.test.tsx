@@ -79,7 +79,7 @@ const SCORE: MyScoreView = {
       },
     },
   ],
-  constructor: { id: "ctor-x", name: "Constructor X", points: 38 },
+  manufacturer: { id: "ctor-x", name: "Constructor X", points: 38 },
   team: { id: "team-x", name: "Equipo X", points: 38 },
   total: 170.5,
 };

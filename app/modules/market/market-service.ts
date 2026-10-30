@@ -122,7 +122,13 @@ export interface RiderAffiliationView {
 export interface RiderAffiliationDetail extends RiderAffiliationView {
   gp: { id: string; seasonId: string; round: number; name: string; date: Date };
   team: { id: string; name: string };
-  constructor: { id: string; name: string };
+  /**
+   * Constructor del equipo. Se nombra `manufacturer` (NO `constructor`):
+   * superjson (transformer de tRPC) rechaza cualquier objeto con key propia
+   * `constructor` (protección anti prototype pollution) y el endpoint
+   * `market.riders.get` fallaría al serializar la respuesta.
+   */
+  manufacturer: { id: string; name: string };
 }
 
 /** Piloto con sus afiliaciones ordenadas por ronda de GP. */
@@ -1076,7 +1082,9 @@ export class MarketService {
         date: affiliation.gp.date,
       },
       team: { id: affiliation.team.id, name: affiliation.team.name },
-      constructor: {
+      // `manufacturer` (NO `constructor`): superjson rechaza la key propia
+      // `constructor` al serializar la respuesta (anti prototype pollution).
+      manufacturer: {
         id: affiliation.constructor.id,
         name: affiliation.constructor.name,
       },

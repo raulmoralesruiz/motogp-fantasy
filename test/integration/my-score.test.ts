@@ -410,9 +410,11 @@ describe("US-20 · Mi puntuación con desglose (PostgreSQL real)", () => {
     expect(hView.breakdown.total).toBeCloseTo(-4, 2);
 
     // Constructor y equipo: 38.0 (media top-2 {56, 20}), nombres resueltos.
-    expect(score.constructor.id).toBe(world.ctor.id);
-    expect(score.constructor.name).toBe(world.ctor.name);
-    expect(score.constructor.points).toBeCloseTo(38, 2);
+    // `manufacturer` (NO `constructor`): superjson rechaza la key propia
+    // `constructor` al serializar la respuesta (anti prototype pollution).
+    expect(score.manufacturer.id).toBe(world.ctor.id);
+    expect(score.manufacturer.name).toBe(world.ctor.name);
+    expect(score.manufacturer.points).toBeCloseTo(38, 2);
     expect(score.team.id).toBe(world.team.id);
     expect(score.team.name).toBe(world.team.name);
     expect(score.team.points).toBeCloseTo(38, 2);

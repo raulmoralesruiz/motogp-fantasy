@@ -322,7 +322,13 @@ export type MyScoreView = {
   computedAt: Date;
   gold: RiderScoreView[];
   silver: RiderScoreView[];
-  constructor: { id: string; name: string; points: number };
+  /**
+   * Constructor del lineup. Se nombra `manufacturer` (NO `constructor`):
+   * superjson (transformer de tRPC) rechaza cualquier objeto con key propia
+   * `constructor` (protección anti prototype pollution) y el endpoint
+   * `results.myScore` fallaría al serializar la respuesta.
+   */
+  manufacturer: { id: string; name: string; points: number };
   team: { id: string; name: string; points: number };
   total: number;
 };
@@ -1641,7 +1647,11 @@ export class ResultsService {
       computedAt: score.computedAt,
       gold: breakdown.gold.map(toRiderView),
       silver: breakdown.silver.map(toRiderView),
-      constructor: {
+      // `manufacturer` (NO `constructor`): superjson rechaza la key propia
+      // `constructor` al serializar la respuesta (anti prototype pollution).
+      // La key almacenada en `Score.breakdown` sigue siendo `constructor`
+      // (JSON interno de BD, nunca se serializa directamente).
+      manufacturer: {
         id: breakdown.constructor.id,
         name: ctorRow?.name ?? breakdown.constructor.id,
         points: breakdown.constructor.points,

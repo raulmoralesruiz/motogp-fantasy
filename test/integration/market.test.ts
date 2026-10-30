@@ -560,17 +560,19 @@ describe("US-06 · Mercado: activos y afiliaciones por GP (PostgreSQL real)", ()
     const detail = await market.riders.get({ riderId });
     expect(detail.rider).toMatchObject({ id: riderId, name: world.riders[0].name });
     expect(detail.affiliations.map((a) => a.gp.round)).toEqual([1, 2, 3]);
+    // `manufacturer` (NO `constructor`): superjson rechaza la key propia
+    // `constructor` al serializar la respuesta (anti prototype pollution).
     expect(detail.affiliations[0]).toMatchObject({
       team: { id: teamBId },
-      constructor: { id: ctorBId },
+      manufacturer: { id: ctorBId },
     });
     expect(detail.affiliations[1]).toMatchObject({
       team: { id: teamAId },
-      constructor: { id: ctorAId },
+      manufacturer: { id: ctorAId },
     });
     expect(detail.affiliations[2]).toMatchObject({
       team: { id: teamAId },
-      constructor: { id: ctorAId },
+      manufacturer: { id: ctorAId },
     });
   });
 
