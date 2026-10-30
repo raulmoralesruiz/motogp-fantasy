@@ -9,6 +9,7 @@ import CalendarImportForm from "./calendar-import-form";
 import CreateCircuitForm from "./create-circuit-form";
 import CreateSeasonForm from "./create-season-form";
 import GpsSection from "./gps-section";
+import MarketImportForm from "./market-import-form";
 import MarketSection from "./market-section";
 import ResultsSection from "./results-section";
 
@@ -120,6 +121,14 @@ export default function AdminPage() {
             onImported={() => {
               void seasons.refetch();
               void circuits.refetch();
+            }}
+          />
+
+          <h2>Importar mercado</h2>
+          <MarketImportForm
+            seasons={seasons.data ?? []}
+            onImported={() => {
+              void seasons.refetch();
             }}
           />
 

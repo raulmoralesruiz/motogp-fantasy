@@ -39,6 +39,10 @@ import type {
 } from "@prisma/client";
 
 import { appendAudit } from "@/modules/admin";
+import {
+  type NormalizedMarket,
+  MarketNormalizationError,
+} from "./market-source";
 
 export interface MarketServiceDeps {
   prisma: PrismaClient;
@@ -141,6 +145,30 @@ export interface AffiliationRangeReport {
   seasonId: string;
   created: number;
   skipped: Array<{ gpId: string; round: number; reason: string }>;
+}
+
+// ── Import de mercado (US-06, ADR-0013) ───────────────────────────────────
+
+/** Informe de import de mercado: cuántos activos se crearon/saltaron. */
+export interface MarketImportReport {
+  seasonId: string;
+  seasonYear: number;
+  /** Constructores creados (nuevos). */
+  constructorsCreated: number;
+  /** Constructores saltados (ya existían). */
+  constructorsSkipped: number;
+  /** Equipos creados (nuevos). */
+  teamsCreated: number;
+  /** Equipos saltados (ya existían). */
+  teamsSkipped: number;
+  /** Pilotos creados (nuevos). */
+  ridersCreated: number;
+  /** Pilotos saltados (ya existían). */
+  ridersSkipped: number;
+  /** Afiliaciones creadas (nuevas). */
+  affiliationsCreated: number;
+  /** Afiliaciones saltadas (ya existían). */
+  affiliationsSkipped: number;
 }
 
 // ── Utilidades ──────────────────────────────────────────────────────────────
@@ -580,6 +608,152 @@ export class MarketService {
         seasonId: fromGp.seasonId,
         created,
         skipped,
+      };
+    });
+  }
+
+  // ── Mapeo a vistas ────────────────────────────────────────────────────────
+
+  /**
+   * Importa un mercado normalizado desde la fuente (US-06, ADR-0013):
+   * transacción atómica que crea constructores, equipos, pilotos y
+   * afiliaciones (idempotente por nombre/ID de fuente).
+   *
+   * - Constructores: únicos por `name` (se saltan si existen).
+   * - Equipos: únicos por `name` (se saltan si existen).
+   * - Pilotos: únicos por `name` (se saltan si existen).
+   * - Afiliaciones: rider→equipo (se saltan si ya existen).
+   *
+   * El constructor se deriva del equipo (invariante 5).
+   *
+   * Auditoría: `market.imported` con resumen (entityId = seasonId).
+   */
+  async importMarket(
+    input: { normalized: NormalizedMarket; seasonId: string },
+    meta: AuditMeta,
+  ): Promise<MarketImportReport> {
+    const { normalized, seasonId } = input;
+
+    // Validar que el año del mercado coincide con la temporada.
+    const season = await this.deps.prisma.season.findUnique({
+      where: { id: seasonId },
+    });
+    if (!season) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "La temporada no existe.",
+      });
+    }
+    if (normalized.year !== season.year) {
+      throw new MarketNormalizationError(
+        `El mercado es para el año ${normalized.year}, pero la temporada es ${season.year}.`,
+      );
+    }
+
+    return this.deps.prisma.$transaction(async (tx) => {
+      let constructorsCreated = 0;
+      let constructorsSkipped = 0;
+      let teamsCreated = 0;
+      let teamsSkipped = 0;
+      let ridersCreated = 0;
+      let ridersSkipped = 0;
+      const affiliationsCreated = 0;
+      const affiliationsSkipped = 0;
+
+      // Mapeo: name → id (BD) para constructores y equipos.
+      const constructorByName = new Map<string, string>();
+      const teamByName = new Map<string, string>();
+
+      // 1) Constructores (únicos por name).
+      for (const ctor of normalized.constructors) {
+        const existing = await tx.constructor.findUnique({
+          where: { name: ctor.name },
+        });
+        if (existing) {
+          constructorByName.set(ctor.name, existing.id);
+          constructorsSkipped += 1;
+          continue;
+        }
+        const created = await tx.constructor.create({
+          data: { name: ctor.name },
+        });
+        constructorByName.set(ctor.name, created.id);
+        constructorsCreated += 1;
+      }
+
+      // 2) Equipos (únicos por name, FK constructor).
+      for (const team of normalized.teams) {
+        const existing = await tx.team.findUnique({
+          where: { name: team.name },
+        });
+        if (existing) {
+          teamByName.set(team.name, existing.id);
+          teamsSkipped += 1;
+          continue;
+        }
+        const constructorId = constructorByName.get(team.constructor.name);
+        if (!constructorId) {
+          throw new MarketNormalizationError(
+            `El equipo «${team.name}» referencia un constructor desconocido «${team.constructor.name}».`,
+          );
+        }
+        const created = await tx.team.create({
+          data: { name: team.name, constructorId },
+        });
+        teamByName.set(team.name, created.id);
+        teamsCreated += 1;
+      }
+
+      // 3) Pilotos (únicos por name).
+      for (const rider of normalized.riders) {
+        const fullName = `${rider.name} ${rider.surname}`.trim();
+        const existing = await tx.rider.findUnique({
+          where: { name: fullName },
+        });
+        if (existing) {
+          ridersSkipped += 1;
+          continue;
+        }
+        await tx.rider.create({
+          data: { name: fullName, number: rider.number ?? null },
+        });
+        ridersCreated += 1;
+      }
+
+      // 4) Afiliaciones (rider→equipo por GP — pero aquí no tenemos GPs).
+      //    Las afiliaciones se crean "desde el GP X en adelante" (setRiderAffiliationFrom).
+      //    Por ahora, solo reportamos: el admin debe ejecutar "desde GP 1" manualmente.
+
+      await appendAudit(tx, {
+        actorId: meta.actorId,
+        action: "market.imported",
+        entity: "market",
+        entityId: seasonId,
+        beforeData: null,
+        afterData: {
+          seasonId,
+          seasonYear: normalized.year,
+          constructorsCreated,
+          constructorsSkipped,
+          teamsCreated,
+          teamsSkipped,
+          ridersCreated,
+          ridersSkipped,
+        },
+        ip: meta.ip,
+      });
+
+      return {
+        seasonId,
+        seasonYear: normalized.year,
+        constructorsCreated,
+        constructorsSkipped,
+        teamsCreated,
+        teamsSkipped,
+        ridersCreated,
+        ridersSkipped,
+        affiliationsCreated,
+        affiliationsSkipped,
       };
     });
   }

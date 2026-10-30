@@ -72,8 +72,15 @@ describe("barrels de módulos (Fase 0, T-03)", () => {
     ]);
   });
 
-  it("market exporta MarketService y PriceService (US-06/US-07)", () => {
-    expect(Object.keys(market).sort()).toEqual(["MarketService", "PriceService"]);
+  it("market exporta MarketService, PriceService y la fuente de mercado (US-06/US-07, ADR-0013)", () => {
+    expect(Object.keys(market).sort()).toEqual([
+      "MarketNormalizationError",
+      "MarketService",
+      "MarketSourceError",
+      "PriceService",
+      "PulseLiveMarketSource",
+      "normalizePulseLiveMarket",
+    ]);
   });
 
   it("results exporta el núcleo puro, ResultsService y el adapter de la fuente (Fase 3, US-16/US-17)", () => {

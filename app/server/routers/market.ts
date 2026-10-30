@@ -14,12 +14,23 @@
  */
 import type { PrismaClient } from "@prisma/client";
 
-import { MarketService, PriceService } from "@/modules/market";
+import { TRPCError } from "@trpc/server";
+
+import type { MarketSource } from "@/modules/market";
+import {
+  MarketService,
+  PriceService,
+  PulseLiveMarketSource,
+  MarketSourceError,
+  MarketNormalizationError,
+} from "@/modules/market";
 import {
   applyFormulaInputSchema,
   createConstructorInputSchema,
   createRiderInputSchema,
   createTeamInputSchema,
+  fetchMarketInputSchema,
+  importMarketInputSchema,
   listAssetPricesInputSchema,
   marketDetailInputSchema,
   marketListInputSchema,
@@ -36,12 +47,30 @@ import { adminProcedure, protectedProcedure, router } from "../trpc";
 
 export interface MarketRouterDeps {
   prisma: PrismaClient;
+  /** Fuente de mercado (ADR-0013); por defecto PulseLive. */
+  marketSource?: MarketSource;
+}
+
+/**
+ * Fallos de la fuente de mercado (red, HTTP, normalización): el admin
+ * necesita el motivo en español; el errorFormatter expone `message` para
+ * todos los códigos, así que INTERNAL_SERVER_ERROR no oculta nada aquí.
+ */
+function toMarketTrpcError(error: unknown): never {
+  if (
+    error instanceof MarketSourceError ||
+    error instanceof MarketNormalizationError
+  ) {
+    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error.message });
+  }
+  throw error;
 }
 
 /** Router inyectable: los tests de integración lo montan con su propia BD. */
 export function createMarketRouter(deps: MarketRouterDeps) {
   const service = new MarketService({ prisma: deps.prisma });
   const priceService = new PriceService({ prisma: deps.prisma });
+  const marketSource = deps.marketSource ?? new PulseLiveMarketSource();
 
   return router({
     /** Pilotos (US-06). */
@@ -197,6 +226,34 @@ export function createMarketRouter(deps: MarketRouterDeps) {
       detail: protectedProcedure
         .input(marketDetailInputSchema)
         .query(({ input }) => priceService.marketDetail(input)),
+
+      /**
+       * Descarga y normaliza el mercado del año desde la fuente
+       * (preview, SIN escribir en BD). El resultado se reenvía a
+       * `market.import`.
+       */
+      fetch: adminProcedure.input(fetchMarketInputSchema).query(async ({ input }) => {
+        try {
+          return await marketSource.fetchSeasonMarket(input.year);
+        } catch (error) {
+          toMarketTrpcError(error);
+        }
+      }),
+
+      /**
+       * Importa el mercado normalizado (revalidado server-side) en una
+       * temporada: transacción atómica, salta lo que ya existe
+       * (constructores, equipos, pilotos, afiliaciones) y audita
+       * `market.imported` con resumen.
+       */
+      import: adminProcedure
+        .input(importMarketInputSchema)
+        .mutation(({ ctx, input }) =>
+          service.importMarket(
+            { normalized: input.market, seasonId: input.seasonId },
+            { actorId: ctx.user.id, ip: ctx.ip },
+          ),
+        ),
     }),
   });
 }

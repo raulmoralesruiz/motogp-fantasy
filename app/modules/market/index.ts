@@ -38,3 +38,4 @@
  */
 export * from "./market-service";
 export * from "./price-service";
+export * from "./market-source";

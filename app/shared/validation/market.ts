@@ -187,3 +187,105 @@ export type SetManualPriceInput = z.infer<typeof setManualPriceInputSchema>;
 export type ApplyFormulaInput = z.infer<typeof applyFormulaInputSchema>;
 export type MarketListInput = z.infer<typeof marketListInputSchema>;
 export type MarketDetailInput = z.infer<typeof marketDetailInputSchema>;
+
+// ── Import de mercado (US-06, ADR-0013) ──────────────────────────────────
+
+/**
+ * Constructor normalizado (preview del import de mercado).
+ */
+const normalizedConstructorSchema = z.object({
+  sourceId: z.string().min(1).nullable(),
+  name: z
+    .string()
+    .min(1, "El nombre del constructor es obligatorio")
+    .max(160, "El nombre del constructor no puede superar los 160 caracteres"),
+});
+
+/**
+ * Equipo normalizado (preview del import de mercado).
+ */
+const normalizedTeamSchema = z.object({
+  sourceId: z.string().min(1).nullable(),
+  name: z
+    .string()
+    .min(1, "El nombre del equipo es obligatorio")
+    .max(160, "El nombre del equipo no puede superar los 160 caracteres"),
+  constructor: normalizedConstructorSchema,
+});
+
+/**
+ * Piloto normalizado (preview del import de mercado).
+ */
+const normalizedRiderSchema = z.object({
+  sourceId: z.string().min(1).nullable(),
+  name: z
+    .string()
+    .min(1, "El nombre del piloto es obligatorio")
+    .max(80, "El nombre del piloto no puede superar los 80 caracteres"),
+  surname: z
+    .string()
+    .min(1, "El apellido del piloto es obligatorio")
+    .max(80, "El apellido del piloto no puede superar los 80 caracteres"),
+  number: z.number().int().min(1).max(999).nullable(),
+  countryIso: z.string().max(2).nullable(),
+});
+
+/**
+ * Afiliación normalizada (preview del import de mercado).
+ */
+const normalizedAffiliationSchema = z.object({
+  riderSourceId: z.string().min(1),
+  teamSourceId: z.string().min(1),
+  seasonYear: z
+    .number()
+    .int()
+    .min(1900)
+    .max(2200),
+});
+
+/**
+ * Mercado normalizado de temporada: lo devuelve `market.fetch` y lo
+ * recibe `market.import` (revalidado server-side — AGENTS.md §8).
+ */
+export const normalizedMarketSchema = z.object({
+  year: z
+    .number()
+    .int("El año debe ser un entero")
+    .min(1900, "El año debe ser 1900 o posterior")
+    .max(2200, "El año no puede superar 2200"),
+  seasonRef: z.string().min(1, "La referencia de temporada de la fuente es obligatoria"),
+  source: z.object({
+    name: z.string().min(1, "El nombre de la fuente es obligatorio"),
+    version: z.string().min(1, "La versión de la fuente es obligatoria"),
+  }),
+  constructors: z.array(normalizedConstructorSchema).min(1, "El mercado no tiene constructores"),
+  teams: z.array(normalizedTeamSchema).min(1, "El mercado no tiene equipos"),
+  riders: z.array(normalizedRiderSchema).min(1, "El mercado no tiene pilotos"),
+  affiliations: z.array(normalizedAffiliationSchema).min(1, "El mercado no tiene afiliaciones"),
+});
+
+/** Obtención de mercado (US-06): año de la temporada en la fuente. */
+export const fetchMarketInputSchema = z.object({
+  year: z
+    .number()
+    .int("El año debe ser un entero")
+    .min(1900, "El año debe ser 1900 o posterior")
+    .max(2200, "El año no puede superar 2200"),
+});
+
+/**
+ * Importación de mercado (US-06): el preview normalizado reenviado por
+ * el cliente; el servidor lo revalida y exige `market.year === season.year`.
+ */
+export const importMarketInputSchema = z.object({
+  seasonId: z.string().uuid("El identificador de temporada no es válido"),
+  market: normalizedMarketSchema,
+});
+
+export type NormalizedConstructorInput = z.infer<typeof normalizedConstructorSchema>;
+export type NormalizedTeamInput = z.infer<typeof normalizedTeamSchema>;
+export type NormalizedRiderInput = z.infer<typeof normalizedRiderSchema>;
+export type NormalizedAffiliationInput = z.infer<typeof normalizedAffiliationSchema>;
+export type NormalizedMarketInput = z.infer<typeof normalizedMarketSchema>;
+export type FetchMarketInput = z.infer<typeof fetchMarketInputSchema>;
+export type ImportMarketInput = z.infer<typeof importMarketInputSchema>;
