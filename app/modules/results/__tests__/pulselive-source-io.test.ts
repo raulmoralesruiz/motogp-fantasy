@@ -140,7 +140,7 @@ describe("PulseLiveResultsSource — I/O con fetchImpl inyectado (US-17, ADR-001
       const { source, calls } = makeSourceWithCalls([
         ...baseRoutes(),
         { match: "/results/sessions", body: RAC_SESSIONS },
-        { match: "/results/classification", body: RACE_CLASSIFICATION },
+        { match: "/classification", body: RACE_CLASSIFICATION },
       ]);
 
       const result = await source.fetchEventResults("gp-1", "race");
@@ -149,7 +149,7 @@ describe("PulseLiveResultsSource — I/O con fetchImpl inyectado (US-17, ADR-001
         `${BASE_URL}/results/seasons`,
         `${BASE_URL}/results/categories?seasonUuid=season-2026`,
         `${BASE_URL}/results/sessions?eventUuid=ev-1&categoryUuid=cat-moto-gp`,
-        `${BASE_URL}/results/classification?sessionUuid=s-rac&categoryUuid=cat-moto-gp`,
+        `${BASE_URL}/results/session/s-rac/classification?categoryUuid=cat-moto-gp`,
       ]);
       expect(result).toMatchObject({
         event: "race",
@@ -163,7 +163,7 @@ describe("PulseLiveResultsSource — I/O con fetchImpl inyectado (US-17, ADR-001
       const { source } = makeSourceWithCalls([
         ...baseRoutes(),
         { match: "/results/sessions", body: RAC_SESSIONS },
-        { match: "/results/classification", body: RACE_CLASSIFICATION },
+        { match: "/classification", body: RACE_CLASSIFICATION },
       ]);
 
       const result = await source.fetchEventResults("gp-1", "race");
@@ -204,7 +204,7 @@ describe("PulseLiveResultsSource — I/O con fetchImpl inyectado (US-17, ADR-001
           ],
         },
         {
-          match: "/results/classification",
+          match: "/classification",
           body: {
             classification: [
               {
@@ -238,7 +238,7 @@ describe("PulseLiveResultsSource — I/O con fetchImpl inyectado (US-17, ADR-001
             { id: "s-rac", type: "RAC", date: "2026-09-06T08:00:00Z", status: "NOT-STARTED" },
           ],
         },
-        { match: "/results/classification", body: RACE_CLASSIFICATION },
+        { match: "/classification", body: RACE_CLASSIFICATION },
       ]);
 
       await expect(source.fetchEventResults("gp-1", "race")).rejects.toBeInstanceOf(
@@ -247,7 +247,7 @@ describe("PulseLiveResultsSource — I/O con fetchImpl inyectado (US-17, ADR-001
       await expect(source.fetchEventResults("gp-1", "race")).rejects.toThrow(
         "La sesión RAC del GP «GP de Indonesia» no ha terminado (estado de la fuente: NOT-STARTED); se reintentará.",
       );
-      expect(calls.some((url) => url.includes("/results/classification"))).toBe(false);
+      expect(calls.some((url) => url.includes("/classification"))).toBe(false);
       // 2 llamadas: seasons+categories cacheadas (1ª) y sessions re-fetcheada
       // en cada intento (no cacheada, el estado puede cambiar).
       expect(calls).toHaveLength(4);
@@ -305,7 +305,7 @@ describe("PulseLiveResultsSource — I/O con fetchImpl inyectado (US-17, ADR-001
       const { source, calls } = makeSourceWithCalls([
         ...baseRoutes(),
         { match: "/results/sessions", body: RAC_SESSIONS },
-        { match: "/results/classification", body: RACE_CLASSIFICATION },
+        { match: "/classification", body: RACE_CLASSIFICATION },
       ]);
 
       await source.fetchEventResults("gp-1", "race");
@@ -315,7 +315,7 @@ describe("PulseLiveResultsSource — I/O con fetchImpl inyectado (US-17, ADR-001
       expect(count("/results/seasons")).toBe(1);
       expect(count("/results/categories")).toBe(1);
       expect(count("/results/sessions")).toBe(2);
-      expect(count("/results/classification")).toBe(2);
+      expect(count("/classification")).toBe(2);
     });
   });
 

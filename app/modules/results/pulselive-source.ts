@@ -145,7 +145,7 @@ export interface PulseLiveRecord {
   rider: PulseLiveRiderRef;
 }
 
-/** Clasificación cruda tal y como la devuelve `/results/classification`. */
+/** Clasificación cruda tal y como la devuelve `/results/session/{id}/classification`. */
 export interface PulseLiveClassification {
   classification: PulseLiveClassificationEntry[];
   records: PulseLiveRecord[];
@@ -464,7 +464,7 @@ export class PulseLiveResultsSource implements ResultsSource {
     }
 
     const payload = await this.getJson<unknown>(
-      `${this.baseUrl}/results/classification?sessionUuid=${session.id}&categoryUuid=${categoryId}`,
+      `${this.baseUrl}/results/session/${session.id}/classification?categoryUuid=${categoryId}`,
     );
 
     return normalizePulseLiveClassification(payload, {

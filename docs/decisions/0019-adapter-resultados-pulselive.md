@@ -19,7 +19,7 @@ US-17 debe implementar la importación automática de resultados vía PulseLive:
 
 **Verificación en vivo** (2026-10-21, temporada 2026 completa: 22 GPs no-test, 177 sesiones, 69 sesiones Q/SPR/RAC clasificadas, 0 sin clasificación):
 
-- Endpoints y payloads según `integrations.md` §2.1 (actualizada por este ADR). El parámetro de `/results/sessions` es el campo `id` del evento (**no** `toad_api_uuid`); el de `/results/classification` es el campo `id` de la sesión.
+- Endpoints y payloads según `integrations.md` §2.1 (actualizada por este ADR). El parámetro de `/results/sessions` es el campo `id` del evento (**no** `toad_api_uuid`); el de `/results/session/{id}/classification` es el campo `id` de la sesión.
 - `rider.riders_id` presente en el 100% de las entradas escaneadas; `rider.id` no es estable entre eventos.
 - Estados de entrada observados: `INSTND` (terminó), `OUTSTND` (DNF), `NOTFINISHFIRST` (DNF), `NOTONRESTARTGRID` (ausente).
 - Tipos de sesión: `FP`, `PR`, `Q` (1–2 por GP), `SPR`, `WUP`, `RAC` (23: un GP con 2 `RAC` = carrera reiniciada). Estados observados: `FINISHED`, `NOT-STARTED`.
