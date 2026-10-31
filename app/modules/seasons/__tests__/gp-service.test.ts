@@ -32,7 +32,12 @@ function makePrisma() {
     create: vi.fn(),
     update: vi.fn(),
   };
-  const weekendEvent = { findFirst: vi.fn(), create: vi.fn() };
+  const weekendEvent = {
+    findFirst: vi.fn(),
+    create: vi.fn(),
+    findMany: vi.fn(),
+    updateMany: vi.fn(),
+  };
   const auditLog = { create: vi.fn() };
   const prisma = {
     circuit,
@@ -223,5 +228,73 @@ describe("GpService.importCalendar (T-24)", () => {
     });
     // La revalidación es la primera barrera: no se consultó nada.
     expect(fake.season.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("ronda existente → actualiza las horas (date + eventos) y audita gp.times-updated", async () => {
+    const fake = makePrisma();
+    const existingGp = {
+      id: "gp-1",
+      name: "GP MALASIA",
+      date: new Date("2026-11-01T15:00:00.000Z"), // hora antigua (mal)
+    };
+    fake.season.findUnique.mockResolvedValue({ id: "s1", year: 2026 });
+    fake.gp.findUnique.mockResolvedValue(existingGp);
+    fake.weekendEvent.findMany.mockResolvedValue([
+      { type: "q2", startTime: new Date("2026-10-31T11:15:00.000Z") },
+      { type: "race", startTime: new Date("2026-11-01T15:00:00.000Z") },
+    ]);
+    fake.gp.update.mockResolvedValue(existingGp);
+    fake.weekendEvent.updateMany.mockResolvedValue({ count: 1 });
+    fake.auditLog.create.mockResolvedValue({});
+
+    const service = new GpService({ prisma: fake.prisma });
+    const calendar = {
+      year: 2026,
+      seasonRef: "season-2026",
+      source: { name: "pulselive", version: "v1" },
+      gps: [
+        {
+          round: 19,
+          name: "GP MALASIA",
+          circuit: { name: "Sepang", country: "Malaysia", location: "Sepang" },
+          date: new Date("2026-11-01T07:00:00.000Z"), // hora corregida (UTC real)
+          events: [
+            { type: "q2", startTime: new Date("2026-10-31T03:15:00.000Z") },
+            { type: "race", startTime: new Date("2026-11-01T07:00:00.000Z") },
+          ],
+          sourceEventRef: "ev-19",
+        },
+      ],
+    } as unknown as NormalizedSeasonCalendar;
+
+    const report = await service.importCalendar(
+      { seasonId: "s1", calendar },
+      meta,
+    );
+
+    // Se actualizó (no se creó ni se saltó).
+    expect(report).toMatchObject({ created: 0, updated: 1, skipped: [] });
+    // La fecha del GP y las horas de los eventos se actualizaron.
+    expect(fake.gp.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "gp-1" },
+        data: { date: new Date("2026-11-01T07:00:00.000Z") },
+      }),
+    );
+    expect(fake.weekendEvent.updateMany).toHaveBeenCalledTimes(2);
+    expect(fake.weekendEvent.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { gpId: "gp-1", type: "race" },
+        data: { startTime: new Date("2026-11-01T07:00:00.000Z") },
+      }),
+    );
+    // No se creó ningún GP nuevo.
+    expect(fake.gp.create).not.toHaveBeenCalled();
+    // Auditoría gp.times-updated con before/after.
+    const auditCalls = fake.auditLog.create.mock.calls.map(
+      (c) => (c[0] as { data: { action: string } }).data.action,
+    );
+    expect(auditCalls).toContain("gp.times-updated");
+    expect(auditCalls).toContain("calendar.imported");
   });
 });

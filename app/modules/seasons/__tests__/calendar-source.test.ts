@@ -28,15 +28,27 @@ function makeSession(type: string, date: string | null): PulseLiveSession {
   return { id: `s-${sessionCounter}`, type, date };
 }
 
+/**
+ * País por defecto de los fixtures: Malasia (Asia/Kuala_Lumpur, UTC+8, sin
+ * DST) — offset fijo para que las horas esperadas sean predecibles. Los
+ * nombres de país replican los que devuelve la API real (inglés).
+ */
+const DEFAULT_COUNTRY = "Malaysia";
+
 function makeEvent(
   overrides: Partial<PulseLiveEvent> &
     Pick<PulseLiveEvent, "id" | "name" | "date_start" | "date_end">,
 ): PulseLiveEvent {
   return {
     circuit: { name: "Circuito Test", place: "Ciudad" },
-    country: { name: "España" },
+    country: { name: DEFAULT_COUNTRY },
     ...overrides,
   };
+}
+
+/** Hora local (reloj del circuito) → UTC esperada, para fixtures legibles. */
+function localToUtc(local: string, offsetHours: number): Date {
+  return new Date(new Date(local).getTime() - offsetHours * 3600 * 1000);
 }
 
 /** GP completo: FP, PR, FP, Q, Q, SPR, WUP, RAC (formato 2026). */
@@ -92,15 +104,15 @@ describe("normalizePulseLiveCalendar (US-05)", () => {
       country: "Thailand",
       location: "Buriram",
     });
-    // La fecha del GP es la de la carrera (Date UTC, superjson-safe).
-    expect(gp?.date).toEqual(new Date("2026-03-01T13:00:00.000Z"));
+    // La fecha del GP es la de la carrera (hora local Tailandia UTC+7 → UTC).
+    expect(gp?.date).toEqual(localToUtc("2026-03-01T13:00:00Z", 7));
     // Referencia estable en la fuente (US-17, ADR-0019): `id` del evento.
     expect(gp?.sourceEventRef).toBe("ev-1");
     expect(gp?.events).toEqual([
-      { type: "q1", startTime: new Date("2026-02-28T12:00:00.000Z") },
-      { type: "q2", startTime: new Date("2026-02-28T12:45:00.000Z") },
-      { type: "sprint", startTime: new Date("2026-02-28T14:00:00.000Z") },
-      { type: "race", startTime: new Date("2026-03-01T13:00:00.000Z") },
+      { type: "q1", startTime: localToUtc("2026-02-28T12:00:00Z", 7) },
+      { type: "q2", startTime: localToUtc("2026-02-28T12:45:00Z", 7) },
+      { type: "sprint", startTime: localToUtc("2026-02-28T14:00:00Z", 7) },
+      { type: "race", startTime: localToUtc("2026-03-01T13:00:00Z", 7) },
     ]);
   });
 
@@ -121,8 +133,8 @@ describe("normalizePulseLiveCalendar (US-05)", () => {
       SOURCE,
     );
     expect(calendar.gps[0]?.events).toEqual([
-      { type: "q2", startTime: new Date("2026-04-04T12:00:00.000Z") },
-      { type: "race", startTime: new Date("2026-04-05T13:00:00.000Z") },
+      { type: "q2", startTime: localToUtc("2026-04-04T12:00:00Z", 8) },
+      { type: "race", startTime: localToUtc("2026-04-05T13:00:00Z", 8) },
     ]);
   });
 
@@ -146,10 +158,10 @@ describe("normalizePulseLiveCalendar (US-05)", () => {
     );
     expect(calendar.gps[0]?.events.map((e) => e.type)).toEqual(["q1", "q2", "race"]);
     expect(calendar.gps[0]?.events[0]?.startTime).toEqual(
-      new Date("2026-04-11T10:00:00.000Z"),
+      localToUtc("2026-04-11T10:00:00Z", 8),
     );
     expect(calendar.gps[0]?.events[1]?.startTime).toEqual(
-      new Date("2026-04-11T12:00:00.000Z"),
+      localToUtc("2026-04-11T12:00:00Z", 8),
     );
   });
 
@@ -173,9 +185,9 @@ describe("normalizePulseLiveCalendar (US-05)", () => {
     );
     const gp = calendar.gps[0];
     expect(gp?.events.find((e) => e.type === "race")?.startTime).toEqual(
-      new Date("2026-05-17T15:17:00.000Z"),
+      localToUtc("2026-05-17T15:17:00Z", 8),
     );
-    expect(gp?.date).toEqual(new Date("2026-05-17T15:17:00.000Z"));
+    expect(gp?.date).toEqual(localToUtc("2026-05-17T15:17:00Z", 8));
   });
 
   it("varios sprints: la última por fecha", () => {
@@ -197,7 +209,7 @@ describe("normalizePulseLiveCalendar (US-05)", () => {
       SOURCE,
     );
     expect(calendar.gps[0]?.events.find((e) => e.type === "sprint")?.startTime).toEqual(
-      new Date("2026-06-06T15:30:00.000Z"),
+      localToUtc("2026-06-06T15:30:00Z", 8),
     );
   });
 
@@ -393,6 +405,72 @@ describe("normalizePulseLiveCalendar (US-05)", () => {
         SOURCE,
       ),
     ).toThrowError(/fecha inválida/);
+  });
+});
+
+describe("conversión de horas (PulseLive devuelve hora local etiquetada como UTC)", () => {
+  function makeCalendar(country: string, circuit: string, raceLocal: string) {
+    const event = makeEvent({
+      id: "ev-tz",
+      name: "GP HUSO",
+      date_start: "2026-01-01",
+      date_end: "2026-01-03",
+      circuit: { name: circuit, place: "Ciudad" },
+      country: { name: country },
+    });
+    return normalizePulseLiveCalendar(
+      makeRaw([event], {
+        [event.id]: [
+          makeSession("Q", raceLocal.replace(/T\d{2}:\d{2}:\d{2}/, "T12:00:00")),
+          makeSession("RAC", raceLocal),
+        ],
+      }),
+      SOURCE,
+    );
+  }
+
+  it("Malasia (UTC+8, sin DST): sprint 15:00 local → 07:00 UTC (caso real del bug)", () => {
+    const calendar = makeCalendar("Malaysia", "Petronas Sepang International Circuit", "2026-10-31T15:00:00+00:00");
+    const gp = calendar.gps[0];
+    expect(gp?.events.find((e) => e.type === "race")?.startTime).toEqual(
+      new Date("2026-10-31T07:00:00.000Z"),
+    );
+    expect(gp?.date).toEqual(new Date("2026-10-31T07:00:00.000Z"));
+  });
+
+  it("España en verano (CEST, UTC+2): 14:00 local → 12:00 UTC", () => {
+    const calendar = makeCalendar("Spain", "Circuit de Barcelona-Catalunya", "2026-07-12T14:00:00+00:00");
+    expect(calendar.gps[0]?.events.find((e) => e.type === "race")?.startTime).toEqual(
+      new Date("2026-07-12T12:00:00.000Z"),
+    );
+  });
+
+  it("España en invierno (CET, UTC+1): 14:00 local → 13:00 UTC (DST manejado por fecha)", () => {
+    const calendar = makeCalendar("Spain", "Circuit Ricardo Tormo", "2026-01-18T14:00:00+00:00");
+    expect(calendar.gps[0]?.events.find((e) => e.type === "race")?.startTime).toEqual(
+      new Date("2026-01-18T13:00:00.000Z"),
+    );
+  });
+
+  it("Indonesia/Mandalika (Lombok UTC+8, no Jakarta UTC+7): el circuito manda", () => {
+    // Si se usara Jakarta (UTC+7) daría 06:00 UTC; Mandalika es UTC+8 → 05:00 UTC.
+    const calendar = makeCalendar("Indonesia", "Pertamina Mandalika Circuit", "2026-09-13T13:00:00+00:00");
+    expect(calendar.gps[0]?.events.find((e) => e.type === "race")?.startTime).toEqual(
+      new Date("2026-09-13T05:00:00.000Z"),
+    );
+  });
+
+  it("Indonesia otro circuito (sin override) → Jakarta (UTC+7): 13:00 local → 06:00 UTC", () => {
+    const calendar = makeCalendar("Indonesia", "Circuito de Jakarta", "2026-09-13T13:00:00+00:00");
+    expect(calendar.gps[0]?.events.find((e) => e.type === "race")?.startTime).toEqual(
+      new Date("2026-09-13T06:00:00.000Z"),
+    );
+  });
+
+  it("país sin mapeo → CalendarNormalizationError (fail-closed, no se adivina el huso)", () => {
+    expect(() =>
+      makeCalendar("Atlantis", "Circuito Atlantis", "2026-03-01T13:00:00+00:00"),
+    ).toThrowError(/timezone IANA mapeado/);
   });
 });
 

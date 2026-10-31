@@ -135,6 +135,8 @@ export interface CalendarImportReport {
   seasonId: string;
   year: number;
   created: number;
+  /** Rondas existentes cuya hora se actualizó con la fuente (re-import). */
+  updated: number;
   skipped: Array<{ round: number; reason: string }>;
 }
 
@@ -535,16 +537,17 @@ export class GpService {
     return this.deps.prisma.$transaction(async (tx) => {
       const skipped: Array<{ round: number; reason: string }> = [];
       let created = 0;
+      let updated = 0;
 
       for (const gp of [...calendar.gps].sort((a, b) => a.round - b.round)) {
         const existing = await tx.gp.findUnique({
           where: { seasonId_round: { seasonId: season.id, round: gp.round } },
         });
         if (existing) {
-          skipped.push({
-            round: gp.round,
-            reason: `La ronda ${gp.round} ya existe (${existing.name}).`,
-          });
+          // Re-import: actualiza las horas (date + eventos) con la fuente
+          // (fix de horas, ADR-0012 addendum). Auditoría `gp.times-updated`.
+          await this.updateGpTimesInTx(tx, existing, gp, meta);
+          updated += 1;
           continue;
         }
         const circuitId = await this.upsertCircuitInTx(tx, gp.circuit, meta);
@@ -599,12 +602,13 @@ export class GpService {
           source: calendar.source.name,
           seasonRef: calendar.seasonRef,
           created,
+          updated,
           skipped: skipped.length,
         },
         ip: meta.ip,
       });
 
-      return { seasonId: season.id, year: calendar.year, created, skipped };
+      return { seasonId: season.id, year: calendar.year, created, updated, skipped };
     });
   }
 
@@ -641,6 +645,63 @@ export class GpService {
       ip: meta.ip,
     });
     return created.id;
+  }
+
+  /**
+   * Actualiza las horas de un GP existente (date + eventos de fin de
+   * semana) con los datos de la fuente (re-import, fix de horas
+   * ADR-0012 addendum). Auditoría `gp.times-updated` con before/after.
+   */
+  private async updateGpTimesInTx(
+    tx: Prisma.TransactionClient,
+    existing: { id: string; name: string; date: Date },
+    gp: {
+      name: string;
+      date: Date;
+      events: Array<{ type: WeekendEventType; startTime?: Date | null }>;
+    },
+    meta: AuditMeta,
+  ): Promise<void> {
+    const beforeEvents = await tx.weekendEvent.findMany({
+      where: { gpId: existing.id },
+      select: { type: true, startTime: true },
+    });
+    const toEventJson = (e: { type: WeekendEventType; startTime?: Date | null }) => ({
+      type: e.type,
+      startTime: e.startTime?.toISOString() ?? null,
+    });
+    const before = {
+      date: existing.date.toISOString(),
+      events: beforeEvents.map(toEventJson),
+    };
+
+    // Fecha del GP (la de la carrera).
+    await tx.gp.update({
+      where: { id: existing.id },
+      data: { date: gp.date },
+    });
+    // Horas de cada evento de fin de semana (idempotente por tipo).
+    for (const event of gp.events) {
+      await tx.weekendEvent.updateMany({
+        where: { gpId: existing.id, type: event.type },
+        data: { startTime: event.startTime ?? null },
+      });
+    }
+
+    await appendAudit(tx, {
+      actorId: meta.actorId,
+      action: "gp.times-updated",
+      entity: "gp",
+      entityId: existing.id,
+      beforeData: before,
+      afterData: {
+        name: gp.name,
+        date: gp.date.toISOString(),
+        events: gp.events.map(toEventJson),
+        source: "calendar.reimport",
+      },
+      ip: meta.ip,
+    });
   }
 
   /** Revalida el calendario server-side (AGENTS.md §8). */

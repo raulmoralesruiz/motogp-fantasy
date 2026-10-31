@@ -138,6 +138,7 @@ export default function CalendarImportForm({
       {importCalendar.isSuccess && (
         <Alert variant="success">
           Importados {importCalendar.data.created} GPs;{" "}
+          {importCalendar.data.updated} horas actualizadas;{" "}
           {importCalendar.data.skipped.length} saltados
           {importCalendar.data.skipped.length > 0
             ? ` (${importCalendar.data.skipped

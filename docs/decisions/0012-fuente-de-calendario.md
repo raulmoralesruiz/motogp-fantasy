@@ -97,3 +97,17 @@ El calendario normalizado usa `Date` (UTC), no strings ISO: el preview viaja por
 - **Datos incompletos en la fuente** (p. ej. un GP sin carrera) → el `fetch` falla con el nombre del GP; el admin lo crea manualmente. La import es por temporada completa, no por GP: si un GP falla la normalización, el resto tampoco se importa (el admin corrige y re-importa; las rondas ya creadas se saltan).
 - **N+1 de peticiones** (~24 por temporada) → aceptable para una acción puntual de admin; si se convierte en job periódico, se optimiza (caché o batch) antes de US-13.
 - **Divergencia de nombres/circuitos** entre importaciones (p. ej. «Circuito de Barcelona» vs «Circuit de Barcelona-Catalunya») → el unique `(name, country)` crea circuitos duplicados; el admin los gestiona manualmente (no hay fusión automática en el MVP).
+
+## Addendum (2026-10-31): las horas de la fuente son hora local etiquetada como UTC
+
+**Problema.** PulseLive devuelve la hora **local del país del evento** con offset `+00:00` (p. ej. la sprint de Malasia a las 15:00 MYT llega como `2026-10-31T15:00:00+00:00`). Verificado 2026-10-31 contra motogp.com: sprint/race de Sepang son 15:00 local (UTC+8) = 07:00 UTC; la API las devuelve como 15:00+00:00. El normalizador anterior (`toUtcDate`) las trataba como UTC, así que las horas guardadas salían **desfasadas** (8h en Malasia; el desfase varía por país y por DST).
+
+**Decisión.** Corregir en el import (Opción B): interpretar la hora como **reloj local** en el timezone IANA del circuito y convertirla a UTC real.
+
+- **Conversión** (`localWallClockToUtc`, pura): parsea la hora reloj local y la convierte a UTC usando `Intl.DateTimeFormat` (base de datos IANA), con dos iteraciones para manejar el **DST** (el offset puede cambiar entre la estimación y la hora corregida). Sin I/O; `Intl` es una API global, no una dependencia.
+- **Mapa país → timezone IANA** (19 países de la temporada 2026) en `calendar-source.ts` (específico de la fuente, no un parámetro de reglas — no va en `season_rules`). Overrides por **circuito** para países con varios husos: `Pertamina Mandalika Circuit` → `Asia/Makassar` (Lombok = UTC+8, no Jakarta UTC+7).
+- **Fail-closed:** `resolveTimezone(circuito, país)` lanza `CalendarNormalizationError` si no hay mapeo (no se adivina el huso; se añade el país al mapa al cambiar el calendario).
+
+**Fix de datos (re-import).** Como la import anterior **saltaba** las rondas existentes, las horas ya guardadas no se corregían solas. `importCalendar` ahora **actualiza** las horas de los GPs existentes (`gp.date` + `weekend_events.startTime`) en lugar de saltarlos: el admin re-importa el calendario desde el panel y se corrigen las 22 rondas. Auditoría `gp.times-updated` (before/after) + el resumen `calendar.imported` incluye `updated`. El reporte pasa a `{created, updated, skipped}`.
+
+**Impacto.** `calendar-source.ts` (conversión + mapa + `resolveTimezone`), `gp-service.ts` (`updateGpTimesInTx` + reporte), UI `calendar-import-form.tsx` (muestra `updated`), tests (conversión por huso/DST/override + re-import). `integrations.md` actualizada.

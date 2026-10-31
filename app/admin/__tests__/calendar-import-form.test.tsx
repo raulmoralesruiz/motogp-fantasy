@@ -149,6 +149,7 @@ describe("CalendarImportForm", () => {
         seasonId: "s1",
         year: 2026,
         created: 2,
+        updated: 0,
         skipped: [{ round: 1, reason: "ya existe" }],
       },
     });
@@ -161,7 +162,7 @@ describe("CalendarImportForm", () => {
     await user.click(screen.getByRole("button", { name: "2. Importar GPs" }));
 
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Importados 2 GPs; 1 saltados (R1).",
+      "Importados 2 GPs; 0 horas actualizadas; 1 saltados (R1).",
     );
   });
 
@@ -169,7 +170,7 @@ describe("CalendarImportForm", () => {
     utilsMock("seasons.calendar.fetch.fetch").mockResolvedValue(calendar);
     mockImport({
       isSuccess: true,
-      data: { seasonId: "s1", year: 2026, created: 2, skipped: [] },
+      data: { seasonId: "s1", year: 2026, created: 2, updated: 0, skipped: [] },
     });
     render(<CalendarImportForm seasons={[season]} onImported={vi.fn()} />);
 
@@ -179,7 +180,28 @@ describe("CalendarImportForm", () => {
     await user.selectOptions(screen.getByLabelText("Importar en la temporada"), "s1");
     await user.click(screen.getByRole("button", { name: "2. Importar GPs" }));
 
-    expect(screen.getByRole("status")).toHaveTextContent("Importados 2 GPs; 0 saltados.");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Importados 2 GPs; 0 horas actualizadas; 0 saltados.",
+    );
+  });
+
+  it("muestra las horas actualizadas en un re-import (fix de horas)", async () => {
+    utilsMock("seasons.calendar.fetch.fetch").mockResolvedValue(calendar);
+    mockImport({
+      isSuccess: true,
+      data: { seasonId: "s1", year: 2026, created: 0, updated: 22, skipped: [] },
+    });
+    render(<CalendarImportForm seasons={[season]} onImported={vi.fn()} />);
+
+    await downloadCalendar();
+
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText("Importar en la temporada"), "s1");
+    await user.click(screen.getByRole("button", { name: "2. Importar GPs" }));
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Importados 0 GPs; 22 horas actualizadas; 0 saltados.",
+    );
   });
 
   it("muestra el error general cuando falla la import", async () => {

@@ -140,16 +140,140 @@ function sortByDate<T extends { date: string | null }>(sessions: T[]): T[] {
   return [...sessions].sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""));
 }
 
-/** Convierte la fecha ISO de la fuente a `Date`; `null` se conserva. */
-function toUtcDate(iso: string | null, context: string): Date | null {
+// ── Timezones (PulseLive devuelve hora local etiquetada como UTC) ──────────
+//
+// PulseLive devuelve la hora local del país del evento con offset `+00:00`
+// (p. ej. la sprint de Malasia a las 15:00 MYT llega como
+// `2026-10-31T15:00:00+00:00`). Para recuperar la UTC real, se interpreta la
+// hora como reloj local en el timezone IANA del circuito y se convierte.
+// (Verificado 2026-10-31 contra motogp.com: sprint/race Sepang 15:00 local =
+// 07:00 UTC; la API las devuelve como 15:00+00:00.)
+
+/** País → timezone IANA (países con un solo huso relevante para MotoGP). */
+const COUNTRY_TIMEZONES: Record<string, string> = {
+  Australia: "Australia/Melbourne",
+  Austria: "Europe/Vienna",
+  Brazil: "America/Sao_Paulo",
+  Czechia: "Europe/Prague",
+  France: "Europe/Paris",
+  Germany: "Europe/Berlin",
+  Hungary: "Europe/Budapest",
+  Indonesia: "Asia/Jakarta",
+  Italy: "Europe/Rome",
+  Japan: "Asia/Tokyo",
+  Malaysia: "Asia/Kuala_Lumpur",
+  Netherlands: "Europe/Amsterdam",
+  Portugal: "Europe/Lisbon",
+  Qatar: "Asia/Qatar",
+  "San Marino": "Europe/Rome",
+  Spain: "Europe/Madrid",
+  Thailand: "Asia/Bangkok",
+  "United Kingdom of Great Britain and Northern Ireland": "Europe/London",
+  "United States of America": "America/Chicago",
+};
+
+/**
+ * Overrides por circuito (países con varios husos): el circuito manda sobre
+ * el país. P. ej. Mandalika (Lombok) está en WITA (UTC+8), no WIB/Jakarta
+ * (UTC+7).
+ */
+const CIRCUIT_TIMEZONES: Record<string, string> = {
+  "Pertamina Mandalika Circuit": "Asia/Makassar",
+};
+
+/**
+ * Resuelve el timezone IANA de un evento. Fail-closed: si no hay mapeo,
+ * lanza `CalendarNormalizationError` (no se adivina el huso).
+ */
+function resolveTimezone(circuitName: string, countryName: string): string {
+  const byCircuit = CIRCUIT_TIMEZONES[circuitName];
+  if (byCircuit) return byCircuit;
+  const byCountry = COUNTRY_TIMEZONES[countryName];
+  if (byCountry) return byCountry;
+  throw new CalendarNormalizationError(
+    `No hay timezone IANA mapeado para el circuito «${circuitName}» (país «${countryName}»); añádelo al mapa de timezones de la fuente.`,
+  );
+}
+
+/** Offset (ms) de `timeZone` respecto a UTC en el instante `utcMs`. */
+function tzOffsetMs(utcMs: number, timeZone: string): number {
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  const parts = dtf.formatToParts(new Date(utcMs));
+  const get = (type: string) =>
+    Number(parts.find((p) => p.type === type)?.value ?? 0);
+  const asUtc = Date.UTC(
+    get("year"),
+    get("month") - 1,
+    get("day"),
+    get("hour"),
+    get("minute"),
+    get("second"),
+  );
+  return asUtc - utcMs;
+}
+
+/**
+ * Convierte una hora reloj local (componentes) a un instante UTC (ms),
+ * manejando el DST con dos iteraciones (el offset puede cambiar entre la
+ * estimación inicial y la hora corregida).
+ */
+function zonedTimeToUtc(
+  y: number,
+  mo: number,
+  d: number,
+  h: number,
+  mi: number,
+  s: number,
+  timeZone: string,
+): number {
+  const guessUtc = Date.UTC(y, mo - 1, d, h, mi, s);
+  let utc = guessUtc - tzOffsetMs(guessUtc, timeZone);
+  utc = guessUtc - tzOffsetMs(utc, timeZone);
+  return utc;
+}
+
+/**
+ * Convierte la fecha ISO de la fuente (hora local etiquetada como UTC) a
+ * `Date` UTC real; `null` se conserva. Lanza si la fecha no se puede
+ * interpretar como reloj local.
+ */
+function localWallClockToUtc(
+  iso: string | null,
+  timeZone: string,
+  context: string,
+): Date | null {
   if (iso === null) return null;
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/.exec(iso);
+  if (!match) {
     throw new CalendarNormalizationError(
       `La fuente devolvió una fecha inválida para ${context}: «${iso}».`,
     );
   }
-  return date;
+  const toNum = (v: string | undefined): number => {
+    const n = Number(v);
+    if (Number.isNaN(n)) {
+      throw new CalendarNormalizationError(
+        `La fuente devolvió una fecha inválida para ${context}: «${iso}».`,
+      );
+    }
+    return n;
+  };
+  const y = toNum(match[1]);
+  const mo = toNum(match[2]);
+  const d = toNum(match[3]);
+  const h = toNum(match[4]);
+  const mi = toNum(match[5]);
+  const s = toNum(match[6]);
+  return new Date(zonedTimeToUtc(y, mo, d, h, mi, s, timeZone));
 }
 
 interface MappedWeekend {
@@ -161,8 +285,15 @@ interface MappedWeekend {
 /**
  * Mapea las sesiones de un evento a eventos de fin de semana (reglas del
  * ADR-0012). Lanza `CalendarNormalizationError` si falta Q2 o la carrera.
+ *
+ * `timeZone` es el timezone IANA del circuito: las horas de la fuente son
+ * reloj local y se convierten a UTC real (ver `localWallClockToUtc`).
  */
-function mapWeekendSessions(gpName: string, sessions: PulseLiveSession[]): MappedWeekend {
+function mapWeekendSessions(
+  gpName: string,
+  sessions: PulseLiveSession[],
+  timeZone: string,
+): MappedWeekend {
   const sorted = sortByDate(sessions);
   const qs = sorted.filter((s) => s.type === "Q");
   const sprints = sorted.filter((s) => s.type === "SPR");
@@ -170,7 +301,7 @@ function mapWeekendSessions(gpName: string, sessions: PulseLiveSession[]): Mappe
 
   const events: CalendarWeekendEvent[] = [];
   const startTime = (session: PulseLiveSession, label: string) =>
-    toUtcDate(session.date, `la sesión ${label} del GP «${gpName}»`);
+    localWallClockToUtc(session.date, timeZone, `la sesión ${label} del GP «${gpName}»`);
 
   // Q por orden temporal: la primera → q1, la segunda → q2. Una sola Q
   // (clasificación combinada) cuenta como q2.
@@ -236,7 +367,8 @@ export function normalizePulseLiveCalendar(
 
   const gps: CalendarGp[] = events.map((event, index) => {
     const sessions = raw.sessionsByEvent[event.id] ?? [];
-    const weekend = mapWeekendSessions(event.name, sessions);
+    const timeZone = resolveTimezone(event.circuit.name, event.country.name);
+    const weekend = mapWeekendSessions(event.name, sessions, timeZone);
     // Fecha del GP = fecha de la carrera; fallback: date_end (UTC medianoche).
     const fallback = new Date(`${event.date_end}T00:00:00.000Z`);
     if (Number.isNaN(fallback.getTime())) {
