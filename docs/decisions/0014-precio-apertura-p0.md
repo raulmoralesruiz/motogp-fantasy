@@ -66,3 +66,7 @@ Opción 2. `setOpeningPrice({ assetType, assetId, price })` (solo `global_admin`
 - Cero migraciones: reutiliza la tabla `prices` y el índice parcial único de P0.
 - El P0 heurístico es una **siembra inicial**: el admin puede corregir cualquier P0 después con `setOpeningPrice` (manual, auditado) sin conflicto.
 - La heurística es transparente y reproducible (posición → precio lineal; media de riders para grupos), y queda registrada en el `audit_log` con el actor y el resumen.
+
+## Addendum (2026-10-31): rango P0 calibrado (ADR-0032)
+
+El rango 30→10 de este addendum se **re-escala a 17.4→5.8** (k≈0.58) en **ADR-0032** (calibración P0, Opción B): con el rango original el lineup competitivo costaba ~173 (~1.7× el presupuesto base B=100, ADR-0030); con el nuevo rango cuesta ~100. La heurística (`calculateP0FromClassification`) ahora lee el rango de `shared/config` (`PROVISIONAL_MARKET_CONFIG.p0.max`/`min`) en lugar de tenerlo hardcodeado; el resto de la semántica (posición → precio lineal, media de riders para grupos, upsert, idempotencia, auditoría `price.p0_heuristic`) se mantiene. Para alinear los precios de una temporada en curso con el P0 recalibrado: re-seed (`p0Heuristic`) + `PriceService.recalculateSeasonPrices` (recálculo GP a GP auditado, endpoint `market.prices.recalculateSeason`).

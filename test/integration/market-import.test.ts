@@ -13,9 +13,10 @@
  *   afiliaciones para TODOS los GPs de la temporada; idempotente (re-ejecutar
  *   salta); auditoría `market.imported` con resumen.
  * - Año del mercado ≠ año de la temporada → error.
- * - `p0Heuristic` calcula P0 de riders (posición → precio lineal 30→10),
- *   equipos y constructores (media de sus riders, vía afiliación en BD);
- *   idempotente (re-ejecutar actualiza); auditoría `price.p0_heuristic`.
+ * - `p0Heuristic` calcula P0 de riders (posición → precio lineal sobre el
+ *   rango P0 de `shared/config`, 17.4→5.8, ADR-0032), equipos y constructores
+ *   (media de sus riders, vía afiliación en BD); idempotente (re-ejecutar
+ *   actualiza); auditoría `price.p0_heuristic`.
  * - RBAC: mutaciones solo `global_admin` (403 para `user`).
  * - Fallos de la fuente → INTERNAL_SERVER_ERROR con motivo en español.
  */
@@ -486,13 +487,14 @@ describe("US-06/ADR-0013/ADR-0014 · Import de mercado + P0 heurística (Postgre
       seasonId: world.season.id,
     });
 
-    // 2 riders: pos 1 → 30, pos 2 → 10 (n=2, step=20).
+    // 2 riders (rango P0 17.4→5.8, ADR-0032): pos 1 → 17.4, pos 2 → 5.8
+    // (n=2, step=11.6).
     expect(result).toMatchObject({
       ridersPriced: 2,
       teamsPriced: 1, // solo el rider con afiliación cuenta
       constructorsPriced: 1,
-      maxPrice: 30,
-      minPrice: 10,
+      maxPrice: 17.4,
+      minPrice: 5.8,
     });
 
     // P0 del rider (gp_id = NULL).
@@ -500,22 +502,22 @@ describe("US-06/ADR-0013/ADR-0014 · Import de mercado + P0 heurística (Postgre
     const riderP0 = await prisma.price.findFirst({
       where: { assetType: "rider", assetId: rider?.id, gpId: null },
     });
-    expect(Number(riderP0?.price)).toBe(30);
+    expect(Number(riderP0?.price)).toBe(17.4);
     expect(riderP0?.reason).toBe("formula");
 
-    // P0 del equipo = media de sus riders (solo el de pos 1) = 30.
+    // P0 del equipo = media de sus riders (solo el de pos 1) = 17.4.
     const team = await prisma.team.findUnique({ where: { name: TEAM } });
     const teamP0 = await prisma.price.findFirst({
       where: { assetType: "team", assetId: team?.id, gpId: null },
     });
-    expect(Number(teamP0?.price)).toBe(30);
+    expect(Number(teamP0?.price)).toBe(17.4);
 
-    // P0 del constructor = media de sus riders (solo el de pos 1) = 30.
+    // P0 del constructor = media de sus riders (solo el de pos 1) = 17.4.
     const ctor = await prisma.constructor.findUnique({ where: { name: CTOR } });
     const ctorP0 = await prisma.price.findFirst({
       where: { assetType: "constructor", assetId: ctor?.id, gpId: null },
     });
-    expect(Number(ctorP0?.price)).toBe(30);
+    expect(Number(ctorP0?.price)).toBe(17.4);
 
     // Auditoría `price.p0_heuristic`.
     const audit = await prisma.auditLog.findFirst({

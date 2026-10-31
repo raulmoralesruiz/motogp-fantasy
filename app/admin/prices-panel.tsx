@@ -73,6 +73,14 @@ export default function PricesPanel() {
       void history.refetch();
     },
   });
+  // Recalcular temporada (calibración P0, ADR-0032): re-ejecuta la fórmula
+  // GP a GP para alinear la serie de precios con el P0 vigente.
+  const recalculateSeason = trpc.market.prices.recalculateSeason.useMutation({
+    onSuccess: () => {
+      void assets.refetch();
+      void history.refetch();
+    },
+  });
   // P0 heurística desde la clasificación (ADR-0014): recalcula los P0 de
   // todos los activos y refresca la lista de activos (para ver los nuevos P0).
   const p0Heuristic = trpc.market.market.p0Heuristic.useMutation({
@@ -118,7 +126,8 @@ export default function PricesPanel() {
       <h4>P0 automático (heurística de siembra)</h4>
       <p className="muted">
         Calcula los P0 de todos los activos a partir de la clasificación del campeonato
-        (posición → precio lineal 30→10; cada posición tiene un precio único; equipos y
+        (posición → precio lineal sobre el rango P0 de `shared/config` — 17.4→5.8,
+        calibración ADR-0032; cada posición tiene un precio único; equipos y
         constructores = media de sus riders). Requiere que el mercado esté importado
         antes (pilotos, equipos, constructores y afiliaciones). Idempotente:
         re-ejecutarlo actualiza los P0 (auditado).
@@ -386,6 +395,37 @@ export default function PricesPanel() {
             : applyFormula.data.skippedLocked
               ? `El GP objetivo (ronda ${applyFormula.data.targetGpRound}) está en lockout: precios sin cambios.`
               : `Precios de la ronda ${applyFormula.data.targetGpRound} aplicados: ${applyFormula.data.created} creados, ${applyFormula.data.updated} actualizados, ${applyFormula.data.unchanged} sin cambios, ${applyFormula.data.skippedNoOpening} sin P0.`}
+        </p>
+      )}
+
+      <h5>Recalcular temporada (calibración P0, ADR-0032)</h5>
+      <p className="muted">
+        Tras cambiar el P0 (p. ej. con el P0 automático de arriba), recalcula los precios
+        de la temporada GP a GP (solo los GPs con resultados definitivos) para que la
+        serie de precios quede consistente con el P0 vigente. Cada fila recalculada queda
+        auditada (antes → después). Requiere una temporada elegida arriba.
+      </p>
+      <div>
+        <Button
+          type="button"
+          disabled={seasonId === "" || recalculateSeason.isPending}
+          onClick={() => recalculateSeason.mutate({ seasonId })}
+        >
+          {recalculateSeason.isPending
+            ? "Recalculando…"
+            : "Recalcular precios de la temporada"}
+        </Button>
+      </div>
+      {recalculateSeason.isError && (
+        <p className="bad">
+          No se pudo recalcular la temporada: {recalculateSeason.error.message}
+        </p>
+      )}
+      {recalculateSeason.isSuccess && (
+        <p className="ok">
+          Temporada recalculada: {recalculateSeason.data.recalculated} GP recalculados,{" "}
+          {recalculateSeason.data.skippedNoDefinitive} sin resultados definitivos (se
+          saltaron).
         </p>
       )}
     </section>

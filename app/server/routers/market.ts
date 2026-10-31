@@ -36,6 +36,7 @@ import {
   marketListInputSchema,
   p0HeuristicInputSchema,
   priceHistoryInputSchema,
+  recalculateSeasonPricesInputSchema,
   riderIdInputSchema,
   setManualPriceInputSchema,
   setOpeningPriceInputSchema,
@@ -205,6 +206,17 @@ export function createMarketRouter(deps: MarketRouterDeps) {
       applyFormula: adminProcedure
         .input(applyFormulaInputSchema)
         .mutation(({ input }) => priceService.applyFormulaForGp(input)),
+
+      /**
+       * Recalcula los precios de una temporada GP a GP (calibración P0,
+       * 2026-10-31): re-ejecuta la fórmula (pricing-v1) para cada GP con
+       * resultados definitivos, alineando la serie de precios con el P0
+       * vigente. Uso: tras re-seedear el P0 (`p0Heuristic`) para alinear los
+       * precios de una temporada en curso con el nuevo P0 (admin).
+       */
+      recalculateSeason: adminProcedure
+        .input(recalculateSeasonPricesInputSchema)
+        .mutation(({ input }) => priceService.recalculateSeasonPrices(input)),
     }),
 
     /** Exploración del mercado (US-14). */
@@ -257,9 +269,10 @@ export function createMarketRouter(deps: MarketRouterDeps) {
         ),
 
       /**
-       * P0 heurística desde la clasificación del campeonato (ADR-0014):
-       * calcula los precios de apertura (P0) de todos los activos a partir
-       * de la clasificación de la temporada (posición → precio lineal 30→10;
+       * P0 heurística desde la clasificación del campeonato (ADR-0014; rango
+       * calibrado ADR-0032): calcula los precios de apertura (P0) de todos
+       * los activos a partir de la clasificación de la temporada (posición →
+       * precio lineal sobre el rango P0 de `shared/config`, 17.4→5.8;
        * equipos/constructores = media de sus riders). Idempotente (re-ejecutar
        * actualiza los P0) y auditada (`price.p0_heuristic`). Requiere que el
        * mercado (activos + afiliaciones) esté importado antes (admin).

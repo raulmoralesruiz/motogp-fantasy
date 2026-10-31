@@ -39,6 +39,7 @@ import type {
 } from "@prisma/client";
 
 import { appendAudit } from "@/modules/admin";
+import { PROVISIONAL_MARKET_CONFIG } from "@/shared/config";
 import {
   type NormalizedMarket,
   type StandingsEntry,
@@ -886,9 +887,12 @@ export class MarketService {
    *
    * - `standings` (clasificación de la temporada, ya normalizada por la
    *   fuente — la obtiene el router vía `MarketSource.fetchStandings`).
-   * - Mapeo posición → precio (lineal, 30 → 10):
-   *   `P0 = 30 - (posición - 1) * (20 / (n - 1))`, donde `n` = nº de riders.
-   *   Cada posición tiene un precio único (ningún piloto comparte posición).
+   * - Mapeo posición → precio (lineal, rango P0 de `shared/config`):
+   *   `P0 = p0.max - (posición - 1) * ((p0.max - p0.min) / (n - 1))`,
+   *   donde `n` = nº de riders. Cada posición tiene un precio único
+   *   (ningún piloto comparte posición). Pos 1 → `p0.max`, pos `n` →
+   *   `p0.min`. Calibración Opción B (2026-10-31): rango 30→10 escalado
+   *   a ~17.4→5.8 para que el lineup competitivo cueste ~100 (B=100).
    * - P0 de equipos/constructores: media de los P0 de sus riders, agrupados
    *   por su afiliación en BD (más robusto que mapear por nombre de fuente,
    *   que difiere entre los endpoints `/riders` y `/results/standings`).
@@ -923,10 +927,10 @@ export class MarketService {
       );
     }
 
-    // Mapeo posición → precio (lineal, 30 → 10).
+    // Mapeo posición → precio (lineal, rango P0 de `shared/config`).
     const n = standings.length;
-    const maxPrice = 30;
-    const minPrice = 10;
+    const maxPrice = PROVISIONAL_MARKET_CONFIG.p0.max;
+    const minPrice = PROVISIONAL_MARKET_CONFIG.p0.min;
     const step = n > 1 ? (maxPrice - minPrice) / (n - 1) : 0;
 
     // Mapeo: riderName → P0.

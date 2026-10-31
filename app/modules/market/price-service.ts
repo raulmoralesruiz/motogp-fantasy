@@ -166,6 +166,36 @@ export interface ApplyFormulaForGpResult {
   skippedLocked: boolean;
 }
 
+/** Recálculo de precios de una temporada (calibración P0, 2026-10-31). */
+export interface RecalculateSeasonPricesInput {
+  seasonId: string;
+}
+
+/**
+ * Resultado del recálculo de precios de una temporada: re-ejecuta la fórmula
+ * (pricing-v1) GP a GP (r=1→N−1) sobre el P0 vigente, para que la serie de
+ * precios quede consistente con el P0 recalibrado. Cada GP con resultados
+ * definitivos recalcula el precio del GP siguiente (auditado
+ * `price.formula_recompute` por fila).
+ */
+export interface RecalculateSeasonPricesResult {
+  seasonId: string;
+  /** GPs fuente recalculados (con resultados definitivos). */
+  recalculated: number;
+  /** GPs fuente saltados (sin resultados definitivos). */
+  skippedNoDefinitive: number;
+  /** Detalle por GP fuente (r → precio de r+1). */
+  results: Array<{
+    gpRound: number;
+    targetGpRound: number | null;
+    created: number;
+    updated: number;
+    unchanged: number;
+    skippedNoOpening: number;
+    skippedLocked: boolean;
+  }>;
+}
+
 /** Resultado de un ajuste manual (US-08). */
 export interface SetManualPriceResult {
   price: number;
@@ -919,6 +949,75 @@ export class PriceService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Recalcula los precios de una temporada GP a GP (calibración P0,
+   * 2026-10-31): re-ejecuta la fórmula (pricing-v1) para cada GP fuente r
+   * (r=1→N−1) que tenga resultados definitivos, escribiendo el precio del GP
+   * siguiente (r+1) sobre el P0 vigente. Así la serie de precios queda
+   * consistente con el P0 recalibrado (el precio del GP1 es el P0; el de
+   * GP2…GP N se recalcula en cascada).
+   *
+   * - Cada GP recalculado audita `price.formula_recompute` (before/after)
+   *   por fila (mismo patrón que `applyFormulaForGp`).
+   * - GP fuente sin resultados definitivos → se salta (no se recalcula el
+   *   siguiente).
+   * - Gate de lockout: si el GP objetivo (r+1) está `locked`, no se toca
+   *   (reportado en `skippedLocked`).
+   * - Idempotente: re-ejecutar con el mismo P0 no cambia nada (no-op).
+   *
+   * Uso: tras re-seedear el P0 (`calculateP0FromClassification`) para
+   * alinear los precios de una temporada en curso con el nuevo P0.
+   */
+  async recalculateSeasonPrices(
+    input: RecalculateSeasonPricesInput,
+  ): Promise<RecalculateSeasonPricesResult> {
+    const gps = await this.deps.prisma.gp.findMany({
+      where: { seasonId: input.seasonId },
+      orderBy: { round: "asc" },
+      select: { id: true, round: true },
+    });
+    if (gps.length === 0) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "La temporada no tiene GPs.",
+      });
+    }
+
+    const results: RecalculateSeasonPricesResult["results"] = [];
+    let recalculated = 0;
+    let skippedNoDefinitive = 0;
+    // Orden r=1→N−1: el precio de r+1 depende del precio (recalculado) de r.
+    for (let i = 0; i < gps.length - 1; i++) {
+      const gp = gps[i]!;
+      const hasDefinitive = await this.gpHasDefinitiveRaceResults(
+        this.deps.prisma,
+        gp.id,
+      );
+      if (!hasDefinitive) {
+        skippedNoDefinitive += 1;
+        continue;
+      }
+      const r = await this.applyFormulaForGp({ gpId: gp.id });
+      results.push({
+        gpRound: gp.round,
+        targetGpRound: r.targetGpRound,
+        created: r.created,
+        updated: r.updated,
+        unchanged: r.unchanged,
+        skippedNoOpening: r.skippedNoOpening,
+        skippedLocked: r.skippedLocked,
+      });
+      recalculated += 1;
+    }
+
+    return {
+      seasonId: input.seasonId,
+      recalculated,
+      skippedNoDefinitive,
+      results,
+    };
   }
 
   /**

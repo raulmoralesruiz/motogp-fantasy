@@ -393,8 +393,8 @@ describe("MarketService.calculateP0FromClassification (ADR-0014)", () => {
   });
 
   it(
-    "calcula P0 de riders (lineal 30→10), equipos y constructores (media), " +
-      "y audita `price.p0_heuristic`",
+    "calcula P0 de riders (lineal sobre el rango de shared/config, 17.4→5.8), " +
+      "equipos y constructores (media), y audita `price.p0_heuristic`",
     async () => {
       const fake = makePrisma();
       fake.season.findUnique.mockResolvedValue(seasonRow);
@@ -427,38 +427,40 @@ describe("MarketService.calculateP0FromClassification (ADR-0014)", () => {
         meta,
       );
 
-      // Riders: pos 1 → 30, pos 2 → 20, pos 3 → 10.
+      // Riders (rango P0 17.4→5.8, shared/config): pos 1 → 17.4, pos 2 → 11.6,
+      // pos 3 → 5.8.
       expect(result).toMatchObject({
         ridersPriced: 3,
         teamsPriced: 2,
         constructorsPriced: 2,
-        maxPrice: 30,
-        minPrice: 10,
+        maxPrice: 17.4,
+        minPrice: 5.8,
       });
       // P0 de riders.
       const riderCreates = fake.price.create.mock.calls
         .map((call) => call[0].data)
         .filter((d) => d.assetType === "rider");
       expect(riderCreates).toEqual([
-        expect.objectContaining({ assetId: "r1", price: 30, reason: "formula" }),
-        expect.objectContaining({ assetId: "r2", price: 20, reason: "formula" }),
-        expect.objectContaining({ assetId: "r3", price: 10, reason: "formula" }),
+        expect.objectContaining({ assetId: "r1", price: 17.4, reason: "formula" }),
+        expect.objectContaining({ assetId: "r2", price: 11.6, reason: "formula" }),
+        expect.objectContaining({ assetId: "r3", price: 5.8, reason: "formula" }),
       ]);
-      // P0 de equipos (media de sus riders): Team A = (30+20)/2 = 25, Team B = 10.
+      // P0 de equipos (media de sus riders): Team A = (17.4+11.6)/2 = 14.5,
+      // Team B = 5.8.
       const teamCreates = fake.price.create.mock.calls
         .map((call) => call[0].data)
         .filter((d) => d.assetType === "team");
       expect(teamCreates).toEqual([
-        expect.objectContaining({ assetId: "t1", price: 25 }),
-        expect.objectContaining({ assetId: "t2", price: 10 }),
+        expect.objectContaining({ assetId: "t1", price: 14.5 }),
+        expect.objectContaining({ assetId: "t2", price: 5.8 }),
       ]);
-      // P0 de constructores: Ctor A = 25, Ctor B = 10.
+      // P0 de constructores: Ctor A = 14.5, Ctor B = 5.8.
       const ctorCreates = fake.price.create.mock.calls
         .map((call) => call[0].data)
         .filter((d) => d.assetType === "constructor");
       expect(ctorCreates).toEqual([
-        expect.objectContaining({ assetId: "c1", price: 25 }),
-        expect.objectContaining({ assetId: "c2", price: 10 }),
+        expect.objectContaining({ assetId: "c1", price: 14.5 }),
+        expect.objectContaining({ assetId: "c2", price: 5.8 }),
       ]);
       // Auditoría `price.p0_heuristic` con resumen (los campos van en `data`).
       expect(fake.auditLog.create).toHaveBeenCalledWith(
@@ -506,12 +508,12 @@ describe("MarketService.calculateP0FromClassification (ADR-0014)", () => {
       teamsPriced: 1,
       constructorsPriced: 1,
     });
-    // Team A solo cuenta r1 (30) → P0 = 30 (no la media de 30 y 20).
+    // Team A solo cuenta r1 (17.4) → P0 = 17.4 (no la media de 17.4 y 5.8).
     const teamCreates = fake.price.create.mock.calls
       .map((call) => call[0].data)
       .filter((d) => d.assetType === "team");
     expect(teamCreates).toEqual([
-      expect.objectContaining({ assetId: "t1", price: 30 }),
+      expect.objectContaining({ assetId: "t1", price: 17.4 }),
     ]);
   });
 
@@ -535,11 +537,11 @@ describe("MarketService.calculateP0FromClassification (ADR-0014)", () => {
     );
 
     expect(result).toMatchObject({ ridersPriced: 1 });
-    // Se actualiza (no se crea).
+    // Se actualiza (no se crea). Top rider (pos 1) → P0 = 17.4 (rango config).
     expect(fake.price.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "p1" },
-        data: expect.objectContaining({ price: 30, reason: "formula" }),
+        data: expect.objectContaining({ price: 17.4, reason: "formula" }),
       }),
     );
     expect(fake.price.create).not.toHaveBeenCalled();

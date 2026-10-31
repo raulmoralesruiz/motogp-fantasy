@@ -780,3 +780,109 @@ describe("PricesPanel · Precios por GP (US-08)", () => {
     expect(historyRefetch).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("PricesPanel · Recalcular temporada (calibración P0, ADR-0032)", () => {
+  beforeEach(() => resetTrpcMocks());
+
+  it("desactiva el botón hasta que hay temporada elegida", () => {
+    mockResult(trpc.market.prices.recalculateSeason.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+    });
+    mockSeasons([season]);
+    render(<PricesPanel />);
+
+    expect(
+      screen.getByRole("button", { name: "Recalcular precios de la temporada" }),
+    ).toBeDisabled();
+  });
+
+  it("recalcula la temporada elegida (recalculateSeason)", async () => {
+    mockSeasons([season]);
+    const mutate = vi.fn();
+    mockResult(trpc.market.prices.recalculateSeason.useMutation, {
+      mutate,
+      isPending: false,
+      isError: false,
+    });
+    render(<PricesPanel />);
+
+    const user = userEvent.setup();
+    const button = screen.getByRole("button", {
+      name: "Recalcular precios de la temporada",
+    });
+    expect(button).toBeDisabled();
+
+    await user.selectOptions(screen.getByLabelText("Temporada"), "s1");
+    expect(button).toBeEnabled();
+    await user.click(button);
+
+    expect(mutate).toHaveBeenCalledWith({ seasonId: "s1" });
+  });
+
+  it("muestra el resumen de la temporada recalculada", () => {
+    mockResult(trpc.market.prices.recalculateSeason.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      data: {
+        seasonId: "s1",
+        recalculated: 18,
+        skippedNoDefinitive: 1,
+        results: [],
+      },
+    });
+    render(<PricesPanel />);
+
+    expect(
+      screen.getByText(
+        "Temporada recalculada: 18 GP recalculados, 1 sin resultados definitivos (se saltaron).",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("muestra el error al no poder recalcular la temporada", () => {
+    mockResult(trpc.market.prices.recalculateSeason.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error: new Error("La temporada no tiene GPs."),
+    });
+    render(<PricesPanel />);
+
+    expect(
+      screen.getByText("No se pudo recalcular la temporada: La temporada no tiene GPs."),
+    ).toBeInTheDocument();
+  });
+
+  it("refresca la lista de activos y el histórico tras recalcular", async () => {
+    const assetsRefetch = vi.fn();
+    mockAssets([riderAsset], assetsRefetch);
+    const historyRefetch = vi.fn();
+    mockHistory(historyRows, historyRefetch);
+    mockSeasons([season]);
+    mockResult(trpc.market.prices.recalculateSeason.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+    });
+    render(<PricesPanel />);
+
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText("Temporada"), "s1");
+    await user.click(
+      screen.getByRole("button", { name: "Recalcular precios de la temporada" }),
+    );
+
+    // `onSuccess` se captura de `useMutation` y se invoca manualmente.
+    const options = asMockFn(
+      trpc.market.prices.recalculateSeason.useMutation,
+    ).mock.calls[0]?.[0] as { onSuccess?: () => void };
+    options.onSuccess?.();
+
+    expect(assetsRefetch).toHaveBeenCalledTimes(1);
+    expect(historyRefetch).toHaveBeenCalledTimes(1);
+  });
+});

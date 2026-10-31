@@ -796,6 +796,68 @@ describe("PriceService.applyFormulaForGp (US-08)", () => {
   });
 });
 
+describe("PriceService.recalculateSeasonPrices (calibración P0)", () => {
+  it("recalcula GP a GP (solo los con resultados definitivos) y salta el resto", async () => {
+    const fake = makePrisma();
+    // 3 GPs (rondas 1, 2, 3).
+    fake.gp.findMany.mockResolvedValue([
+      { id: "g1", round: 1 },
+      { id: "g2", round: 2 },
+      { id: "g3", round: 3 },
+    ]);
+    // GP1 tiene carrera definitiva; GP2 no (se salta); GP3 es el último
+    // (no se comprueba: no tiene GP siguiente).
+    fake.weekendEvent.findFirst.mockImplementation(
+      ({ where }: { where: { gpId: string } }) =>
+        Promise.resolve(
+          where.gpId === "g1" ? { id: "race", gpId: "g1" } : null,
+        ),
+    );
+    fake.result.count.mockResolvedValue(5);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    // Espía `applyFormulaForGp` para verificar la secuencia.
+    const applySpy = vi
+      .spyOn(service, "applyFormulaForGp")
+      .mockResolvedValue({
+        targetGpId: "g2",
+        targetGpRound: 2,
+        created: 3,
+        updated: 0,
+        unchanged: 1,
+        skippedNoOpening: 0,
+        skippedLocked: false,
+      });
+
+    const result = await service.recalculateSeasonPrices({ seasonId: "s1" });
+
+    // Solo GP1 se recalcula (GP2 sin definitivos → skip; GP3 último → no se
+    // comprueba).
+    expect(applySpy).toHaveBeenCalledTimes(1);
+    expect(applySpy).toHaveBeenNthCalledWith(1, { gpId: "g1" });
+    expect(result).toMatchObject({
+      seasonId: "s1",
+      recalculated: 1,
+      skippedNoDefinitive: 1,
+    });
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0]).toMatchObject({ gpRound: 1 });
+  });
+
+  it("temporada sin GPs → NOT_FOUND", async () => {
+    const fake = makePrisma();
+    fake.gp.findMany.mockResolvedValue([]);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    await expect(
+      service.recalculateSeasonPrices({ seasonId: "s1" }),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+      message: "La temporada no tiene GPs.",
+    });
+  });
+});
+
 describe("PriceService.setManualPrice (US-08)", () => {
   const input = { assetType: "rider" as const, assetId: "r1", gpId: "g1", price: 21 };
 

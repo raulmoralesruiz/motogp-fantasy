@@ -173,6 +173,15 @@ export const applyFormulaInputSchema = z.object({
   gpId: z.string().uuid("El identificador de GP no es válido"),
 });
 
+/**
+ * Recalcular los precios de una temporada GP a GP (calibración P0,
+ * 2026-10-31): re-ejecuta la fórmula (pricing-v1) para cada GP con
+ * resultados definitivos, alineando la serie de precios con el P0 vigente.
+ */
+export const recalculateSeasonPricesInputSchema = z.object({
+  seasonId: z.string().uuid("El identificador de temporada no es válido"),
+});
+
 export type CreateRiderInput = z.infer<typeof createRiderInputSchema>;
 export type CreateConstructorInput = z.infer<typeof createConstructorInputSchema>;
 export type CreateTeamInput = z.infer<typeof createTeamInputSchema>;
@@ -185,6 +194,9 @@ export type PriceHistoryInput = z.infer<typeof priceHistoryInputSchema>;
 export type ListAssetPricesInput = z.infer<typeof listAssetPricesInputSchema>;
 export type SetManualPriceInput = z.infer<typeof setManualPriceInputSchema>;
 export type ApplyFormulaInput = z.infer<typeof applyFormulaInputSchema>;
+export type RecalculateSeasonPricesInput = z.infer<
+  typeof recalculateSeasonPricesInputSchema
+>;
 export type MarketListInput = z.infer<typeof marketListInputSchema>;
 export type MarketDetailInput = z.infer<typeof marketDetailInputSchema>;
 
@@ -283,9 +295,10 @@ export const importMarketInputSchema = z.object({
 });
 
 /**
- * P0 heurística desde la clasificación del campeonato (ADR-0014): el admin
- * dispara el cálculo de los precios de apertura (P0) de todos los activos a
- * partir de la clasificación de la temporada (posición → precio lineal 30→10,
+ * P0 heurística desde la clasificación del campeonato (ADR-0014; rango
+ * calibrado ADR-0032): el admin dispara el cálculo de los precios de apertura
+ * (P0) de todos los activos a partir de la clasificación de la temporada
+ * (posición → precio lineal sobre el rango P0 de `shared/config`, 17.4→5.8,
  * equipos/constructores = media de sus riders). `seasonId` identifica la
  * temporada (de la que se toma el año para la clasificación).
  */
