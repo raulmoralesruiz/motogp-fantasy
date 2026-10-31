@@ -29,6 +29,7 @@ import {
   seedWorld,
   type World,
 } from "./helpers";
+import type { NormalizedMarketInput } from "../../app/shared/validation/market";
 
 process.env.DATABASE_URL = integrationDbUrl();
 process.env.REDIS_URL ??= "redis://localhost:6379/0";
@@ -73,7 +74,7 @@ describe("US-06/ADR-0013/ADR-0014 · Import de mercado + P0 heurística (Postgre
   };
 
   /** Mercado normalizado para el año de la temporada (2099). */
-  function normalizedMarket(year: number) {
+  function normalizedMarket(year: number): NormalizedMarketInput {
     return {
       year,
       seasonRef: `ref-${suffix}`,
@@ -239,6 +240,10 @@ describe("US-06/ADR-0013/ADR-0014 · Import de mercado + P0 heurística (Postgre
       // 1 rider × 2 GPs (ronda 1 + ronda 2).
       affiliationsCreated: 2,
       affiliationsSkipped: 0,
+      // Auto-mapeo fuente→piloto (ADR-0019 addendum): 1 piloto con sourceId.
+      riderMappingsCreated: 1,
+      riderMappingsUpdated: 0,
+      riderMappingsSkipped: 0,
     });
 
     // El piloto se crea con el nombre completo "name surname".
@@ -259,6 +264,13 @@ describe("US-06/ADR-0013/ADR-0014 · Import de mercado + P0 heurística (Postgre
     );
     // El constructor de la afiliación se deriva del equipo (invariante 5).
     expect(affs[0]?.constructorId).toBe(ctor?.id);
+
+    // Auto-mapeo fuente→piloto: la fila `rider_mappings` asocia el sourceId
+    // de la fuente al piloto de la BD (ADR-0019 addendum).
+    const mapping = await prisma.riderMapping.findUnique({
+      where: { source_riderRef: { source: "fake", riderRef: `r-${suffix}` } },
+    });
+    expect(mapping).toMatchObject({ riderId: rider?.id });
 
     // Auditoría `market.imported`.
     const audit = await prisma.auditLog.findFirst({
@@ -294,11 +306,92 @@ describe("US-06/ADR-0013/ADR-0014 · Import de mercado + P0 heurística (Postgre
       ridersSkipped: 1,
       affiliationsCreated: 0,
       affiliationsSkipped: 2,
+      // El mapeo ya existía y apuntaba al mismo piloto → no-op (idempotencia).
+      riderMappingsCreated: 0,
+      riderMappingsUpdated: 0,
+      riderMappingsSkipped: 1,
     });
     // Una sola fila por nombre (no se duplica).
     expect(await prisma.constructor.count({ where: { name: CTOR } })).toBe(1);
     expect(await prisma.team.count({ where: { name: TEAM } })).toBe(1);
     expect(await prisma.rider.count({ where: { name: RIDER_FULL } })).toBe(1);
+    // El mapeo no se duplica (unique source+riderRef).
+    expect(
+      await prisma.riderMapping.count({
+        where: { source: "fake", riderRef: `r-${suffix}` },
+      }),
+    ).toBe(1);
+  });
+
+  it("market.import actualiza un mapeo que apuntaba a otro piloto (self-correcting)", async () => {
+    // Pre-condición: el sourceId del fixture ya está mapeado a un piloto
+    // distinto (simula un mapeo manual anterior o un cambio de identidad).
+    const otherRider = await prisma.rider.create({
+      data: { name: `Otro Imp ${suffix}` },
+    });
+    await prisma.riderMapping.upsert({
+      where: { source_riderRef: { source: "fake", riderRef: `r-${suffix}` } },
+      update: { riderId: otherRider.id },
+      create: {
+        source: "fake",
+        riderRef: `r-${suffix}`,
+        riderId: otherRider.id,
+      },
+    });
+
+    const { market } = await callerFor(ADMIN_IP, adminToken);
+    const report = await market.market.import({
+      seasonId: world.season.id,
+      market: normalizedMarket(world.season.year),
+    });
+
+    // El import de mercado es la fuente de verdad del mapeo: lo corrige.
+    expect(report).toMatchObject({
+      riderMappingsCreated: 0,
+      riderMappingsUpdated: 1,
+      riderMappingsSkipped: 0,
+    });
+    const mapping = await prisma.riderMapping.findUnique({
+      where: { source_riderRef: { source: "fake", riderRef: `r-${suffix}` } },
+    });
+    const rider = await prisma.rider.findUnique({ where: { name: RIDER_FULL } });
+    expect(mapping?.riderId).toBe(rider?.id);
+  });
+
+  it("market.import sin sourceId no crea mapeo (fail-soft, no bloquea)", async () => {
+    const marketNoSource = normalizedMarket(world.season.year);
+    const riderNoSource = {
+      sourceId: null,
+      name: `Sin Id ${suffix}`,
+      surname: `Imp ${suffix}`,
+      number: 1,
+      countryIso: "ES",
+    };
+    marketNoSource.riders = [riderNoSource];
+    // La afiliación original (riderSourceId `r-${suffix}`) no resuelve: el
+    // único piloto no tiene sourceId → no se crea afiliación (no importa).
+
+    const { market } = await callerFor(ADMIN_IP, adminToken);
+    const report = await market.market.import({
+      seasonId: world.season.id,
+      market: marketNoSource,
+    });
+
+    expect(report).toMatchObject({
+      ridersCreated: 1,
+      riderMappingsCreated: 0,
+      riderMappingsUpdated: 0,
+      riderMappingsSkipped: 0,
+    });
+    // El piloto se crea, pero sin fila de mapeo.
+    const rider = await prisma.rider.findUnique({
+      where: { name: `Sin Id Imp ${suffix}` },
+    });
+    expect(rider).not.toBeNull();
+    const mappings = await prisma.riderMapping.findMany({
+      where: { riderId: rider?.id },
+    });
+    expect(mappings).toHaveLength(0);
   });
 
   it("market.import: año del mercado ≠ año de la temporada → error", async () => {

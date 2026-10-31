@@ -151,3 +151,16 @@ PulseLive nunca declara resultados «definitivos» (eso es decisión admin en el
 - **Integración**: re-import idempotente (no duplica); manual gana a auto; sin mapear → saltar + alerta persistente; `linkSource` (match único).
 - **Job**: ventana con `now` inyectado; gate `NOT-STARTED` sin contar fallo; N fallos → alerta.
 - Verificación en vivo 2026-10-21 (ver Problema).
+
+## Addendum (2026-10-31): auto-mapeo de pilotos desde el import de mercado
+
+**Problema.** En producción (temporada `test2`, GP Malasia) el auto-import de Q2 y sprint terminó «bien» (fetch OK, horas y posiciones correctas en el preview) pero **registró 0 puntos**: todos los pilotos salieron «Sin mapear» (`0 creados, 0 corregidos, 0 sin cambios, 0 conservados`). Causa raíz: la tabla `rider_mappings` estaba **vacía** — el diseño original (este ADR) la deja «mantenida por el admin» vía `results.riderMapping.set` (manual, ~20 pilotos por temporada). El import de mercado (ADR-0013) **no** la puebla: crea los pilotos por nombre pero descarta el `sourceId` (el `riders_id` de PulseLive) que la fuente ya aporta. Resultado: hay que mapear a mano cada temporada, y hasta que no se hace, el auto-import no crea puntos.
+
+**Decisión.** El **import de mercado se convierte en la fuente de verdad del mapeo**: al importar, para cada piloto que trae `sourceId`, crea/actualiza su fila `rider_mappings (source, riderRef, riderId)` en la misma transacción. El mapeo pasa de «manual» a **automático e idempotente**; el admin sigue pudiendo corregirlo con `results.riderMapping.set` (un re-import lo re-deriva: el import de mercado es la fuente de verdad).
+
+- **Mismo ID verificado en vivo (2026-10-31):** el `sourceId` del mercado (`rider.id` de `/riders`) es el **mismo UUID** que el `riderRef` de los resultados (`rider.riders_id` de `/results/session/{id}/classification`). Verificado contra la API real (Johann Zarco `4a439bde-…` aparece igual en ambos endpoints). Por eso el mapeo auto-poblado resuelve el auto-import sin paso manual.
+- **Semántica (determinista, idempotente):** sin fila → `create` (`riderMappingsCreated`); fila con otro `riderId` → `update` (`riderMappingsUpdated`, self-correcting); fila ya correcta → no-op (`riderMappingsSkipped`). Fail-soft: un piloto sin `sourceId` no bloquea el import (no crea mapeo).
+- **Coherencia con este ADR:** no añade `sourceRef` a `riders` (alternativa descartada aquí) ni hace match por nombre (descartado por frágil); usa la tabla `rider_mappings` (por fuente) y el **ID estable** — exactamente el mecanismo que este ADR eligió, solo que ahora lo puebla el import en vez del admin.
+- **Reporte y auditoría:** `market.imported` (y el resumen de la UI) ganan `riderMappingsCreated/Updated/Skipped`.
+
+**Impacto.** `market-service.ts` (`importMarket` crea/actualiza `rider_mappings` + contadores), `MarketImportReport` (3 campos), UI `market-import-form.tsx` (muestra los mapeos), tests de integración (`market-import.test.ts`: creación, idempotencia, self-correcting, sin `sourceId`). **Procedimiento operativo:** al importar un mercado nuevo, los mapeos se crean solos; el auto-import de resultados ya asocia las clasificaciones a los pilotos sin mapeo manual.

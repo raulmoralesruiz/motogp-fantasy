@@ -176,6 +176,12 @@ export interface MarketImportReport {
   affiliationsCreated: number;
   /** Afiliaciones saltadas (ya existían). */
   affiliationsSkipped: number;
+  /** Mapeos fuente→piloto creados (nuevos; ADR-0019 addendum). */
+  riderMappingsCreated: number;
+  /** Mapeos fuente→piloto actualizados (existían apuntando a otro piloto). */
+  riderMappingsUpdated: number;
+  /** Mapeos fuente→piloto ya correctos (no-op, idempotencia). */
+  riderMappingsSkipped: number;
 }
 
 // ── Utilidades ──────────────────────────────────────────────────────────────
@@ -664,6 +670,9 @@ export class MarketService {
       let teamsSkipped = 0;
       let ridersCreated = 0;
       let ridersSkipped = 0;
+      let riderMappingsCreated = 0;
+      let riderMappingsUpdated = 0;
+      let riderMappingsSkipped = 0;
 
       // Mapeo: name → id (BD) para constructores y equipos.
       const constructorByName = new Map<string, string>();
@@ -710,22 +719,61 @@ export class MarketService {
       }
 
       // 3) Pilotos (únicos por name). Mapeo: fullName → id (BD).
+      //    + auto-mapeo fuente→piloto (ADR-0019 addendum): si el piloto trae
+      //    `sourceId` (referencia estable en la fuente, p. ej. `riders_id` de
+      //    PulseLive), crea/actualiza su `rider_mapping`. El import de
+      //    resultados lo usa para asociar las clasificaciones a los pilotos de
+      //    la app (antes era manual; ahora es automático e idempotente).
       const riderByName = new Map<string, string>();
+      const sourceName = normalized.source.name;
       for (const rider of normalized.riders) {
         const fullName = `${rider.name} ${rider.surname}`.trim();
         const existing = await tx.rider.findUnique({
           where: { name: fullName },
         });
+        const riderId =
+          existing?.id ??
+          (
+            await tx.rider.create({
+              data: { name: fullName, number: rider.number ?? null },
+            })
+          ).id;
+        riderByName.set(fullName, riderId);
         if (existing) {
-          riderByName.set(fullName, existing.id);
           ridersSkipped += 1;
-          continue;
+        } else {
+          ridersCreated += 1;
         }
-        const created = await tx.rider.create({
-          data: { name: fullName, number: rider.number ?? null },
-        });
-        riderByName.set(fullName, created.id);
-        ridersCreated += 1;
+
+        // Auto-mapeo (solo si la fuente aporta `sourceId`; fail-soft: un
+        // piloto sin reference no bloquea el import). Determinista e
+        // idempotente: el import de mercado es la fuente de verdad del mapeo.
+        if (rider.sourceId) {
+          const previous = await tx.riderMapping.findUnique({
+            where: {
+              source_riderRef: { source: sourceName, riderRef: rider.sourceId },
+            },
+          });
+          if (!previous) {
+            await tx.riderMapping.create({
+              data: { source: sourceName, riderRef: rider.sourceId, riderId },
+            });
+            riderMappingsCreated += 1;
+          } else if (previous.riderId !== riderId) {
+            await tx.riderMapping.update({
+              where: {
+                source_riderRef: {
+                  source: sourceName,
+                  riderRef: rider.sourceId,
+                },
+              },
+              data: { riderId },
+            });
+            riderMappingsUpdated += 1;
+          } else {
+            riderMappingsSkipped += 1;
+          }
+        }
       }
 
       // 4) Afiliaciones (rider→equipo para todos los GPs de la temporada).
@@ -805,6 +853,9 @@ export class MarketService {
           ridersSkipped,
           affiliationsCreated,
           affiliationsSkipped,
+          riderMappingsCreated,
+          riderMappingsUpdated,
+          riderMappingsSkipped,
         },
         ip: meta.ip,
       });
@@ -820,6 +871,9 @@ export class MarketService {
         ridersSkipped,
         affiliationsCreated,
         affiliationsSkipped,
+        riderMappingsCreated,
+        riderMappingsUpdated,
+        riderMappingsSkipped,
       };
     });
   }

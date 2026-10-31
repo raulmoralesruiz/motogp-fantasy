@@ -163,6 +163,9 @@ describe("MarketImportForm", () => {
         ridersSkipped: 0,
         affiliationsCreated: 4,
         affiliationsSkipped: 0,
+        riderMappingsCreated: 2,
+        riderMappingsUpdated: 0,
+        riderMappingsSkipped: 0,
       },
     });
     render(<MarketImportForm seasons={[season]} onImported={onImported} />);
@@ -178,6 +181,9 @@ describe("MarketImportForm", () => {
     );
     expect(screen.getByRole("status")).toHaveTextContent(
       "4 afiliaciones creadas, 0 saltadas",
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "2 mapeos de piloto creados, 0 actualizados, 0 ya correctos",
     );
     // `onSuccess` se pasa a `useMutation`; se invoca como en el resto de tests.
     const options =

@@ -190,12 +190,17 @@ export default function MarketImportForm({
           {importMarket.data.ridersCreated} pilotos creados,{" "}
           {importMarket.data.ridersSkipped} saltados;{" "}
           {importMarket.data.affiliationsCreated} afiliaciones creadas,{" "}
-          {importMarket.data.affiliationsSkipped} saltadas.
+          {importMarket.data.affiliationsSkipped} saltadas;{" "}
+          {importMarket.data.riderMappingsCreated} mapeos de piloto creados,{" "}
+          {importMarket.data.riderMappingsUpdated} actualizados,{" "}
+          {importMarket.data.riderMappingsSkipped} ya correctos.
           <br />
           <em>
-            Las afiliaciones se crean automáticamente para todos los GPs de la
-            temporada. A continuación puedes calcular el P0 automático desde el
-            panel de precios.
+            Las afiliaciones y los mapeos de piloto (fuente → piloto) se crean
+            automáticamente para todos los GPs de la temporada: con ellos el
+            auto-import de resultados asocia las clasificaciones a los pilotos
+            sin mapeo manual. A continuación puedes calcular el P0 automático
+            desde el panel de precios.
           </em>
         </Alert>
       )}
