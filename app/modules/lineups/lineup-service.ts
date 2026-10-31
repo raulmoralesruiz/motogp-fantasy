@@ -258,16 +258,12 @@ export class LineupService {
       //    transfers.
       const rules = await this.latestRules(tx, gp.season_id);
 
-      // 4. Afiliaciones del GP + precios congelados (ADR-0015).
-      const [affiliations, prices] = await Promise.all([
+      // 4. Afiliaciones del GP + precios congelados (ADR-0015, con fallback
+      //    al P0 para GPs sin precio propio, p. ej. el GP 1).
+      const [affiliations, gpPrices] = await Promise.all([
         tx.riderAffiliation.findMany({ where: { gpId: gp.id } }),
-        tx.price.findMany({ where: { gpId: gp.id } }),
+        this.resolveGpPrices(tx, gp.id),
       ]);
-      const gpPrices: GpPrice[] = prices.map((p) => ({
-        assetType: p.assetType,
-        assetId: p.assetId,
-        price: Number(p.price),
-      }));
 
       // 5. Validación + coste (núcleo puro; el cliente nunca envía coste).
       const validation = validateLineup(input.slots, affiliations, rules.limits);
@@ -490,14 +486,8 @@ export class LineupService {
     });
     if (!lineup) return null;
 
-    const prices = await this.prisma.price.findMany({
-      where: { gpId: lineup.gp.id },
-    });
-    const gpPrices: GpPrice[] = prices.map((p) => ({
-      assetType: p.assetType,
-      assetId: p.assetId,
-      price: Number(p.price),
-    }));
+    // Precios congelados del GP, con fallback al P0 (ADR-0015 addendum).
+    const gpPrices = await this.resolveGpPrices(this.prisma, lineup.gp.id);
     const slots = slotsFromRows(lineup.slots);
     const costResult = lineupCost(slots, gpPrices);
     if (!costResult.ok) {
@@ -556,13 +546,15 @@ export class LineupService {
     if (!gp) {
       throw new TRPCError({ code: "NOT_FOUND", message: "El GP no existe." });
     }
-    const [affiliations, prices, constructors, teams, budget] =
+    const [affiliations, gpPrices, constructors, teams, budget] =
       await Promise.all([
         this.prisma.riderAffiliation.findMany({
           where: { gpId },
           include: { rider: true, team: true, constructor: true },
         }),
-        this.prisma.price.findMany({ where: { gpId } }),
+        // Precios del GP con fallback al P0 (ADR-0015 addendum): el GP 1 no
+        // tiene precio propio y debe usar el P0, igual que el mercado.
+        this.resolveGpPrices(this.prisma, gpId),
         this.prisma.constructor.findMany({ orderBy: { name: "asc" } }),
         this.prisma.team.findMany({
           orderBy: { name: "asc" },
@@ -571,10 +563,10 @@ export class LineupService {
         this.budgetForGp(gp, userId),
       ]);
     const priceOf = (assetType: string, assetId: string): number | null => {
-      const price = prices.find(
+      const price = gpPrices.find(
         (p) => p.assetType === assetType && p.assetId === assetId,
       );
-      return price ? Number(price.price) : null;
+      return price ? price.price : null;
     };
     return {
       gp: {
@@ -744,16 +736,12 @@ export class LineupService {
         });
       }
 
-      // 4. Afiliaciones + precios congelados.
-      const [affiliations, prices] = await Promise.all([
+      // 4. Afiliaciones + precios congelados (con fallback al P0, ADR-0015
+      //    addendum).
+      const [affiliations, gpPrices] = await Promise.all([
         tx.riderAffiliation.findMany({ where: { gpId: gp.id } }),
-        tx.price.findMany({ where: { gpId: gp.id } }),
+        this.resolveGpPrices(tx, gp.id),
       ]);
-      const gpPrices: GpPrice[] = prices.map((p) => ({
-        assetType: p.assetType,
-        assetId: p.assetId,
-        price: Number(p.price),
-      }));
 
       // 5. Validación + coste.
       const validation = validateLineup(input.slots, affiliations, rules.limits);
@@ -1007,5 +995,37 @@ export class LineupService {
     return balanceFromMovements(
       movements.map((m) => ({ type: m.type, amount: Number(m.amount) })),
     );
+  }
+
+  /**
+   * Precios congelados de un GP con fallback al P0 (ADR-0015 addendum):
+   * para cada activo, el precio del GP si existe; si no, el P0 (fila
+   * `gpId = null`); si no, ausente. Devuelve la lista RESUELTA: cada activo
+   * aparece una vez, con el precio del GP prevaleciendo sobre el P0.
+   *
+   * Sin este fallback, el primer GP de una temporada —que no recibe precio
+   * propio, porque la fórmula US-08 solo genera el del GP siguiente tras un
+   * GP definitivo— no tendría precios y el builder/save mostrarían "sin
+   * precio" aunque el mercado sí muestre el P0 (`isP0Fallback`).
+   */
+  private async resolveGpPrices(
+    tx: Prisma.TransactionClient,
+    gpId: string,
+  ): Promise<GpPrice[]> {
+    const [p0, gp] = await Promise.all([
+      tx.price.findMany({ where: { gpId: null } }),
+      tx.price.findMany({ where: { gpId } }),
+    ]);
+    // El P0 primero y el precio del GP después: al sobrescribir en el mapa,
+    // el precio del GP prevalece (mismo criterio que el mercado, US-14).
+    const byKey = new Map<string, GpPrice>();
+    for (const row of [...p0, ...gp]) {
+      byKey.set(`${row.assetType}:${row.assetId}`, {
+        assetType: row.assetType,
+        assetId: row.assetId,
+        price: Number(row.price),
+      });
+    }
+    return Array.from(byKey.values());
   }
 }

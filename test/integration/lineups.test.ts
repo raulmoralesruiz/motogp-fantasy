@@ -78,6 +78,18 @@ describe("US-09 · Lineups: composición, coste y cambios (PostgreSQL real)", ()
   let luisToken: string;
   let saraToken: string;
   let pabloToken: string;
+  // Fallback al P0 (ADR-0015 addendum): activos y GPs aislados (no
+  // interfieren con los tests existentes).
+  // 4 pilotos (2 oro + 2 plata), repartidos en 2 ctor/equipo (tupla: índices definidos).
+  let p0Riders: [string, string, string, string];
+  let p0CtorAId: string; // r1, r2
+  let p0CtorBId: string; // r3, r4
+  let p0TeamAId: string; // r1, r2
+  let p0TeamBId: string; // r3, r4
+  let gpP0Id: string; // solo P0 (sin precio propio)
+  let gpMixedId: string; // precio propio solo para el 1er piloto (precedencia)
+  // Usuario nuevo: sin carry → presupuesto determinista (B).
+  let p0UserToken: string;
 
   type Rider = World["riders"][number];
   let r1: Rider;
@@ -286,6 +298,92 @@ describe("US-09 · Lineups: composición, coste y cambios (PostgreSQL real)", ()
     });
     if (!adminUser) throw new Error("no se pudo registrar el admin");
     adminId = adminUser.id;
+
+    // ── Fallback al P0 (ADR-0015 addendum) ─────────────────────────────────
+    // Activos aislados con P0 (gpId null) y GPs sin precio propio: el builder/
+    // save/get deben resolver el P0 (y el precio propio, si existe, prevalece).
+    // 4 pilotos repartidos en 2 constructores/2 equipos (límite de
+    // concentración: máx 2 por constructor y por equipo).
+    p0CtorAId = (
+      await prisma.constructor.create({ data: { name: `Ctor P0A ${suffix}` } })
+    ).id;
+    p0CtorBId = (
+      await prisma.constructor.create({ data: { name: `Ctor P0B ${suffix}` } })
+    ).id;
+    p0TeamAId = (
+      await prisma.team.create({
+        data: { name: `Equipo P0A ${suffix}`, constructorId: p0CtorAId },
+      })
+    ).id;
+    p0TeamBId = (
+      await prisma.team.create({
+        data: { name: `Equipo P0B ${suffix}`, constructorId: p0CtorBId },
+      })
+    ).id;
+    const [p0r1, p0r2, p0r3, p0r4] = await Promise.all([
+      prisma.rider.create({ data: { name: `Piloto P0 ${suffix}-1` } }),
+      prisma.rider.create({ data: { name: `Piloto P0 ${suffix}-2` } }),
+      prisma.rider.create({ data: { name: `Piloto P0 ${suffix}-3` } }),
+      prisma.rider.create({ data: { name: `Piloto P0 ${suffix}-4` } }),
+    ]);
+    p0Riders = [p0r1.id, p0r2.id, p0r3.id, p0r4.id];
+    const mkP0Gp = (round: number, name: string) =>
+      prisma.gp.create({
+        data: {
+          seasonId: world.season.id,
+          round,
+          name,
+          circuitId: world.gp.circuitId,
+          date: new Date(`2099-07-${String(round).padStart(2, "0")}T12:00:00Z`),
+        },
+      });
+    gpP0Id = (await mkP0Gp(8, `GP solo P0 ${suffix}`)).id;
+    gpMixedId = (await mkP0Gp(9, `GP mixto ${suffix}`)).id;
+    // Afiliaciones: r1, r2 → ctorA/teamA; r3, r4 → ctorB/teamB.
+    const p0Affiliations = [
+      { riderId: p0Riders[0], teamId: p0TeamAId, constructorId: p0CtorAId },
+      { riderId: p0Riders[1], teamId: p0TeamAId, constructorId: p0CtorAId },
+      { riderId: p0Riders[2], teamId: p0TeamBId, constructorId: p0CtorBId },
+      { riderId: p0Riders[3], teamId: p0TeamBId, constructorId: p0CtorBId },
+    ];
+    for (const gpId of [gpP0Id, gpMixedId]) {
+      await prisma.$transaction(
+        p0Affiliations.map((aff) =>
+          prisma.riderAffiliation.create({ data: { gpId, ...aff } }),
+        ),
+      );
+    }
+    // P0 (gpId null) para los 4 pilotos + 2 constructores + 2 equipos.
+    await prisma.price.createMany({
+      data: [
+        { gpId: null, assetType: "rider", assetId: p0Riders[0], price: 11 },
+        { gpId: null, assetType: "rider", assetId: p0Riders[1], price: 12 },
+        { gpId: null, assetType: "rider", assetId: p0Riders[2], price: 13 },
+        { gpId: null, assetType: "rider", assetId: p0Riders[3], price: 14 },
+        { gpId: null, assetType: "constructor", assetId: p0CtorAId, price: 21 },
+        { gpId: null, assetType: "constructor", assetId: p0CtorBId, price: 21 },
+        { gpId: null, assetType: "team", assetId: p0TeamAId, price: 22 },
+        { gpId: null, assetType: "team", assetId: p0TeamBId, price: 22 },
+      ],
+    });
+    // Precio propio SOLO para el 1er piloto en gpMixed (distinto del P0):
+    // prueba la precedencia (el precio del GP gana al P0).
+    await prisma.price.create({
+      data: { gpId: gpMixedId, assetType: "rider", assetId: p0Riders[0], price: 100 },
+    });
+    // Usuario nuevo para los tests de save/get (sin carry → presupuesto = B).
+    const p0Caller = await callerFor("198.51.100.70");
+    await p0Caller.auth.register({
+      email: email("p0user"),
+      username: username("p0user"),
+      password: PASSWORD,
+      termsAccepted: true,
+    });
+    p0UserToken = sessionTokenFrom(p0Caller.ctx);
+    const p0User = await prisma.user.findUnique({
+      where: { email: email("p0user") },
+    });
+    if (!p0User) throw new Error("no se pudo registrar p0user");
   });
 
   afterAll(async () => {
@@ -817,6 +915,66 @@ describe("US-09 · Lineups: composición, coste y cambios (PostgreSQL real)", ()
       code: "NOT_FOUND",
       message: "El GP no existe.",
     });
+  });
+
+  // ── Fallback al P0 (ADR-0015 addendum) ────────────────────────────────────
+  // El GP 1 no recibe precio propio (la fórmula US-08 solo genera el del GP
+  // siguiente tras un GP definitivo): builder/save/get deben resolver el P0,
+  // igual que el mercado (`isP0Fallback`). El precio propio, si existe,
+  // prevalece sobre el P0.
+
+  it("builder: GP sin precio propio muestra el P0 (fallback)", async () => {
+    const { lineups } = await callerFor(USER_IP, mariaToken);
+    const view = await lineups.builder({ gpId: gpP0Id });
+    // Los 4 pilotos resuelven su P0 (11/12/13/14), no null.
+    expect(view.riders).toHaveLength(4);
+    const prices = view.riders
+      .map((r) => r.price)
+      .sort((a, b) => (a ?? 0) - (b ?? 0));
+    expect(prices).toEqual([11, 12, 13, 14]);
+    for (const ctorId of [p0CtorAId, p0CtorBId]) {
+      const ctorRow = view.constructors.find((c) => c.id === ctorId);
+      expect(ctorRow).toMatchObject({ price: 21 });
+    }
+    for (const teamId of [p0TeamAId, p0TeamBId]) {
+      const teamRow = view.teams.find((t) => t.id === teamId);
+      expect(teamRow).toMatchObject({ price: 22 });
+    }
+  });
+
+  it("save: GP sin precio propio calcula el coste desde el P0", async () => {
+    // Usuario nuevo (sin carry): presupuesto = B = 100, determinista.
+    const { lineups } = await callerFor("198.51.100.70", p0UserToken);
+    // Coste = 11 + 12 + 13 + 14 + 21 + 22 = 93 (≤ presupuesto 100).
+    const result = await lineups.save({
+      gpId: gpP0Id,
+      slots: {
+        gold: [p0Riders[0], p0Riders[1]],
+        silver: [p0Riders[2], p0Riders[3]],
+        constructorId: p0CtorAId,
+        teamId: p0TeamAId,
+      },
+    });
+    expect(result.cost).toBe(93);
+    expect(result.balance).toBe(7); // 100 − 93
+    // get recupera el lineup con el coste resuelto desde el P0.
+    const view = await lineups.get({ gpId: gpP0Id });
+    expect(view).not.toBeNull();
+    expect(view?.cost).toBe(93);
+  });
+
+  it("builder: el precio propio del GP prevalece sobre el P0", async () => {
+    const { lineups } = await callerFor(USER_IP, mariaToken);
+    const view = await lineups.builder({ gpId: gpMixedId });
+    // 1er piloto: precio propio (100) gana al P0 (11).
+    const first = view.riders.find((r) => r.riderId === p0Riders[0]);
+    expect(first).toMatchObject({ price: 100 });
+    // El resto: fallback al P0 (12/13/14).
+    const others = view.riders
+      .filter((r) => r.riderId !== p0Riders[0])
+      .map((r) => r.price)
+      .sort((a, b) => (a ?? 0) - (b ?? 0));
+    expect(others).toEqual([12, 13, 14]);
   });
 
   // ── US-12: lesiones, wildcard e historial ─────────────────────────────────

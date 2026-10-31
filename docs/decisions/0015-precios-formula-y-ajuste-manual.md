@@ -55,3 +55,15 @@ Opción 3.
 - **Lockout inviolable:** ni el job ni el ajuste manual tocan precios de un GP `locked`; el check se evalúa dentro de la transacción (misma garantía que el lockout de lineups).
 - **Auditoría completa:** cada cambio de precio por fórmula o manual queda en `audit_log` con before/after y actor (sistema = `null`); las creaciones de primera vez no auditan (no hay valor previo).
 - **Diferido explícito:** BullMQ + lock Redis + disparo automático al pasar a definitivo se implementan en la fase de resultados, inyectando las dependencias reales en `applyPricesForGp` sin cambiar su contrato.
+
+## Addendum (2026-10-31): fallback al P0 en lineups
+
+**Problema (bug, no cambio de regla):** la fórmula solo genera el precio del GP *siguiente* tras un GP definitivo, así que el **GP 1 de una temporada no tiene precio propio** (solo el P0, fila `gpId = null`). El mercado (US-14) ya resolvía esa situación con fallback al P0 (`isP0Fallback`), pero el servicio de lineups (`lineup-service.ts`) consultaba únicamente `price.findMany({ where: { gpId } })`: en el GP 1 todos los activos salían `null` → el builder mostraba "sin precio" y el save era imposible, aunque el mercado mostrara precios.
+
+**Decisión:** el servicio de lineups resuelve los precios congelados como `precio_del_GP ?? P0 ?? ausente`, con **prevalencia del precio del GP** sobre el P0 (mismo criterio que el mercado). Implementación: helper `resolveGpPrices` (una consulta P0 + una del GP, lista resuelta: cada activo una vez, con el precio del GP prevaleciendo) aplicado en los 4 puntos que leían precios del GP — `builder`, `save`, `get` y `applyWildcard`. La fórmula pura `lineupCost` no cambia: sigue recibiendo la lista de precios ya resuelta (invariante 2 intacta: el coste se recalcula siempre en el servidor).
+
+**Consecuencias:**
+
+- El GP 1 (y cualquier GP sin precio propio) se puede construir y guardar con el P0, coherente con lo que ve el jugador en el mercado.
+- Si un GP tiene precio propio para un activo, ese precio gana al P0 (tests de integración: GP mixto).
+- No cambia ninguna regla de juego ni el versionado de precios; es un fix de coherencia entre el mercado y los lineups.
