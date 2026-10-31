@@ -29,6 +29,8 @@ const SCORE = {
   gpName: GP1.name,
   round: 1,
   seasonName: "Temporada 2099",
+  status: "definitive",
+  eventsIncluded: ["q2", "sprint", "race"],
   pointsTotal: 170.5,
   rulesVersion: "scoring-v1",
   resultsVersion: "rv-1",
@@ -208,7 +210,36 @@ describe("PuntuacionPage", () => {
     expect(screen.getAllByText("38 pts")).toHaveLength(2);
   });
 
-  it("muestra el error si el GP no tiene resultados definitivos", async () => {
+  it("muestra la puntuación provisional (ADR-0031) con etiqueta y eventos", async () => {
+    mockSeasons();
+    mockGps();
+    mockResult(trpc.results.myScore.useQuery, {
+      data: {
+        ...SCORE,
+        status: "provisional",
+        eventsIncluded: ["q2", "sprint"],
+        resultsVersion: null,
+        computedAt: null,
+      },
+      isPending: false,
+      isError: false,
+    });
+    renderPuntuacion(<PuntuacionPage />);
+
+    const user = userEvent.setup();
+    await openGp1(user);
+
+    // Total con la etiqueta provisional (sin versión de resultados).
+    expect(screen.getByText("170,5 puntos")).toBeInTheDocument();
+    expect(screen.getByText(/provisional · reglas scoring-v1/)).toBeInTheDocument();
+    expect(screen.queryByText(/resultados rv-1/)).not.toBeInTheDocument();
+
+    // Aviso provisional con los eventos incluidos.
+    expect(screen.getByText("Puntuación provisional")).toBeInTheDocument();
+    expect(screen.getByText(/Q2, sprint/)).toBeInTheDocument();
+  });
+
+  it("muestra el error si el GP no tiene resultados importados", async () => {
     mockSeasons();
     mockGps();
     mockResult(trpc.results.myScore.useQuery, {
@@ -216,7 +247,7 @@ describe("PuntuacionPage", () => {
       isPending: false,
       isError: true,
       error: new Error(
-        "Este GP aún no tiene resultados definitivos; tu puntuación aparecerá cuando se marquen definitivos.",
+        "Este GP aún no tiene resultados importados; tu puntuación aparecerá cuando se importen los resultados o se marquen definitivos.",
       ),
     });
     renderPuntuacion(<PuntuacionPage />);
@@ -225,7 +256,7 @@ describe("PuntuacionPage", () => {
     await openGp1(user);
 
     expect(
-      screen.getByText(/Este GP aún no tiene resultados definitivos/),
+      screen.getByText(/Este GP aún no tiene resultados importados/),
     ).toBeInTheDocument();
     expect(screen.queryByText("170,5 puntos")).not.toBeInTheDocument();
   });

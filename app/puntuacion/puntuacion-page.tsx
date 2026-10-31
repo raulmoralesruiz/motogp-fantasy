@@ -72,10 +72,16 @@ export default function PuntuacionPage() {
           <h2>Mi puntuación — {score.data.gpName}</h2>
           <p>
             Total: <strong>{fmt(score.data.total)} puntos</strong>{" "}
-            <span className="muted">
-              (reglas {score.data.rulesVersion} · resultados{" "}
-              {score.data.resultsVersion})
-            </span>
+            {score.data.status === "provisional" ? (
+              <span className="muted">
+                (provisional · reglas {score.data.rulesVersion})
+              </span>
+            ) : (
+              <span className="muted">
+                (definitivo · reglas {score.data.rulesVersion} · resultados{" "}
+                {score.data.resultsVersion})
+              </span>
+            )}
           </p>
 
           <ScoreBreakdown score={score.data} />

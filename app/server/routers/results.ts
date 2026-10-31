@@ -299,9 +299,12 @@ export function createResultsRouter(deps: ResultsRouterDeps) {
       .query(({ input }) => service.gpState(input.gpId)),
 
     /**
-     * Mi puntuación en un GP con el desglose (US-20): por piloto (Q2/sprint/
-     * GP/bonos/penalizaciones), constructor y equipo, con pesos oro/plata.
-     * Solo lectura; el usuario ve su propia puntuación (ctx.user.id).
+     * Mi puntuación en un GP con el desglose (US-20; ADR-0031: provisional
+     * en vivo): por piloto (Q2/sprint/GP/bonos/penalizaciones), constructor
+     * y equipo, con pesos oro/plata. Solo lectura; el usuario ve su propia
+     * puntuación (ctx.user.id). `status: "provisional"` (sin `Score`,
+     * calculada al vuelo con la misma fórmula que el recálculo definitivo)
+     * o `"definitive"` (fila `Score` del recálculo).
      */
     myScore: protectedProcedure
       .input(myScoreInputSchema)

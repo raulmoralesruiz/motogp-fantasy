@@ -1,5 +1,7 @@
 import type { MyScoreView, RiderScoreView } from "@/modules/results";
 
+import { Alert } from "./alert";
+
 /** Etiquetas en español de un código de bono/penalización (scoring-v1). */
 const CODE_LABELS: Record<string, string> = {
   pole: "Pole",
@@ -19,6 +21,18 @@ function codeLabel(code: string): string {
 /** Formatea un número de puntos (sin ceros sobrantes, coma decimal en es). */
 export function fmt(value: number): string {
   return new Intl.NumberFormat("es-ES", { maximumFractionDigits: 2 }).format(value);
+}
+
+/** Etiquetas en español de los eventos de un fin de semana (ADR-0031). */
+const EVENT_LABELS: Record<string, string> = {
+  q2: "Q2",
+  sprint: "sprint",
+  race: "carrera",
+};
+
+/** Lista legible de los eventos incluidos en la puntuación (ADR-0031). */
+export function eventsLabel(events: Array<"q2" | "sprint" | "race">): string {
+  return events.map((e) => EVENT_LABELS[e] ?? e).join(", ");
 }
 
 /** Lista legible de bonos/penalizaciones (código + puntos con signo). */
@@ -53,10 +67,22 @@ function RiderRow({ rider }: { rider: RiderScoreView }) {
  * oro/plata con pesos (×1/×0,5) y desglose por piloto (Q2/sprint/carrera/
  * bonos/penalizaciones), constructor y equipo. Los valores son los que
  * escribió el recálculo (US-18/US-19) con el módulo puro `scoring`.
+ *
+ * Puntuación provisional en vivo (ADR-0031): si `score.status` es
+ * `provisional` (aún sin `Score`, GP no definitivo), lo indica con un
+ * aviso y los eventos incluidos; los valores son los calculados al vuelo
+ * con la misma fórmula del recálculo definitivo.
  */
 export function ScoreBreakdown({ score }: { score: MyScoreView }) {
   return (
     <>
+      {score.status === "provisional" && (
+        <Alert variant="info">
+          <strong>Puntuación provisional</strong>: calculada con los resultados
+          importados hasta ahora ({eventsLabel(score.eventsIncluded)}). Se
+          confirmará cuando el GP se marque definitivo.
+        </Alert>
+      )}
       <h3>Oro</h3>
       <ul>
         {score.gold.map((rider) => (

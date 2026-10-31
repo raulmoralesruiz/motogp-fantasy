@@ -14,6 +14,7 @@ import { mockResult, resetTrpcMocks } from "../../../test/trpc-mock";
 import { render, screen, userEvent } from "../../../test/rtl";
 
 import type { MyLeagueGpRanking, MyResultsView } from "@/server/routers/results";
+import type { MyScoreView } from "@/modules/results";
 
 import ResultadosPage from "../resultados-page";
 
@@ -95,11 +96,13 @@ const RESULTS: MyResultsView = {
 };
 
 /** Desglose de 170.5 (scoring.md §5), el mismo fixture de `/puntuacion`. */
-const SCORE = {
+const SCORE: MyScoreView = {
   gpId: GP2.id,
   gpName: GP2.name,
   round: 2,
   seasonName: "Temporada 2099",
+  status: "definitive",
+  eventsIncluded: ["q2", "sprint", "race"],
   pointsTotal: 170.5,
   rulesVersion: "scoring-v1",
   resultsVersion: "rv-2",
@@ -196,7 +199,7 @@ function mockResults(data: typeof RESULTS) {
   });
 }
 
-function mockScore(score: typeof SCORE) {
+function mockScore(score: MyScoreView) {
   mockResult(trpc.results.myScore.useQuery, {
     data: score,
     isPending: false,
@@ -326,7 +329,7 @@ describe("ResultadosPage", () => {
       isPending: false,
       isError: true,
       error: new Error(
-        "Este GP aún no tiene resultados definitivos; tu puntuación aparecerá cuando se marquen definitivos.",
+        "Este GP aún no tiene resultados importados; tu puntuación aparecerá cuando se importen los resultados o se marquen definitivos.",
       ),
     });
     renderResultados(<ResultadosPage />);
@@ -338,9 +341,49 @@ describe("ResultadosPage", () => {
       screen.getByText("Aún no hay resultados definitivos en este GP."),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Este GP aún no tiene resultados definitivos/),
+      screen.getByText(/Este GP aún no tiene resultados importados/),
     ).toBeInTheDocument();
     expect(screen.queryByText("170,5 puntos")).not.toBeInTheDocument();
+  });
+
+  it("provisional (ADR-0031): aviso + desglose provisional con eventos", async () => {
+    mockSeasons();
+    mockGps();
+    mockResults({
+      ...RESULTS,
+      state: {
+        gpId: GP2.id,
+        gpName: GP2.name,
+        round: 2,
+        seasonName: "Temporada 2099",
+        definitive: false,
+        resultsVersion: null,
+        counts: { provisional: 36, definitive: 0, corrected: 0 },
+        totalResults: 36,
+        lineups: 12,
+      },
+    });
+    mockScore({
+      ...SCORE,
+      status: "provisional",
+      eventsIncluded: ["q2", "sprint"],
+      resultsVersion: null,
+      computedAt: null,
+    });
+    renderResultados(<ResultadosPage />);
+
+    const user = userEvent.setup();
+    await openGp2(user);
+
+    // El GP no es definitivo todavía…
+    expect(
+      screen.getByText("Aún no hay resultados definitivos en este GP."),
+    ).toBeInTheDocument();
+    // …pero el desglose se muestra como provisional, con los eventos.
+    expect(screen.getByText("170,5 puntos")).toBeInTheDocument();
+    expect(screen.getByText(/provisional · reglas scoring-v1/)).toBeInTheDocument();
+    expect(screen.getByText("Puntuación provisional")).toBeInTheDocument();
+    expect(screen.getByText(/Q2, sprint/)).toBeInTheDocument();
   });
 
   it("muestra el error si `myResults` falla", async () => {

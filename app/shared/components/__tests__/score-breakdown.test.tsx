@@ -19,6 +19,8 @@ const SCORE: MyScoreView = {
   gpName: "GP de Jerez",
   round: 1,
   seasonName: "Temporada 2099",
+  status: "definitive",
+  eventsIncluded: ["q2", "sprint", "race"],
   pointsTotal: 170.5,
   rulesVersion: "scoring-v1",
   resultsVersion: "rv-1",
@@ -84,6 +86,15 @@ const SCORE: MyScoreView = {
   total: 170.5,
 };
 
+/** Misma puntuación, estado provisional (ADR-0031): solo Q2 + sprint. */
+const SCORE_PROVISIONAL: MyScoreView = {
+  ...SCORE,
+  status: "provisional",
+  eventsIncluded: ["q2", "sprint"],
+  resultsVersion: null,
+  computedAt: null,
+};
+
 describe("ScoreBreakdown", () => {
   it("muestra oro/plata con pesos y desglose por piloto", () => {
     render(<ScoreBreakdown score={SCORE} />);
@@ -126,6 +137,21 @@ describe("ScoreBreakdown", () => {
     expect(screen.getByText("Constructor X")).toBeInTheDocument();
     expect(screen.getByText("Equipo X")).toBeInTheDocument();
     expect(screen.getAllByText("38 pts")).toHaveLength(2);
+  });
+
+  it("provisional (ADR-0031): aviso con los eventos incluidos", () => {
+    render(<ScoreBreakdown score={SCORE_PROVISIONAL} />);
+
+    expect(screen.getByText("Puntuación provisional")).toBeInTheDocument();
+    expect(screen.getByText(/Q2, sprint/)).toBeInTheDocument();
+    // Sigue mostrando el desglose completo.
+    expect(screen.getByText("Piloto A")).toBeInTheDocument();
+  });
+
+  it("definitivo: sin aviso provisional", () => {
+    render(<ScoreBreakdown score={SCORE} />);
+
+    expect(screen.queryByText("Puntuación provisional")).not.toBeInTheDocument();
   });
 
   it("fmt formatea en es-ES (coma decimal, sin ceros sobrantes)", () => {

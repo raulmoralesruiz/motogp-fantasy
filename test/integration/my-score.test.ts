@@ -17,8 +17,12 @@
  * Semánticas bajo test:
  * - `myScore`: desglose por piloto (Q2/sprint/GP/bonos/penal) con pesos
  *   oro/plata, constructor y equipo, nombres resueltos; total = 170.5.
+ * - Puntuación provisional en vivo (ADR-0031): con resultados importados y
+ *   sin `Score`, `myScore` devuelve `status: "provisional"` + `eventsIncluded`
+ *   + el total calculado al vuelo con la MISMA fórmula que el recálculo
+ *   definitivo (Q2 → 47 · Q2+sprint → 82 · completo → 170.5 = definitivo).
  * - Gates: GP inexistente (NOT_FOUND), sin lineup (NOT_FOUND), sin resultados
- *   definitivos (PRECONDITION_FAILED).
+ *   importados (PRECONDITION_FAILED).
  * - RBAC: `protectedProcedure` (401 sin sesión); el usuario ve su propia
  *   puntuación (`ctx.user.id`).
  */
@@ -243,12 +247,12 @@ describe("US-20 · Mi puntuación con desglose (PostgreSQL real)", () => {
 
   // ── Gates + RBAC (sin resultados definitivos todavía) ─────────────────────
 
-  it("myScore sin resultados definitivos → PRECONDITION_FAILED", async () => {
+  it("myScore sin resultados importados → PRECONDITION_FAILED", async () => {
     const { results } = await callerFor(USER_IP, userToken);
     await expect(results.myScore({ gpId: world.gp.id })).rejects.toMatchObject({
       code: "PRECONDITION_FAILED",
       message:
-        "Este GP aún no tiene resultados definitivos; tu puntuación aparecerá cuando se marquen definitivos.",
+        "Este GP aún no tiene resultados importados; tu puntuación aparecerá cuando se importen los resultados o se marquen definitivos.",
     });
   });
 
@@ -287,11 +291,10 @@ describe("US-20 · Mi puntuación con desglose (PostgreSQL real)", () => {
     });
   });
 
-  // ── Importación de resultados + definitivo → myScore = 170.5 ──────────────
+  // ── Provisional en vivo (ADR-0031): importación progresiva ─────────────────
 
-  it("importa Q2/sprint/carrera, marca definitivo y myScore = 170.5 con desglose", async () => {
+  it("provisional solo con Q2: 47 pts, eventos [q2], sin `Score` ni versión", async () => {
     const { results } = await callerFor(ADMIN_IP, adminToken);
-
     // Q2: A p1 (pole) · B p2 · C p3 · E p6 · H p15 · I p12.
     const q2Payload = {
       gpId: world.gp.id,
@@ -307,6 +310,33 @@ describe("US-20 · Mi puntuación con desglose (PostgreSQL real)", () => {
     };
     expect(await results.importEvent(q2Payload)).toMatchObject({ created: 6 });
 
+    const { results: userResults } = await callerFor(USER_IP, userToken);
+    const score = await userResults.myScore({ gpId: world.gp.id });
+
+    // Estado provisional (sin `Score`, sin `results_version`).
+    expect(score.status).toBe("provisional");
+    expect(score.eventsIncluded).toEqual(["q2"]);
+    expect(score.resultsVersion).toBeNull();
+    expect(score.computedAt).toBeNull();
+    expect(score.rulesVersion).toBe("scoring-v1");
+
+    // Solo Q2 puntúa (sprint/carrera sin importar → 0):
+    // A 12+2 (pole) · C 8 · E 5 · H 1 → lineup 14+8+2.5+0.5 = 25;
+    // ctor/equipo X: top-2 {A:14, B:8} → 11. Total = 25+11+11 = 47.
+    expect(score.total).toBeCloseTo(47, 2);
+    expect(score.pointsTotal).toBeCloseTo(47, 2);
+    const aView = score.gold.find((g) => g.riderId === A)!;
+    expect(aView.points).toBeCloseTo(14, 2);
+    expect(aView.breakdown).toMatchObject({ q2: 12, sprint: 0, mainRace: 0, total: 14 });
+    expect(score.manufacturer.points).toBeCloseTo(11, 2);
+    expect(score.team.points).toBeCloseTo(11, 2);
+
+    // Solo lectura: no se ha escrito ninguna `Score` (ADR-0031).
+    expect(await prisma.score.count()).toBe(0);
+  });
+
+  it("provisional con Q2 + sprint: 82 pts, eventos [q2, sprint]", async () => {
+    const { results } = await callerFor(ADMIN_IP, adminToken);
     // Sprint: A p1 · B p3 · C p7 · E p8 · H DNF · I p9.
     const sprintPayload = {
       gpId: world.gp.id,
@@ -322,6 +352,20 @@ describe("US-20 · Mi puntuación con desglose (PostgreSQL real)", () => {
     };
     expect(await results.importEvent(sprintPayload)).toMatchObject({ created: 6 });
 
+    const { results: userResults } = await callerFor(USER_IP, userToken);
+    const score = await userResults.myScore({ gpId: world.gp.id });
+
+    expect(score.status).toBe("provisional");
+    expect(score.eventsIncluded).toEqual(["q2", "sprint"]);
+    // A 14+12 · C 8+3 · E 5+2 · H 1+0 → 26+11+3.5+0.5 = 41;
+    // ctor/equipo X: top-2 {A:26, B:15} → 20.5. Total = 41+20.5+20.5 = 82.
+    expect(score.total).toBeCloseTo(82, 2);
+    expect(score.manufacturer.points).toBeCloseTo(20.5, 2);
+    expect(await prisma.score.count()).toBe(0);
+  });
+
+  it("provisional con el fin de semana completo: 170.5 (misma fórmula que el definitivo)", async () => {
+    const { results } = await callerFor(ADMIN_IP, adminToken);
     // Carrera: A p1 (ganador) · B p11 · C p2 · E p6 · H DNF (−5) · I p14.
     const racePayload = {
       gpId: world.gp.id,
@@ -337,12 +381,30 @@ describe("US-20 · Mi puntuación con desglose (PostgreSQL real)", () => {
     };
     expect(await results.importEvent(racePayload)).toMatchObject({ created: 6 });
 
+    const { results: userResults } = await callerFor(USER_IP, userToken);
+    const score = await userResults.myScore({ gpId: world.gp.id });
+
+    expect(score.status).toBe("provisional");
+    expect(score.eventsIncluded).toEqual(["q2", "sprint", "race"]);
+    // Igual que el definitivo (misma fórmula, ADR-0031).
+    expect(score.total).toBeCloseTo(170.5, 2);
+    expect(await prisma.score.count()).toBe(0);
+  });
+
+  // ── Definitivo → myScore = 170.5 ───────────────────────────────────────────
+
+  it("marca definitivo y myScore = 170.5 con desglose (definitivo)", async () => {
+    const { results } = await callerFor(ADMIN_IP, adminToken);
     // Marcar definitivo → primer recálculo (rv-1) con el motor puro.
     await results.markDefinitive({ gpId: world.gp.id });
 
     // El usuario ve su puntuación con el desglose.
     const { results: userResults } = await callerFor(USER_IP, userToken);
     const score = await userResults.myScore({ gpId: world.gp.id });
+
+    // Definitiva (fila `Score` del recálculo rv-1).
+    expect(score.status).toBe("definitive");
+    expect(score.eventsIncluded).toEqual(["q2", "sprint", "race"]);
 
     // Total = 170.5 (scoring.md §5).
     expect(score.total).toBeCloseTo(170.5, 2);

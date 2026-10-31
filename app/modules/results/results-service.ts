@@ -316,10 +316,21 @@ export type MyScoreView = {
   gpName: string;
   round: number;
   seasonName: string;
+  /**
+   * `definitive`: la puntuación es la fila `Score` (escrita por el
+   * recálculo al marcar definitivo). `provisional`: calculada al vuelo
+   * desde los resultados importados (sin `Score`, no versionada, no
+   * afecta al ranking) — ADR-0031.
+   */
+  status: "definitive" | "provisional";
+  /** Eventos incluidos en la puntuación (los importados y no cancelados). */
+  eventsIncluded: Array<"q2" | "sprint" | "race">;
   pointsTotal: number;
   rulesVersion: string;
-  resultsVersion: string;
-  computedAt: Date;
+  /** Solo `definitive` (versión de resultados de la fila `Score`); `null` en provisional. */
+  resultsVersion: string | null;
+  /** Solo `definitive` (cuándo se calculó la fila `Score`); `null` en provisional. */
+  computedAt: Date | null;
   gold: RiderScoreView[];
   silver: RiderScoreView[];
   /**
@@ -1557,19 +1568,26 @@ export class ResultsService {
   // ── US-20: mi puntuación con desglose ──────────────────────────────────────
 
   /**
-   * Puntuación del usuario en un GP con el desglose (US-20).
+   * Puntuación del usuario en un GP con el desglose (US-20; ADR-0031:
+   * provisional en vivo).
    *
-   * Solo lectura: lee la `Score` más reciente del usuario para el GP (la de
-   * la `results_version` vigente) y devuelve el desglose de `Score.breakdown`
-   * con los nombres resueltos (pilotos/constructor/equipo). El total y el
-   * desglose son los que escribió el recálculo (US-18/US-19) con el motor
-   * puro `scoring` — el usuario ve exactamente lo que puntúa.
+   * Solo lectura. Dos caminos:
+   * - **Definitiva** (`status: "definitive"`): lee la `Score` más reciente
+   *   del usuario para el GP (la de la `results_version` vigente) y devuelve
+   *   el desglose de `Score.breakdown` con los nombres resueltos. El total y
+   *   el desglose son los que escribió el recálculo (US-18/US-19) con el
+   *   motor puro `scoring` — el usuario ve exactamente lo que puntúa.
+   * - **Provisional** (`status: "provisional"`, ADR-0031): aún no hay
+   *   `Score` (el GP no está definitivo) pero sí hay resultados importados
+   *   → calcula al vuelo con `computeGpScores` (la MISMA fórmula que el
+   *   recálculo definitivo; eventos sin importar → 0 puntos). No escribe
+   *   `Score`, no genera `results_version` y no afecta al ranking.
    *
    * Errores:
    * - GP no existe → NOT_FOUND.
    * - El usuario no tiene lineup en el GP → NOT_FOUND.
-   * - El GP aún no tiene resultados definitivos (sin `Score`) →
-   *   PRECONDITION_FAILED (el admin debe marcarlo definitivo, US-18).
+   * - Sin `Score` y sin resultados importados en el GP → PRECONDITION_FAILED
+   *   (no hay nada que puntuar todavía).
    */
   async myScore(gpId: string, userId: string): Promise<MyScoreView> {
     const gp = await this.prisma.gp.findUnique({
@@ -1582,6 +1600,7 @@ export class ResultsService {
 
     const lineup = await this.prisma.lineup.findUnique({
       where: { userId_gpId: { userId, gpId } },
+      include: { slots: true },
     });
     if (!lineup) {
       throw new TRPCError({
@@ -1595,14 +1614,51 @@ export class ResultsService {
       where: { lineupId: lineup.id },
       orderBy: { computedAt: "desc" },
     });
+
+    // ── ADR-0031: puntuación provisional en vivo (aún sin `Score`) ──
     if (!score) {
-      throw new TRPCError({
-        code: "PRECONDITION_FAILED",
-        message:
-          "Este GP aún no tiene resultados definitivos; tu puntuación aparecerá cuando se marquen definitivos.",
-      });
+      const eventsIncluded = await this.eventsIncludedForGp(this.prisma, gpId);
+      if (eventsIncluded.length === 0) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message:
+            "Este GP aún no tiene resultados importados; tu puntuación aparecerá cuando se importen los resultados o se marquen definitivos.",
+        });
+      }
+      // La misma fórmula que el recálculo definitivo (`computeGpScores`):
+      // solo lectura, sin escribir `Score` ni tocar el ranking.
+      const computed = await this.computeGpScores(this.prisma, gpId, gp.seasonId);
+      const view = await this.lineupScoreView(
+        lineup.slots,
+        computed.riderPoints,
+        computed.riderBreakdowns,
+        computed.ctorPoints,
+        computed.teamPoints,
+        {
+          gold: computed.scoringRules.goldWeight,
+          silver: computed.scoringRules.silverWeight,
+        },
+      );
+      return {
+        gpId: gp.id,
+        gpName: gp.name,
+        round: gp.round,
+        seasonName: gp.season.name,
+        status: "provisional",
+        eventsIncluded,
+        pointsTotal: view.pointsTotal,
+        rulesVersion: computed.ruleVersion,
+        resultsVersion: null,
+        computedAt: null,
+        gold: view.gold,
+        silver: view.silver,
+        manufacturer: view.manufacturer,
+        team: view.team,
+        total: view.total,
+      };
     }
 
+    // ── Puntuación definitiva (fila `Score` existente) ──
     const breakdown = score.breakdown as unknown as ScoreBreakdownJson;
 
     // Nombres: pilotos (oro + plata), constructor y equipo.
@@ -1641,6 +1697,8 @@ export class ResultsService {
       gpName: gp.name,
       round: gp.round,
       seasonName: gp.season.name,
+      status: "definitive",
+      eventsIncluded: await this.eventsIncludedForGp(this.prisma, gpId),
       pointsTotal: Number(score.pointsTotal),
       rulesVersion: score.rulesVersion,
       resultsVersion: score.resultsVersion,
@@ -1662,6 +1720,97 @@ export class ResultsService {
         points: breakdown.team.points,
       },
       total: breakdown.total,
+    };
+  }
+
+  /**
+   * Vista de la puntuación de un lineup a partir de los puntos del fin de
+   * semana (motor puro `scoring`): total, oro/plata con desglose, constructor
+   * y equipo, con los nombres resueltos (ADR-0031).
+   *
+   * La usa la puntuación provisional en vivo (`myScore`); el recálculo
+   * definitivo construye su `Score.breakdown` con la misma fórmula
+   * (`recalculateGp`/`computeGpScores`).
+   */
+  private async lineupScoreView(
+    slots: Array<{ slotType: string; assetType: string; assetId: string }>,
+    riderPoints: Map<string, number>,
+    riderBreakdowns: Map<string, RiderPointsBreakdown>,
+    ctorPoints: Map<string, number>,
+    teamPoints: Map<string, number>,
+    weights: { gold: number; silver: number },
+  ): Promise<{
+    pointsTotal: number;
+    gold: RiderScoreView[];
+    silver: RiderScoreView[];
+    manufacturer: { id: string; name: string; points: number };
+    team: { id: string; name: string; points: number };
+    total: number;
+  }> {
+    const gold = slots
+      .filter((s) => s.slotType === "gold" && s.assetType === "rider")
+      .map((s) => s.assetId);
+    const silver = slots
+      .filter((s) => s.slotType === "silver" && s.assetType === "rider")
+      .map((s) => s.assetId);
+    const constructorId = slots.find((s) => s.slotType === "constructor")?.assetId ?? "";
+    const teamId = slots.find((s) => s.slotType === "team")?.assetId ?? "";
+    if (gold.length !== 2 || silver.length !== 2 || !constructorId || !teamId) {
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "El lineup no tiene la composición 2+2+1+1 (invariante 1).",
+      });
+    }
+    const pointsTotal = lineupWeekendPoints(
+      {
+        gold: gold as [string, string],
+        silver: silver as [string, string],
+        constructor: constructorId,
+        team: teamId,
+      },
+      riderPoints,
+      ctorPoints,
+      teamPoints,
+      weights,
+    );
+
+    // Nombres: pilotos (oro + plata), constructor y equipo.
+    const riderIds = [...gold, ...silver];
+    const db = this.prisma;
+    const [riders, ctorRow, teamRow] = await Promise.all([
+      db.rider.findMany({
+        where: { id: { in: riderIds } },
+        select: { id: true, name: true },
+      }),
+      db.constructor.findUnique({ where: { id: constructorId } }),
+      db.team.findUnique({ where: { id: teamId } }),
+    ]);
+    const riderName = new Map(riders.map((r) => [r.id, r.name]));
+    const toRiderView = (riderId: string, weight: number): RiderScoreView => ({
+      riderId,
+      riderName: riderName.get(riderId) ?? riderId,
+      weight,
+      points: (riderPoints.get(riderId) ?? 0) * weight,
+      breakdown: riderBreakdowns.get(riderId) ?? emptyBreakdown(),
+    });
+
+    return {
+      pointsTotal,
+      gold: gold.map((riderId) => toRiderView(riderId, weights.gold)),
+      silver: silver.map((riderId) => toRiderView(riderId, weights.silver)),
+      // `manufacturer` (NO `constructor`): superjson rechaza la key propia
+      // `constructor` al serializar la respuesta (anti prototype pollution).
+      manufacturer: {
+        id: constructorId,
+        name: ctorRow?.name ?? constructorId,
+        points: ctorPoints.get(constructorId) ?? 0,
+      },
+      team: {
+        id: teamId,
+        name: teamRow?.name ?? teamId,
+        points: teamPoints.get(teamId) ?? 0,
+      },
+      total: pointsTotal,
     };
   }
 
@@ -2041,23 +2190,58 @@ export class ResultsService {
   }
 
   /**
-   * Primer recálculo de un GP (US-18, ADR-0020): puntuar el fin de semana de
-   * cada piloto con el motor puro (tablas de `season_rules` vigentes) y
-   * escribir una `Score` por lineup del GP.
-   *
-   * Datos que carga el servicio (no puro) y pasa al motor: resultados por
-   * evento, parrilla de Q2 (posiciones ganadas), afiliaciones (equipo/
-   * constructor) y precios (bono extraordinario). Si la carrera principal
-   * está cancelada, el GP puntúa 0 para todos (scoring.md §6).
-   *
-   * @returns nº de lineups puntuados (filas `Score` escritas).
+   * Eventos del GP incluidos en la puntuación (ADR-0031): los de tipo
+   * q2/sprint/race con resultados importados y no cancelados. Mismo criterio
+   * en el recálculo definitivo y en la puntuación provisional en vivo.
    */
-  private async recalculateGp(
+  private async eventsIncludedForGp(
+    tx: Prisma.TransactionClient,
+    gpId: string,
+  ): Promise<Array<"q2" | "sprint" | "race">> {
+    const [weekendEvents, resultsEvents, results] = await Promise.all([
+      tx.weekendEvent.findMany({
+        where: { gpId, type: { in: ["q2", "sprint", "race"] } },
+        orderBy: { orderNum: "asc" },
+      }),
+      tx.resultsEvent.findMany({ where: { gpId } }),
+      tx.result.findMany({ where: { gpId } }),
+    ]);
+    const cancelledEvents = new Set(
+      resultsEvents.filter((r) => r.cancelled).map((r) => r.eventId),
+    );
+    const eventsWithResults = new Set(results.map((r) => r.eventId));
+    return weekendEvents
+      .filter((e) => eventsWithResults.has(e.id) && !cancelledEvents.has(e.id))
+      .map((e) => e.type as "q2" | "sprint" | "race");
+  }
+
+  /**
+   * Calcula la puntuación del fin de semana de un GP desde los resultados
+   * actuales (ADR-0031): puntos por piloto (motor puro `scoring`), media
+   * top-2 de constructor/equipo, reglas y los eventos incluidos.
+   *
+   * Solo lectura (reglas, eventos, resultados, afiliaciones, precios). NO
+   * escribe `Score`: lo reutilizan el recálculo definitivo (`recalculateGp`,
+   * que sí escribe) y la puntuación provisional en vivo (`myScore`, que no).
+   * Así ambas usan exactamente la misma fórmula (coherencia garantizada).
+   *
+   * Resultados parciales: cada evento (q2/sprint/race) puede faltar → 0
+   * puntos (el motor lo maneja). `eventsIncluded` son los eventos con
+   * resultados importados y no cancelados.
+   */
+  private async computeGpScores(
     tx: Prisma.TransactionClient,
     gpId: string,
     seasonId: string,
-    resultsVersion: string,
-  ): Promise<number> {
+  ): Promise<{
+    scoringRules: ScoringRules;
+    ruleVersion: string;
+    riderPoints: Map<string, number>;
+    riderBreakdowns: Map<string, RiderPointsBreakdown>;
+    ctorPoints: Map<string, number>;
+    teamPoints: Map<string, number>;
+    eventsIncluded: Array<"q2" | "sprint" | "race">;
+  }> {
     // 1. Reglas de la temporada (la versión más reciente).
     const rule = await tx.seasonRule.findFirst({
       where: { seasonId },
@@ -2088,6 +2272,9 @@ export class ResultsService {
     const raceEvent = weekendEvents.find((e) => e.type === "race");
     const raceCancelled = raceEvent ? cancelledEvents.has(raceEvent.id) : false;
 
+    // Eventos incluidos (criterio único: `eventsIncludedForGp`).
+    const eventsIncluded = await this.eventsIncludedForGp(tx, gpId);
+
     // 3. Afiliaciones (rider → equipo/constructor) y precios (extraordinario).
     const teamOf = new Map<string, string>();
     const constructorOf = new Map<string, string>();
@@ -2096,8 +2283,7 @@ export class ResultsService {
       constructorOf.set(a.riderId, a.constructorId);
     }
     // Bono extraordinario = top-3 race + el más barato de SU EQUIPO (roster
-    // afiliado al GP, scoring.md §2.4): se cargan los precios de todos los
-    // pilotos afiliados, no solo los con resultado (ADR-0020).
+    // afiliado al GP, scoring.md §2.4): precios de todos los afiliados.
     const riderIds = [...new Set([...results.map((r) => r.riderId), ...teamOf.keys()])];
     const priceOf = new Map<string, number>();
     if (riderIds.length > 0) {
@@ -2169,6 +2355,46 @@ export class ResultsService {
       (riderId) => teamOf.get(riderId) ?? "",
     );
 
+    return {
+      scoringRules,
+      ruleVersion: rule.version,
+      riderPoints,
+      riderBreakdowns,
+      ctorPoints,
+      teamPoints,
+      eventsIncluded,
+    };
+  }
+
+  /**
+   * Primer recálculo de un GP (US-18, ADR-0020): puntuar el fin de semana de
+   * cada piloto con el motor puro (tablas de `season_rules` vigentes) y
+   * escribir una `Score` por lineup del GP.
+   *
+   * Datos que carga el servicio (no puro) y pasa al motor: resultados por
+   * evento, parrilla de Q2 (posiciones ganadas), afiliaciones (equipo/
+   * constructor) y precios (bono extraordinario). Si la carrera principal
+   * está cancelada, el GP puntúa 0 para todos (scoring.md §6).
+   *
+   * @returns nº de lineups puntuados (filas `Score` escritas).
+   */
+  private async recalculateGp(
+    tx: Prisma.TransactionClient,
+    gpId: string,
+    seasonId: string,
+    resultsVersion: string,
+  ): Promise<number> {
+    // 1-5. Cálculo del fin de semana (helper `computeGpScores`, reutilizado
+    // por la puntuación provisional en vivo — ADR-0031, misma fórmula).
+    const {
+      scoringRules,
+      ruleVersion,
+      riderPoints,
+      riderBreakdowns,
+      ctorPoints,
+      teamPoints,
+    } = await this.computeGpScores(tx, gpId, seasonId);
+
     // 6. Lineups del GP → una `Score` por lineup (desglose incluido).
     const lineups = await tx.lineup.findMany({ where: { gpId }, include: { slots: true } });
     let lineupsScored = 0;
@@ -2199,7 +2425,7 @@ export class ResultsService {
         { gold: scoringRules.goldWeight, silver: scoringRules.silverWeight },
       );
       const breakdown: ScoreBreakdownJson = {
-        rulesVersion: rule.version,
+        rulesVersion: ruleVersion,
         gold: gold.map((riderId) => ({
           riderId,
           weight: scoringRules.goldWeight,
@@ -2221,7 +2447,7 @@ export class ResultsService {
         update: {
           pointsTotal: total,
           breakdown,
-          rulesVersion: rule.version,
+          rulesVersion: ruleVersion,
         },
         create: {
           lineupId: lineup.id,
@@ -2229,7 +2455,7 @@ export class ResultsService {
           gpId,
           pointsTotal: total,
           breakdown,
-          rulesVersion: rule.version,
+          rulesVersion: ruleVersion,
           resultsVersion,
         },
       });
