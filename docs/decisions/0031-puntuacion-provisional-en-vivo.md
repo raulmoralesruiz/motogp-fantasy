@@ -1,6 +1,6 @@
 # ADR-0031: Puntuación provisional en vivo (mi puntuación, sin esperar al definitivo)
 
-- **Estado:** Propuesto (2026-10-31) — implementado y verificado localmente (lint 0, typecheck, pureza, unit 714, UI 35 en los archivos tocados, build); integración en CI (sin Docker local)
+- **Estado:** Aceptado (2026-10-31) — implementado y verificado localmente (lint 0, typecheck, pureza, unit 714, UI 470, build); **commitado y empujado (commit `2841812`, 2026-10-31)**; integración en CI (sin Docker local)
 - **Fecha:** 2026-10-31
 - **Relacionado:** US-20 (puntuación con desglose), US-18/US-19 (definitivo + recálculo, ADR-0020/ADR-0021), US-22 (pantallas de resultados), `scoring.md` §2/§5, invariantes 4–7 (AGENTS.md §4), `data-model.md` §7.
 
