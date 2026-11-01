@@ -1,6 +1,6 @@
 # ADR-0033: Notificaciones por email (US-36) — Resend como proveedor, opt-out por usuario
 
-- **Estado:** Aceptado (2026-11-01) — implementado y verificado localmente (lint 0, typecheck, pureza, unit 737, UI 479, build); integración en CI (sin Docker local)
+- **Estado:** Aceptado (2026-11-01) — commitado y empujado (commit `9ab28fe`), desplegado en producción (2026-11-01) y **verificado en vivo**: envío real vía Resend confirmado en auditoría (`notification.sent` con `sent: 1`); fallos individuales (403 de Resend por dominio no verificado) logueados y sin bloquear el recálculo; integración + gate de cobertura en CI
 - **Fecha:** 2026-11-01
 - **Relacionado:** US-36 (backlog E8), US-02/ADR-0009 (patrón de envío de email inyectable), US-18/ADR-0020 (definitivo) y US-19/ADR-0021 (recálculo por corrección) — los dos eventos que se notifican, T-09 (auditoría append-only), `security.md` §1.11/§3, `runbook.md` §6.
 
@@ -49,3 +49,9 @@ Sobre el envío: **Resend vía REST `fetch`** (cero dependencias npm — mismo e
 - **Sin historial de envíos en BD:** el registro es la auditoría (append-only), coherente con T-09 y con la ausencia de filas de "email enviado" en el resto de la app (US-02).
 - **El link del email apunta a `/resultados`** (la página elige el GP; no lee query params — no se añade una para esto).
 - **Push (US-40)** se construirá sobre esta base: mismo `NotificationService`, mismos eventos, canal inyectable y toggle de usuario adicional.
+
+## Addendum (2026-11-01): verificación en producción + fix de despliegue
+
+- **Verificación en vivo (GP de Malasia, temporada `test2`):** tres disparos de `recalculation_applied` observados en auditoría (`notification.sent`): (1) modo provisional (sin API key en el contenedor) — 4 destinatarios, todo logueado; (2) Resend activo — 4 destinatarios, 4 fallos 403, 0 enviados, recálculo intacto; (3) tras añadir un miembro de prueba a la liga con ranking — **5 destinatarios, 1 enviado real vía Resend, 4 fallos 403**, recálculo intacto. Cadena completa verificada: resolución de destinatarios (miembros activos de ligas con ranking en el GP, dedup por email, exclusión de anonimizados y opt-out), envío, tolerancia a fallos individuales y auditoría.
+- **Fix de despliegue (causa raíz del fallo inicial):** `docker-compose.prod.yml` enumeraba explícitamente las variables del contenedor web y **no pasaba `RESEND_API_KEY`/`EMAIL_FROM`** (estaban en el `.env` del servidor pero no llegaban al contenedor) ⇒ la app operaba en modo provisional (log). Añadidas ambas a `environment` del servicio `web` (con default vacío, coherente con el resto) y desplegado. Lección: al añadir una variable de entorno nueva, revisar el bloque `environment` del compose (no basta con el `.env`).
+- **Límite del plan gratuito de Resend:** sin dominio verificado, Resend solo permite enviar al email dueño de la cuenta (403 para cualquier otro destinatario; el mensaje lo indica explícitamente). Para notificar a usuarios reales hay que **verificar un dominio** en el dashboard de Resend (DNS DKIM/SPF) y fijar `EMAIL_FROM` a ese dominio (p. ej. `Fantasy MotoGP <notificaciones@raulmorales.eu>`). El modo provisional (log) y la tolerancia a fallos hacen que esto no sea un bloqueo: la app funciona, solo no entrega hasta verificar el dominio.

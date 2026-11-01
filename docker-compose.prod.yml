@@ -24,6 +24,10 @@ services:
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
       # US-31: alta automática en la liga pública de bienvenida (vacío = off).
       WELCOME_LEAGUE_ID: ${WELCOME_LEAGUE_ID:-}
+      # US-36 (ADR-0033): notificaciones por email (Resend). Vacía → modo
+      # provisional (las notificaciones se loguean en el servidor).
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
     ports:
       # Solo la web expone puerto a la LAN (Postgres/Redis quedan en red interna).
