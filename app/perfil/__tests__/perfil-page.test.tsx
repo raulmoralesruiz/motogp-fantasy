@@ -242,6 +242,25 @@ describe("PerfilPage", () => {
         screen.getByText("Error interno del servidor"),
       ).toBeInTheDocument();
     });
+
+    it("guardar: tras el éxito invalida la consulta de ajustes", async () => {
+      mockMe();
+      mockSettings(false);
+      mockResult(trpc.notifications.updateSettings.useMutation, {
+        mutate: vi.fn(),
+        isPending: false,
+        isError: false,
+      });
+      const { queryClient } = renderPerfil(<PerfilPage />);
+      const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+
+      await act(async () => {
+        mutationOptions(trpc.notifications.updateSettings.useMutation).onSuccess?.();
+      });
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: getQueryKey(trpc.notifications.settings),
+      });
+    });
   });
 
   it("export: descarga un JSON con los datos del usuario", async () => {

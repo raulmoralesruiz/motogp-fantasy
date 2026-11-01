@@ -794,6 +794,22 @@ describe("PriceService.applyFormulaForGp (US-08)", () => {
       message: "El GP no existe.",
     });
   });
+
+  it("temporada sin reglas publicadas → INTERNAL_SERVER_ERROR (rama defensiva)", async () => {
+    const fake = makePrisma();
+    mountFormulaScenario(fake, gpRow2);
+    // Sin fila `season_rule`: `getSeasonPricingRules` lanza antes de calcular.
+    fake.seasonRule.findFirst.mockResolvedValue(null);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    await expect(
+      service.applyFormulaForGp({ gpId: "g1" }),
+    ).rejects.toMatchObject({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "La temporada no tiene reglas publicadas.",
+    });
+    expect(fake.price.create).not.toHaveBeenCalled();
+  });
 });
 
 describe("PriceService.recalculateSeasonPrices (calibración P0)", () => {

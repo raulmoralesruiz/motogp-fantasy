@@ -136,12 +136,18 @@ describe("US-20 · Mi puntuación con desglose (PostgreSQL real)", () => {
     H = world.riders[4].id;
     I = world.riders[5].id;
 
-    // Resto del fin de semana (seedWorld crea solo la carrera).
+    // Resto del fin de semana (seedWorld crea solo la carrera, orderNum 1).
+    // Orden cronológico del finde: Q2 → sprint → carrera (orderNum 1, 2, 3),
+    // para que `eventsIncluded` salga en orden [q2, sprint, race].
+    await prisma.weekendEvent.update({
+      where: { id: world.event.id },
+      data: { orderNum: 3 },
+    });
     q2 = (
-      await prisma.weekendEvent.create({ data: { gpId: world.gp.id, type: "q2", orderNum: 3 } })
+      await prisma.weekendEvent.create({ data: { gpId: world.gp.id, type: "q2", orderNum: 1 } })
     ).id;
     sprint = (
-      await prisma.weekendEvent.create({ data: { gpId: world.gp.id, type: "sprint", orderNum: 4 } })
+      await prisma.weekendEvent.create({ data: { gpId: world.gp.id, type: "sprint", orderNum: 2 } })
     ).id;
 
     // Reglas de la temporada (PROVISIONAL) — el recálculo las requiere.
@@ -332,7 +338,7 @@ describe("US-20 · Mi puntuación con desglose (PostgreSQL real)", () => {
     expect(score.team.points).toBeCloseTo(11, 2);
 
     // Solo lectura: no se ha escrito ninguna `Score` (ADR-0031).
-    expect(await prisma.score.count()).toBe(0);
+    expect(await prisma.score.count({ where: { gpId: world.gp.id } })).toBe(0);
   });
 
   it("provisional con Q2 + sprint: 82 pts, eventos [q2, sprint]", async () => {
@@ -361,7 +367,7 @@ describe("US-20 · Mi puntuación con desglose (PostgreSQL real)", () => {
     // ctor/equipo X: top-2 {A:26, B:15} → 20.5. Total = 41+20.5+20.5 = 82.
     expect(score.total).toBeCloseTo(82, 2);
     expect(score.manufacturer.points).toBeCloseTo(20.5, 2);
-    expect(await prisma.score.count()).toBe(0);
+    expect(await prisma.score.count({ where: { gpId: world.gp.id } })).toBe(0);
   });
 
   it("provisional con el fin de semana completo: 170.5 (misma fórmula que el definitivo)", async () => {
@@ -388,7 +394,7 @@ describe("US-20 · Mi puntuación con desglose (PostgreSQL real)", () => {
     expect(score.eventsIncluded).toEqual(["q2", "sprint", "race"]);
     // Igual que el definitivo (misma fórmula, ADR-0031).
     expect(score.total).toBeCloseTo(170.5, 2);
-    expect(await prisma.score.count()).toBe(0);
+    expect(await prisma.score.count({ where: { gpId: world.gp.id } })).toBe(0);
   });
 
   // ── Definitivo → myScore = 170.5 ───────────────────────────────────────────

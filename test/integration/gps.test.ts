@@ -610,7 +610,7 @@ describe("US-05 · Circuitos, GPs y calendario (PostgreSQL real)", () => {
     });
   });
 
-  it("re-importar el mismo calendario salta todas las rondas (informe, no error)", async () => {
+  it("re-importar el mismo calendario actualiza las horas (informe, no error)", async () => {
     const { seasons } = await callerFor(ADMIN_IP, adminToken);
     const calendar = await seasons.calendar.fetch({ year: 2027 });
     const report = await seasons.calendar.import({
@@ -618,8 +618,9 @@ describe("US-05 · Circuitos, GPs y calendario (PostgreSQL real)", () => {
       calendar,
     });
     expect(report.created).toBe(0);
-    expect(report.skipped.map((s) => s.round)).toEqual([1, 2, 3]);
-    expect(report.skipped.every((s) => s.reason.length > 0)).toBe(true);
+    // Re-import: actualiza las horas de los GPs existentes (ADR-0012 addendum).
+    expect(report.updated).toBe(3);
+    expect(report.skipped).toHaveLength(0);
     // No se duplica nada.
     const gps = await seasons.gps.list({ seasonId: calendarSeasonId });
     expect(gps).toHaveLength(3);

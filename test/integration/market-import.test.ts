@@ -384,9 +384,9 @@ describe("US-06/ADR-0013/ADR-0014 · Import de mercado + P0 heurística (Postgre
       riderMappingsUpdated: 0,
       riderMappingsSkipped: 0,
     });
-    // El piloto se crea, pero sin fila de mapeo.
+    // El piloto se crea (name + " " + surname), pero sin fila de mapeo.
     const rider = await prisma.rider.findUnique({
-      where: { name: `Sin Id Imp ${suffix}` },
+      where: { name: `Sin Id ${suffix} Imp ${suffix}` },
     });
     expect(rider).not.toBeNull();
     const mappings = await prisma.riderMapping.findMany({

@@ -390,6 +390,7 @@ describe("US-36 · Notificaciones por email (PostgreSQL real)", () => {
     const before = sender.sent.length;
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     let result: unknown;
+    let errorCallCount = 0;
     try {
       result = await caller.importEvent({
         gpId: world.gp.id,
@@ -402,6 +403,9 @@ describe("US-36 · Notificaciones por email (PostgreSQL real)", () => {
         ],
         reason: "corrección para probar el fallo de notificación",
       });
+      // `mockRestore()` (en el `finally`) limpia el historial de llamadas del
+      // spy, así que se captura el conteo ANTES de restaurarlo.
+      errorCallCount = errorSpy.mock.calls.length;
     } finally {
       errorSpy.mockRestore();
     }
@@ -412,7 +416,7 @@ describe("US-36 · Notificaciones por email (PostgreSQL real)", () => {
       resultsVersion: "rv-3",
     });
     // El fallo se loguea (sin romper) y no envía ni audita nada.
-    expect(errorSpy).toHaveBeenCalled();
+    expect(errorCallCount).toBeGreaterThan(0);
     expect(sender.sent.length).toBe(before);
     const audit = await prisma.auditLog.findMany({
       where: { action: "notification.sent", entityId: world.gp.id },

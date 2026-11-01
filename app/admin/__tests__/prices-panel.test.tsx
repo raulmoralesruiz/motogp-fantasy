@@ -798,6 +798,21 @@ describe("PricesPanel · Recalcular temporada (calibración P0, ADR-0032)", () =
     ).toBeDisabled();
   });
 
+  it("muestra el estado pendiente mientras recalcula", async () => {
+    mockSeasons([season]);
+    mockResult(trpc.market.prices.recalculateSeason.useMutation, {
+      mutate: vi.fn(),
+      isPending: true,
+      isError: false,
+    });
+    render(<PricesPanel />);
+
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText("Temporada"), "s1");
+
+    expect(screen.getByRole("button", { name: "Recalculando…" })).toBeDisabled();
+  });
+
   it("recalcula la temporada elegida (recalculateSeason)", async () => {
     mockSeasons([season]);
     const mutate = vi.fn();
