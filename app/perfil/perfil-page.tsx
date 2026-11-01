@@ -26,12 +26,21 @@ export default function PerfilPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const me = trpc.profile.me.useQuery();
+  const settings = trpc.notifications.settings.useQuery();
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const update = trpc.profile.update.useMutation({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.profile.me) });
+    },
+  });
+
+  const updateSettings = trpc.notifications.updateSettings.useMutation({
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: getQueryKey(trpc.notifications.settings),
+      });
     },
   });
 
@@ -67,6 +76,14 @@ export default function PerfilPage() {
     update.mutate({ displayName: String(data.get("displayName") ?? "") });
   }
 
+  function onSettings(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    updateSettings.mutate({
+      emailEnabled: data.get("emailEnabled") === "on",
+    });
+  }
+
   async function onExport() {
     setExportMessage(null);
     try {
@@ -91,6 +108,10 @@ export default function PerfilPage() {
     updateIssues.find((issue) => issue.path?.[0] === name)?.message;
   const updateGeneralError =
     update.isError && updateIssues.length === 0 ? update.error.message : null;
+
+  const settingsGeneralError = updateSettings.isError
+    ? updateSettings.error.message
+    : null;
 
   const deleteIssues = deleteAccount.isError ? zodIssues(deleteAccount.error) : [];
   const deleteFieldError = (name: string) =>
@@ -135,6 +156,35 @@ export default function PerfilPage() {
           {update.isPending ? "Guardando…" : "Guardar"}
         </Button>
       </form>
+
+      <h2>Notificaciones</h2>
+      <p className="muted">
+        Recibe un email cuando se publiquen los resultados definitivos de un GP o
+        se aplique un recálculo.
+      </p>
+      {settings.isPending ? (
+        <p className="muted">Consultando…</p>
+      ) : (
+        <form className="form" onSubmit={onSettings} noValidate>
+          <label className="muted">
+            <input
+              type="checkbox"
+              name="emailEnabled"
+              defaultChecked={settings.data?.emailEnabled ?? true}
+            />{" "}
+            Recibir notificaciones por email
+          </label>
+          {settingsGeneralError && (
+            <Alert variant="error">{settingsGeneralError}</Alert>
+          )}
+          {updateSettings.isSuccess && (
+            <Alert variant="success">Ajustes de notificación guardados.</Alert>
+          )}
+          <Button type="submit" disabled={updateSettings.isPending}>
+            {updateSettings.isPending ? "Guardando…" : "Guardar"}
+          </Button>
+        </form>
+      )}
 
       <h2>Privacidad (RGPD)</h2>
       <p className="muted">

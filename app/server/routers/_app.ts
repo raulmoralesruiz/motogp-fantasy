@@ -10,6 +10,7 @@ import { getDefaultDashboardRouter } from "./dashboard";
 import { getDefaultLeaguesRouter } from "./leagues";
 import { getDefaultLineupsRouter } from "./lineups";
 import { getDefaultMarketRouter } from "./market";
+import { getDefaultNotificationsRouter } from "./notifications";
 import { getDefaultProfileRouter } from "./profile";
 import { getDefaultResultsRouter } from "./results";
 import { getDefaultSeasonsRouter } from "./seasons";
@@ -26,6 +27,7 @@ export const appRouter = router({
   results: getDefaultResultsRouter(),
   dashboard: getDefaultDashboardRouter(),
   leagues: getDefaultLeaguesRouter(),
+  notifications: getDefaultNotificationsRouter(),
 });
 
 export type AppRouter = typeof appRouter;

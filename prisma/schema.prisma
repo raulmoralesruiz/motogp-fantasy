@@ -187,6 +187,7 @@ model User {
   scores          Score[]
   rankings        Ranking[]
   auditLog        AuditLog[]
+  notificationSettings NotificationSetting?
 
   @@map("users")
 }
@@ -824,4 +825,19 @@ model SourceState {
 
   @@id([gpId, event, source])
   @@map("source_state")
+}
+
+// ── Notificaciones (US-36, ADR-0033) ────────────────────────────────────────
+
+// Ajustes de notificación por usuario (US-36, ADR-0033): email on/off.
+// Modelo opt-out: sin fila ⇒ `emailEnabled = true` (se notifica por defecto).
+model NotificationSetting {
+  userId       String   @id @map("user_id") @db.Uuid
+  emailEnabled Boolean  @default(true) @map("email_enabled")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_settings")
 }

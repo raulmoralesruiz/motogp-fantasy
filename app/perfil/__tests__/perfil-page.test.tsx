@@ -12,7 +12,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { clientError } from "../../../test/errors";
 import { asMockFn, mockResult, resetTrpcMocks } from "../../../test/trpc-mock";
 import { navigation, resetNavigationMocks } from "../../../test/ui-mocks";
-import { act, render, screen, userEvent } from "../../../test/rtl";
+import { act, render, screen, userEvent, within } from "../../../test/rtl";
 
 import PerfilPage from "../perfil-page";
 
@@ -69,7 +69,8 @@ describe("PerfilPage", () => {
 
   it("muestra el estado pendiente", () => {
     renderPerfil(<PerfilPage />);
-    expect(screen.getByText("Consultando…")).toBeInTheDocument();
+    // `me` y `notifications.settings` llegan pendientes a la vez (US-36).
+    expect(screen.getAllByText("Consultando…").length).toBeGreaterThanOrEqual(1);
   });
 
   it("sin sesión: enlaza al login", () => {
@@ -109,7 +110,10 @@ describe("PerfilPage", () => {
     const input = screen.getByLabelText("Nombre visible");
     await user.clear(input);
     await user.type(input, "Ana MotoGP");
-    await user.click(screen.getByRole("button", { name: "Guardar" }));
+    // Dos botones "Guardar" en la página (nombre + notificaciones, US-36):
+    // se acota al formulario del nombre visible.
+    const nameForm = input.closest("form") as HTMLElement;
+    await user.click(within(nameForm).getByRole("button", { name: "Guardar" }));
 
     expect(mutate).toHaveBeenCalledWith({ displayName: "Ana MotoGP" });
   });
@@ -129,7 +133,8 @@ describe("PerfilPage", () => {
     const input = screen.getByLabelText("Nombre visible");
     await user.clear(input);
     await user.type(input, "Ana MotoGP");
-    await user.click(screen.getByRole("button", { name: "Guardar" }));
+    const nameForm = input.closest("form") as HTMLElement;
+    await user.click(within(nameForm).getByRole("button", { name: "Guardar" }));
 
     await act(async () => {
       mutationOptions(trpc.profile.update.useMutation).onSuccess?.();
@@ -163,6 +168,80 @@ describe("PerfilPage", () => {
     expect(
       screen.getByText("El nombre visible debe tener al menos 3 caracteres"),
     ).toBeInTheDocument();
+  });
+
+  describe("notificaciones (US-36)", () => {
+    function mockSettings(emailEnabled: boolean) {
+      mockResult(trpc.notifications.settings.useQuery, {
+        data: { emailEnabled },
+        isPending: false,
+        isError: false,
+      });
+    }
+
+    it("muestra el estado del ajuste (checkbox)", () => {
+      mockMe();
+      mockSettings(false);
+      renderPerfil(<PerfilPage />);
+      const checkbox = screen.getByLabelText("Recibir notificaciones por email");
+      expect(checkbox).not.toBeChecked();
+    });
+
+    it("guardar: envía el valor del checkbox", async () => {
+      mockMe();
+      mockSettings(false);
+      const mutate = vi.fn();
+      mockResult(trpc.notifications.updateSettings.useMutation, {
+        mutate,
+        isPending: false,
+        isError: false,
+      });
+      renderPerfil(<PerfilPage />);
+
+      const user = userEvent.setup();
+      const checkbox = screen.getByLabelText("Recibir notificaciones por email");
+      await user.click(checkbox);
+      // Se acota al formulario de notificaciones (hay dos "Guardar" en la
+      // página: nombre visible + notificaciones).
+      const notifForm = checkbox.closest("form") as HTMLElement;
+      await user.click(within(notifForm).getByRole("button", { name: "Guardar" }));
+
+      expect(mutate).toHaveBeenCalledWith({ emailEnabled: true });
+    });
+
+    it("guardar: tras el éxito muestra el aviso", () => {
+      mockMe();
+      mockSettings(true);
+      mockResult(trpc.notifications.updateSettings.useMutation, {
+        mutate: vi.fn(),
+        isPending: false,
+        isError: false,
+        isSuccess: true,
+      });
+      renderPerfil(<PerfilPage />);
+
+      expect(
+        screen.getByText("Ajustes de notificación guardados."),
+      ).toBeInTheDocument();
+    });
+
+    it("guardar: muestra el error del servidor", () => {
+      mockMe();
+      mockSettings(true);
+      const error = clientError("Error interno del servidor", {
+        code: "INTERNAL_SERVER_ERROR",
+      });
+      mockResult(trpc.notifications.updateSettings.useMutation, {
+        mutate: vi.fn(),
+        isPending: false,
+        isError: true,
+        error,
+      });
+      renderPerfil(<PerfilPage />);
+      expect(
+        screen.getByText("Error interno del servidor"),
+      ).toBeInTheDocument();
+    });
   });
 
   it("export: descarga un JSON con los datos del usuario", async () => {

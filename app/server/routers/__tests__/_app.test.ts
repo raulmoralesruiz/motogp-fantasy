@@ -1,7 +1,8 @@
 /**
  * Router raíz de tRPC (T-24): agrupa los routers de cada módulo. Se
  * verifica que expone `health`, `auth`, `profile`, `admin`, `seasons`,
- * `market`, `lineups`, `results`, `dashboard` (US-15) y `leagues` (US-23).
+ * `market`, `lineups`, `results`, `dashboard` (US-15), `leagues` (US-23) y
+ * `notifications` (US-36).
  *
  * `getDefaultAuthRouter()` se evalúa al importar `_app` (lee el entorno),
  * así que el env se fija antes del import dinámico y los singletons
@@ -30,6 +31,7 @@ describe("appRouter (T-24)", () => {
       "leagues",
       "lineups",
       "market",
+      "notifications",
       "profile",
       "results",
       "seasons",

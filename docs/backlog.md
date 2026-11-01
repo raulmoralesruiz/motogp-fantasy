@@ -311,12 +311,15 @@
   - CA: temporadas pasadas importables y puntuables con la versión de reglas declarada; cross-check contra la fuente primaria.
 - **US-35 · Ligas temporales y personalizadas** — Dep: E6.
   - CA: reutilizan el motor de ligas (ventana de fechas, reglas de membresía a medida) sin tocar las reglas globales de juego.
-- **US-36 · Notificaciones (push/email)** — Dep: E5.
+- **US-36 · Notificaciones (email)** — Dep: E5.
   - CA: notificación al publicarse resultados definitivos y al aplicar un recálculo.
+  - **Hecho (2026-11-01, ADR-0033):** email vía **Resend** (API REST, 0 deps npm) a los **miembros activos de las ligas con ranking en el GP** (incluye miembros sin lineup; las ligas sin ranking no notifican) — eventos `definitive_published` (tras `markDefinitive`, no-op excluido) y `recalculation_applied` (tras corrección con recálculo); ajustes de usuario (email on/off, **opt-out**) en `notification_settings` + router `notifications` (`settings`/`updateSettings`) + hook BFF en el router `results` (patrón US-21) + sección en `/perfil` + auditoría `notification.sent` + migración `20261101120000_notification_settings`; `RESEND_API_KEY` vacía ⇒ `LogNotificationSender` (dev/provisional, ADR-0009). **Push diferido a US-40.**
 - **US-37 · Estadísticas avanzadas y analítica** — Dep: E5.
   - CA: histórico de puntos por piloto/activo; métricas de uso (activación, retención, ligas activas de `vision.md` §6).
 - **US-38 · Demand-driven (torneos, draft, API pública, temas)** — Dep: señal de demanda (`mvp.md` §4).
   - CA: solo se planifica con peticiones reales de usuarios/organizadores.
+- **US-40 · Notificaciones push (web push)** — Dep: US-36 (2026-11-01).
+  - CA: canal push (VAPID + service worker + `push_subscriptions`) sobre los mismos eventos de US-36 (`definitive_published`/`recalculation_applied`), reutilizando `NotificationService` (canal inyectable) y los ajustes de usuario (toggle push); sin proveedor externo.
 
 ---
 

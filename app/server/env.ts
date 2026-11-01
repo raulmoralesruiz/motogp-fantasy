@@ -56,6 +56,14 @@ const serverEnvSchema = z.object({
   WELCOME_LEAGUE_ID: z
     .union([z.string().uuid("WELCOME_LEAGUE_ID debe ser un UUID"), z.literal("")])
     .default(""),
+  // US-36 · Notificaciones por email (ADR-0033): API key de Resend
+  // (SECRETO, solo por env — security.md §1.12). Vacía →
+  // `LogNotificationSender` (dev/provisional: loguea en el servidor,
+  // mismo espíritu que ADR-0009).
+  RESEND_API_KEY: z.string().default(""),
+  // US-36 · Remitente verificado en Resend (p. ej.
+  // `notificaciones@motogp.raulmorales.eu` tras verificar el dominio).
+  EMAIL_FROM: z.string().default("Fantasy MotoGP <onboarding@resend.dev>"),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

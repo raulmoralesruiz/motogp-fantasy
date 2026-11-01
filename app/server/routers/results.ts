@@ -21,6 +21,7 @@
 import type { PrismaClient } from "@prisma/client";
 
 import { LeagueService, type MyLeagueRanking } from "@/modules/leagues";
+import { NotificationService } from "@/modules/notifications";
 import {
   PulseLiveResultsSource,
   PulseLiveSourceError,
@@ -50,6 +51,7 @@ import {
 
 import { prisma } from "../prisma";
 import { adminProcedure, protectedProcedure, router } from "../trpc";
+import { createDefaultNotificationService } from "./notifications";
 
 export interface ResultsRouterDeps {
   prisma: PrismaClient;
@@ -59,6 +61,11 @@ export interface ResultsRouterDeps {
    * explícito (el servicio lo gestiona).
    */
   source?: ResultsSource & SourceEventCatalog;
+  /**
+   * Notificaciones (US-36, ADR-0033): opcional — si no se inyecta, el flujo
+   * continúa sin notificar (tests que no cubren US-36).
+   */
+  notifications?: NotificationService;
 }
 
 /**
@@ -128,6 +135,29 @@ export function createResultsRouter(deps: ResultsRouterDeps) {
   // US-22: GP anterior de la temporada (módulo `seasons`) para el delta.
   const seasons = new GpService({ prisma: deps.prisma });
 
+  // US-36 (ADR-0033): notifica a las ligas DESPUÉS del commit principal.
+  // Un fallo de envío no rompe el flujo: el servicio ya audita los fallos
+  // individuales; aquí solo se encaja el error (log) y se continúa.
+  async function notify(
+    event: "definitive_published" | "recalculation_applied",
+    gpId: string,
+    actorId: string,
+    ip: string,
+  ): Promise<void> {
+    if (!deps.notifications) return;
+    const notifications = deps.notifications;
+    const call =
+      event === "definitive_published"
+        ? notifications.notifyDefinitivePublished(gpId, { actorId, ip })
+        : notifications.notifyRecalculationApplied(gpId, { actorId, ip });
+    await call.catch((error) => {
+      console.error(
+        `[notifications] fallo al notificar ${event} (GP ${gpId}):`,
+        error instanceof Error ? error.message : error,
+      );
+    });
+  }
+
   return router({
     /**
      * Importa (o corrige) los resultados de un evento (US-16, ADR-0018):
@@ -146,6 +176,8 @@ export function createResultsRouter(deps: ResultsRouterDeps) {
         // cambian → se republican con la nueva `results_version`.
         if (result.recalculated && result.resultsVersion) {
           await leagues.recalculateRankings(input.gpId, result.resultsVersion);
+          // US-36: notifica a las ligas (después del commit principal).
+          await notify("recalculation_applied", input.gpId, ctx.user.id, ctx.ip);
         }
         return result;
       }),
@@ -258,6 +290,8 @@ export function createResultsRouter(deps: ResultsRouterDeps) {
         // definitivo (no hay nueva `results_version`).
         if (!result.noop && result.resultsVersion) {
           await leagues.recalculateRankings(input.gpId, result.resultsVersion);
+          // US-36: notifica a las ligas (después del commit principal).
+          await notify("definitive_published", input.gpId, ctx.user.id, ctx.ip);
         }
         return result;
       }),
@@ -378,6 +412,9 @@ export function getDefaultResultsRouter() {
     source: new PulseLiveResultsSource({
       eventRefResolver: createEventRefResolver(prisma),
     }),
+    // US-36 (ADR-0033): notificaciones por email al publicarse el definitivo
+    // o aplicarse un recálculo (orquestación BFF sobre el módulo `notifications`).
+    notifications: createDefaultNotificationService(prisma),
   });
   return defaultRouter;
 }

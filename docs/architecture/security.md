@@ -79,6 +79,7 @@
   - Los **datos de juego se conservan** apuntando al usuario anonimizado (integridad de rankings; sin recálculos retroactivos).
   - `audit_log` (append-only) se conserva; la entrada `user.account_deleted` no incluye PII (solo `userId` + contadores).
   - Guardas: re-introducción de contraseña + rate-limit (3/h por usuario) + idempotencia (`PRECONDITION_FAILED` si ya está anonimizada).
+- **Canal de email (US-36, ADR-0033):** las notificaciones (definitivo publicado / recálculo aplicado) se envían solo a miembros activos de las ligas con ranking en el GP y con email habilitado — **opt-out** (sin fila en `notification_settings` ⇒ habilitado; se desactiva en `/perfil`); los usuarios anonimizados quedan excluidos de la lista de destinatarios. Un fallo de envío no rompe el flujo principal (se loguea y se audita en `notification.sent`, T-09).
 - **Retención de logs:** los logs de auditoría que contengan PII se anonimizan tras un periodo (periodo pendiente, §5).
 
 ## 2. Cabeceras y transporte
@@ -90,8 +91,8 @@
 ## 3. Secrets
 
 - **Nunca en el repo.** Se usan variables de entorno / vault (Doppler, SOPS, o secrets del PaaS).
-- Secrets: credenciales de BD, clave de sesión, claves de fuentes de datos (si las hubiera), claves de monitoreo.
-- **Rotación** periódica.
+- Secrets: credenciales de BD, clave de sesión, claves de fuentes de datos (si las hubiera), claves de monitoreo, **`RESEND_API_KEY`** (API key del proveedor de email transaccional, US-36/ADR-0033 — solo por env; `EMAIL_FROM` no es secreto, es el remitente verificado).
+- **Rotación** periódica (incluida la API key de Resend: se genera/revoca desde el dashboard de Resend sin tocar el código).
 
 ## 4. Superficie de ataque a minimizar
 

@@ -57,6 +57,7 @@ Qué hace:
 2. Dispara recálculo inline del GP (ver §3).
 3. Registra en `audit_log` la acción (`results.mark_definitive`).
 4. Genera nueva `results_version` si hay cambios.
+5. **Notifica por email** a los miembros activos de las ligas con ranking en el GP (US-36; ver §6). Un fallo de envío no revierte ninguna de las acciones anteriores.
 
 **Verificar:**
 
@@ -186,7 +187,39 @@ Si el error afecta a múltiples GPs:
 
 ---
 
-## 6. Rotación de secrets
+## 6. Notificaciones por email (US-36, ADR-0033)
+
+**Qué se notifica:** publicación de resultados definitivos de un GP (`definitive_published`) y aplicación de un recálculo (`recalculation_applied`). **A quién:** miembros activos de las ligas que tienen ranking en ese GP y con email habilitado (opt-out desde `/perfil`; los usuarios anonimizados quedan excluidos).
+
+**Proveedor:** Resend (API REST, sin dependencias). Configuración por env (ver `.env.prod.example`):
+
+| Env | Para qué |
+| --- | -------- |
+| `RESEND_API_KEY` | API key de Resend (`re_…`). **Secreto.** Vacía ⇒ modo provisional: la notificación se loguea en el servidor (ver abajo). |
+| `EMAIL_FROM` | Remitente verificado en Resend (p. ej. `notificaciones@motogp.raulmorales.eu`). |
+
+**Alta inicial (una vez):** dashboard de Resend → crear cuenta → añadir el dominio `raulmorales.eu` (verificación DNS) → crear una API key → fijar `RESEND_API_KEY` y `EMAIL_FROM` en el `.env` → reiniciar el contenedor web.
+
+**Verificar que se envían:**
+
+```bash
+# Auditoría: una entrada por envío (destinatarios, enviados, fallos).
+docker compose -f docker-compose.prod.yml exec postgres psql -U motogp -d motogp \
+  -c "SELECT ts, actor_id, entity_id, after_data FROM audit_log WHERE action = 'notification.sent' ORDER BY ts DESC LIMIT 5;"
+
+# Modo provisional (RESEND_API_KEY vacía): los emails quedan en los logs.
+docker logs motogp-web --since 1h | grep '\[notification\]'
+```
+
+**Si fallan los envíos:**
+
+1. El flujo principal (definitivo/recálculo) **no** se ve afectado: los fallos se loguean y quedan en `audit_log` (`failed`, `failedEmails`).
+2. Comprueba `RESEND_API_KEY` (¿revocada? ¿límite excedido?) y `EMAIL_FROM` (¿dominio verificado?) en el dashboard de Resend.
+3. Límites del plan gratuito: **100 emails/día y 3000/mes**. Con varias ligas activas, un GP definitivo puede notificar a decenas de destinatarios: vigila el contador de uso en el dashboard.
+
+---
+
+## 7. Rotación de secrets
 
 > **Completo en `deploy.md` §6.** Resumen:
 
@@ -217,7 +250,7 @@ Si el error afecta a múltiples GPs:
 
 ---
 
-## 7. Checklist post-deploy
+## 8. Checklist post-deploy
 
 Tras cada `./deploy.sh`:
 
@@ -233,12 +266,12 @@ Tras cada `./deploy.sh`:
 
 ---
 
-## 8. Contacto y escalación
+## 9. Contacto y escalación
 
 | Problema | Primer nivel | Escalado |
 | -------- | ------------ | -------- |
 | Resultados incorrectos | Admin → corrección manual | Contactar proveedor de datos |
 | BD corrupta | Restore de backup (§4) | — |
 | Deploy fallido | `./deploy.sh` (reintentar) | Revisar logs → `docker compose logs` |
-| Incidente de seguridad | Rotar secrets (§6) | — |
+| Incidente de seguridad | Rotar secrets (§7) | — |
 | Rendimiento / latencia | Reiniciar web (`docker compose restart web`) | Verificar recursos del NAS |
