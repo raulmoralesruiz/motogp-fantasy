@@ -225,6 +225,11 @@ a {
   margin: 0.3rem 0;
 }
 
+/* Panel admin (US-04/05/06/16): título de sección dentro de la tarjeta. */
+.card h2 {
+  margin-top: 0;
+}
+
 /* CTA de tarjeta (tamaño de toque ≥44 px — user-flows.md §3). */
 .card .cta {
   display: inline-block;
@@ -235,6 +240,41 @@ a {
   color: #fff;
   background: var(--accent);
   border-radius: 6px;
+}
+
+/* Panel admin: navegación ancla entre secciones (sticky). */
+.anchor-nav {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  margin: 0 0 1rem;
+  padding: 0.5rem;
+  background: #0b0f14;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+}
+
+.anchor-nav ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.anchor-nav a {
+  display: inline-block;
+  padding: 0.45rem 0.8rem;
+  font-size: 0.9rem;
+  color: var(--fg);
+  background: #10151c;
+  border: 1px solid #21262d;
+  border-radius: 6px;
+}
+
+.anchor-nav a:hover {
+  border-color: var(--accent);
 }
 
 /* Botón primario (componente <Button> de app/shared/components). */
