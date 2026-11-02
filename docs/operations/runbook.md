@@ -196,7 +196,7 @@ Si el error afecta a múltiples GPs:
 | Env | Para qué |
 | --- | -------- |
 | `RESEND_API_KEY` | API key de Resend (`re_…`). **Secreto.** Vacía ⇒ modo provisional: la notificación se loguea en el servidor (ver abajo). |
-| `EMAIL_FROM` | Remitente verificado en Resend (p. ej. `notificaciones@motogp.raulmorales.eu`). |
+| `EMAIL_FROM` | Remitente verificado en Resend (producción: `no-reply@motogp.raulmorales.eu`, verificado 2026-11-02). Con `onboarding@resend.dev` solo se envía al dueño de la cuenta (403 al resto). |
 
 **Alta inicial (una vez):** dashboard de Resend → crear cuenta → añadir el dominio `raulmorales.eu` (verificación DNS) → crear una API key → fijar `RESEND_API_KEY` y `EMAIL_FROM` en el `.env` → reiniciar el contenedor web.
 
