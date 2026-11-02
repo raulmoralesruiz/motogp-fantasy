@@ -107,6 +107,16 @@ export interface RateLimitStore {
     windowSec: number,
   ): Promise<{ count: number; remainingSec: number }>;
   /**
+   * Registra un registro de cuenta de la IP (ventana fija, T-12/ADR-0035;
+   * clave independiente de las anteriores). Anti-flood: sin este límite una
+   * ola de registros bot consume las plazas de la liga de bienvenida (US-31:
+   * registro atómico con la adhesión) y bloquea a los usuarios legítimos.
+   */
+  recordRegistration(
+    ip: string,
+    windowSec: number,
+  ): Promise<{ count: number; remainingSec: number }>;
+  /**
    * Registra un intento de eliminación de cuenta del usuario
    * (ventana fija POR USUARIO, US-03/ADR-0016; clave independiente de las
    * anteriores).
@@ -154,6 +164,7 @@ export class InMemoryRateLimitStore implements RateLimitStore {
   private nowMs = 0;
   private windows = new Map<string, { count: number; resetAtMs: number }>();
   private resetWindows = new Map<string, { count: number; resetAtMs: number }>();
+  private registrationWindows = new Map<string, { count: number; resetAtMs: number }>();
   private deleteWindows = new Map<string, { count: number; resetAtMs: number }>();
   private leagueCreateWindows = new Map<string, { count: number; resetAtMs: number }>();
   private leagueJoinWindows = new Map<string, { count: number; resetAtMs: number }>();
@@ -198,6 +209,13 @@ export class InMemoryRateLimitStore implements RateLimitStore {
     windowSec: number,
   ): Promise<{ count: number; remainingSec: number }> {
     return this.recordWindow(this.resetWindows, ip, windowSec);
+  }
+
+  async recordRegistration(
+    ip: string,
+    windowSec: number,
+  ): Promise<{ count: number; remainingSec: number }> {
+    return this.recordWindow(this.registrationWindows, ip, windowSec);
   }
 
   async recordUserDeletion(

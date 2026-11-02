@@ -41,7 +41,8 @@
 
 ### 1.6 Control de intentos de acceso
 
-- **Rate-limiting** por IP y por usuario en: login, unión a liga (código), creación de ligas, cambios de lineup, API en general.
+- **Rate-limiting** por IP y por usuario en: login, **registro de cuentas** (anti-flood, ADR-0035), recuperación de contraseña, unión a liga (código), creación de ligas, cambios de lineup, API en general.
+- **Registro de cuentas** (T-12/ADR-0035): ventana fija por IP (`AUTH_REGISTER_RATE_LIMIT_MAX`, default 10/hora). Sin este límite una ola de registros bot consume las plazas de la liga de bienvenida (US-31: el registro se une a ella atómicamente) y bloquea los registros legítimos. El rechazo ocurre **antes** de tocar la BD (no crea usuario, no consume plaza).
 - **Detección de fuerza bruta** en códigos de liga (entropía alta + límite de intentos).
 - **Logs de acceso fallido** para acciones sensibles.
 

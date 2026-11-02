@@ -20,6 +20,15 @@ const serverEnvSchema = z.object({
   RESET_TOKEN_TTL_SEC: z.coerce.number().int().positive().default(3600),
   RESET_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(5),
   RESET_RATE_LIMIT_WINDOW_SEC: z.coerce.number().int().positive().default(300),
+  // T-12/ADR-0035 · Rate limit de registro (anti-flood de cuentas,
+  // security.md §1.6): una ola de registros bot llenaría la liga de
+  // bienvenida (US-31) y bloquearía los registros legítimos. Por IP,
+  // parámetro operativo (no vive en `season_rules`).
+  AUTH_REGISTER_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+  AUTH_REGISTER_RATE_LIMIT_WINDOW_SEC: z.coerce.number()
+    .int()
+    .positive()
+    .default(3600),
   // US-03 · Eliminación de cuenta (ADR-0016): rate limit POR USUARIO
   // (parámetro operativo, no regla de juego: no vive en `season_rules`).
   ACCOUNT_DELETE_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(3),

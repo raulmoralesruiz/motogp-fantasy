@@ -54,6 +54,7 @@ describe("T-09 · Auditoría append-only (PostgreSQL real)", () => {
       emailSender: new CapturingEmailSender(),
       appUrl: "http://localhost:3000",
       resetCfg: { tokenTtlSec: 3600, maxPerWindow: 5, windowSec: 300 },
+      registerCfg: { maxPerWindow: 100, windowSec: 3600 },
       bootstrapAdminEmail: BOOTSTRAP_EMAIL,
     });
   });

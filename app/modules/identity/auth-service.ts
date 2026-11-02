@@ -33,6 +33,14 @@ export interface AuthServiceConfig extends RateLimitConfig {
   resetMaxPerWindow: number;
   /** Ventana del rate limit de recuperación en segundos (US-02). */
   resetWindowSec: number;
+  /**
+   * Máx. registros por IP por ventana (T-12/ADR-0035, anti-flood: una ola
+   * de registros bot llenaría la liga de bienvenida — US-31 — y bloquearía
+   * a los usuarios legítimos).
+   */
+  registerMaxPerWindow: number;
+  /** Ventana del rate limit de registro en segundos (T-12/ADR-0035). */
+  registerWindowSec: number;
   /** URL pública de la app para montar el link de recuperación (US-02). */
   appUrl: string;
   /**
@@ -91,7 +99,23 @@ export class AuthService {
     },
     meta: { ip: string },
   ): Promise<AuthResult> {
-    const { prisma, cfg } = this.deps;
+    const { prisma, rateLimit, cfg } = this.deps;
+
+    // Anti-flood de registro (T-12/ADR-0035, security.md §1.6): ventana fija
+    // por IP. Sin este límite una ola de registros bot consume las plazas de
+    // la liga de bienvenida (US-31: el registro se une a ella atómicamente)
+    // y bloquea los registros legítimos. El registro NO cuenta para el
+    // rate-limit de login (son contadores independientes).
+    const { count, remainingSec } = await rateLimit.recordRegistration(
+      meta.ip,
+      cfg.registerWindowSec,
+    );
+    if (count > cfg.registerMaxPerWindow && remainingSec > 0) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: `Estás enviando demasiadas peticiones. Inténtalo de nuevo en ${Math.ceil(remainingSec)} s.`,
+      });
+    }
 
     // Rechazo explícito de duplicados (la constraint única de BD es la
     // última barrera ante concurrencia).

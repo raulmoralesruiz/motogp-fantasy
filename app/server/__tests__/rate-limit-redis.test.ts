@@ -106,6 +106,24 @@ describe("redisRateLimitStore", () => {
     });
   });
 
+  describe("recordRegistration (T-12/ADR-0035, prefijo rl:register:)", () => {
+    it("usa la clave de ventana de REGISTRO por IP (independiente de login/reset)", async () => {
+      mocks.redis.eval.mockResolvedValue(7);
+      mocks.redis.ttl.mockResolvedValue(3500);
+
+      const result = await redisRateLimitStore.recordRegistration("9.8.7.6", 3600);
+
+      expect(mocks.redis.eval).toHaveBeenCalledTimes(1);
+      const [script, numKeys, key, windowSec] = mocks.redis.eval.mock.calls[0] ?? [];
+      expect(script).toContain('redis.call("INCR", KEYS[1])');
+      expect(numKeys).toBe(1);
+      expect(key).toBe("rl:register:ip:9.8.7.6");
+      expect(windowSec).toBe("3600");
+      expect(mocks.redis.ttl).toHaveBeenCalledWith("rl:register:ip:9.8.7.6");
+      expect(result).toEqual({ count: 7, remainingSec: 3500 });
+    });
+  });
+
   describe("recordUserDeletion (US-03/ADR-0016, prefijo rl:delete:)", () => {
     it("usa la clave de ventana de eliminación POR USUARIO", async () => {
       mocks.redis.eval.mockResolvedValue(2);

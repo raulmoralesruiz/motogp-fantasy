@@ -1805,6 +1805,7 @@ describe("US-23 · Router leagues (glue BFF)", () => {
       emailSender: { sendResetLink: async () => {} },
       appUrl: "http://localhost:3000",
       resetCfg: { tokenTtlSec: 3600, maxPerWindow: 5, windowSec: 300 },
+      registerCfg: { maxPerWindow: 100, windowSec: 3600 },
     });
     leaguesRouter = leagues.createLeaguesRouter({ prisma });
     createContext = trpc.createContext;

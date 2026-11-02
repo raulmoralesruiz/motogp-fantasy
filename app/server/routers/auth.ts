@@ -53,6 +53,13 @@ export interface AuthRouterDeps {
     windowSec: number;
   };
   /**
+   * Rate limit de registro (T-12/ADR-0035, anti-flood de cuentas por IP).
+   */
+  registerCfg: {
+    maxPerWindow: number;
+    windowSec: number;
+  };
+  /**
    * Bootstrap de admin (T-08, ADR-0010): el registro con este email
    * recibe `global_admin`. Vacío/ausente → nadie lo recibe.
    */
@@ -77,6 +84,8 @@ export function createAuthRouter(deps: AuthRouterDeps) {
       resetTokenTtlSec: deps.resetCfg.tokenTtlSec,
       resetMaxPerWindow: deps.resetCfg.maxPerWindow,
       resetWindowSec: deps.resetCfg.windowSec,
+      registerMaxPerWindow: deps.registerCfg.maxPerWindow,
+      registerWindowSec: deps.registerCfg.windowSec,
       appUrl: deps.appUrl,
       bootstrapAdminEmail: deps.bootstrapAdminEmail,
     },
@@ -183,6 +192,10 @@ export function getDefaultAuthRouter() {
         tokenTtlSec: env.RESET_TOKEN_TTL_SEC,
         maxPerWindow: env.RESET_RATE_LIMIT_MAX,
         windowSec: env.RESET_RATE_LIMIT_WINDOW_SEC,
+      },
+      registerCfg: {
+        maxPerWindow: env.AUTH_REGISTER_RATE_LIMIT_MAX,
+        windowSec: env.AUTH_REGISTER_RATE_LIMIT_WINDOW_SEC,
       },
       bootstrapAdminEmail: env.BOOTSTRAP_ADMIN_EMAIL || undefined,
       welcomeLeagueId: env.WELCOME_LEAGUE_ID || undefined,

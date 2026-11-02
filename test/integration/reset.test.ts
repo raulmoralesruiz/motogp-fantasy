@@ -59,6 +59,7 @@ describe("US-02 · logout y recuperación de contraseña (PostgreSQL real)", () 
       emailSender,
       appUrl: APP_URL,
       resetCfg: RESET_CFG,
+      registerCfg: { maxPerWindow: 100, windowSec: 3600 },
     });
   });
 

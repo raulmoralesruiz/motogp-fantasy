@@ -25,6 +25,10 @@ const cfg = {
   resetTokenTtlSec: 3600,
   resetMaxPerWindow: 5,
   resetWindowSec: 60,
+  // Rate limit de registro (T-12/ADR-0035): generoso para estos tests
+  // (no ejercen la limitación de registro).
+  registerMaxPerWindow: 100,
+  registerWindowSec: 3600,
   appUrl: "https://app.test",
 };
 

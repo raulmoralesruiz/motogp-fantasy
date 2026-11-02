@@ -272,6 +272,7 @@ describe("US-17 · Importación automática de resultados desde la fuente (Postg
       emailSender: new CapturingEmailSender(),
       appUrl: "http://localhost:3000",
       resetCfg: { tokenTtlSec: 3600, maxPerWindow: 5, windowSec: 300 },
+      registerCfg: { maxPerWindow: 100, windowSec: 3600 },
       bootstrapAdminEmail: ADMIN_EMAIL,
     });
     fixture = makeFakeSource(prisma);

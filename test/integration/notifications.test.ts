@@ -112,6 +112,7 @@ describe("US-36 · Notificaciones por email (PostgreSQL real)", () => {
       emailSender: { sendResetLink: async () => {} },
       appUrl: "http://localhost:3000",
       resetCfg: { tokenTtlSec: 3600, maxPerWindow: 5, windowSec: 300 },
+      registerCfg: { maxPerWindow: 100, windowSec: 3600 },
       bootstrapAdminEmail: ADMIN_EMAIL,
     });
     resultsRouter = createResultsRouter({ prisma, notifications });
@@ -346,9 +347,12 @@ describe("US-36 · Notificaciones por email (PostgreSQL real)", () => {
     }
     expect(batch.map((mail) => mail.to).sort()).toEqual([p1Email, p2Email].sort());
 
-    // Auditoría del segundo envío.
+    // Auditoría del segundo envío. `orderBy` determinista: sin él Postgres
+    // no garantiza el orden de inserción y `audit[1]` podía ser cualquiera
+    // de las dos filas (flake observado en la corrida unida, T-12).
     const audit = await prisma.auditLog.findMany({
       where: { action: "notification.sent", entityId: world.gp.id },
+      orderBy: { createdAt: "asc" },
     });
     expect(audit).toHaveLength(2);
     expect(audit[1]?.afterData).toMatchObject({

@@ -60,6 +60,7 @@ describe("US-03 · perfil y GDPR (PostgreSQL real)", () => {
       emailSender: logEmailSender,
       appUrl: APP_URL,
       resetCfg: RESET_CFG,
+      registerCfg: { maxPerWindow: 100, windowSec: 3600 },
     });
     profileRouter = createProfileRouter({
       prisma,

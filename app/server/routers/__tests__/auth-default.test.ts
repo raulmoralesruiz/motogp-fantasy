@@ -59,6 +59,7 @@ describe("auth router (glue de producción, T-24)", () => {
       emailSender: { sendResetLink: async () => {} },
       appUrl: "http://localhost:3000",
       resetCfg: { tokenTtlSec: 3_600, maxPerWindow: 5, windowSec: 300 },
+      registerCfg: { maxPerWindow: 100, windowSec: 3600 },
     });
 
     // `authRouter` es el router interior: sin el prefijo `auth.` (lo añade

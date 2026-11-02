@@ -89,6 +89,7 @@ describe("US-06 · Mercado: activos y afiliaciones por GP (PostgreSQL real)", ()
       emailSender: new CapturingEmailSender(),
       appUrl: "http://localhost:3000",
       resetCfg: { tokenTtlSec: 3600, maxPerWindow: 5, windowSec: 300 },
+      registerCfg: { maxPerWindow: 100, windowSec: 3600 },
       bootstrapAdminEmail: ADMIN_EMAIL,
     });
     marketRouter = createMarketRouter({ prisma });

@@ -38,6 +38,9 @@ function lockKey(account: string): string {
 function resetWindowKey(ip: string): string {
   return `rl:reset:ip:${ip}`;
 }
+function registrationWindowKey(ip: string): string {
+  return `rl:register:ip:${ip}`;
+}
 function userDeletionWindowKey(userId: string): string {
   return `rl:delete:user:${userId}`;
 }
@@ -86,6 +89,16 @@ export const redisRateLimitStore: RateLimitStore = {
       String(windowSec),
     )) as number;
     const ttl = await redis.ttl(resetWindowKey(ip));
+    return { count, remainingSec: Math.max(0, ttl) };
+  },
+  async recordRegistration(ip, windowSec) {
+    const count = (await redis.eval(
+      WINDOW_SCRIPT,
+      1,
+      registrationWindowKey(ip),
+      String(windowSec),
+    )) as number;
+    const ttl = await redis.ttl(registrationWindowKey(ip));
     return { count, remainingSec: Math.max(0, ttl) };
   },
   async recordUserDeletion(userId, windowSec) {

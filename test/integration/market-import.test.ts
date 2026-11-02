@@ -123,6 +123,7 @@ describe("US-06/ADR-0013/ADR-0014 · Import de mercado + P0 heurística (Postgre
       emailSender: new CapturingEmailSender(),
       appUrl: "http://localhost:3000",
       resetCfg: { tokenTtlSec: 3600, maxPerWindow: 5, windowSec: 300 },
+      registerCfg: { maxPerWindow: 100, windowSec: 3600 },
       bootstrapAdminEmail: ADMIN_EMAIL,
     });
     marketRouter = createMarketRouter({

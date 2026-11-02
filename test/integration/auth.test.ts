@@ -53,6 +53,7 @@ describe("US-01 · registro y login (PostgreSQL real)", () => {
       emailSender,
       appUrl: "http://localhost:3000",
       resetCfg: { tokenTtlSec: 3600, maxPerWindow: 5, windowSec: 300 },
+      registerCfg: { maxPerWindow: 100, windowSec: 3600 },
     });
   });
 
@@ -152,6 +153,82 @@ describe("US-01 · registro y login (PostgreSQL real)", () => {
         termsAccepted: true,
       }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("T-12/ADR-0035: N+1 registros por IP → rechazo (anti-flood; la ola de bots no llena la liga de bienvenida)", async () => {
+    // Router con umbral estricto de registro (el resto de la suite usa 100
+    // para no interferir con los tests de flujo).
+    const storeR = new InMemoryRateLimitStore();
+    const strictRouter = createAuthRouter({
+      prisma,
+      rateLimit: storeR,
+      sessionTtlSec: SESSION_TTL_SEC,
+      secureCookie: true,
+      rateLimitCfg: RATE_CFG,
+      emailSender,
+      appUrl: "http://localhost:3000",
+      resetCfg: { tokenTtlSec: 3600, maxPerWindow: 5, windowSec: 300 },
+      registerCfg: { maxPerWindow: 3, windowSec: 3600 },
+    });
+
+    const IP = "198.18.0.10";
+    const caller = (ip: string) => {
+      const req = new Request("http://localhost/api/trpc/auth", {
+        method: "POST",
+        headers: { "x-forwarded-for": ip },
+      });
+      return createContext(req, prisma).then((ctx) => strictRouter.createCaller(ctx));
+    };
+
+    // 3 registros permitidos (umbral = 3).
+    for (let i = 1; i <= 3; i++) {
+      const c = await caller(IP);
+      await c.register({
+        email: email(`flood${i}`),
+        username: username(`flood${i}`),
+        password: PASSWORD,
+        termsAccepted: true,
+      });
+    }
+
+    // El 4º de la misma IP se rechaza (ventana sin expirar).
+    const blocked = await caller(IP);
+    await expect(
+      blocked.register({
+        email: email("flood4"),
+        username: username("flood4"),
+        password: PASSWORD,
+        termsAccepted: true,
+      }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: expect.stringContaining("demasiadas peticiones"),
+    });
+
+    // La IP bloqueada no crea usuarios (rechazo ANTES de tocar la BD).
+    const none = await prisma.user.findUnique({
+      where: { email: email("flood4") },
+    });
+    expect(none).toBeNull();
+
+    // Otra IP sigue registrando (el límite es por IP, no global).
+    const oc = await caller("198.18.0.11");
+    await oc.register({
+      email: email("otraip"),
+      username: username("otraip"),
+      password: PASSWORD,
+      termsAccepted: true,
+    });
+
+    // Al expirar la ventana, la IP bloqueada puede reintentar.
+    storeR.setNow(3600 * 1000 + 1000);
+    const rc = await caller(IP);
+    await rc.register({
+      email: email("reintento"),
+      username: username("reintento"),
+      password: PASSWORD,
+      termsAccepted: true,
+    });
   });
 
   it("login: credenciales correctas emiten cookie de sesión", async () => {
@@ -318,6 +395,7 @@ describe("US-31 · liga de bienvenida (PostgreSQL real)", () => {
       emailSender,
       appUrl: "http://localhost:3000",
       resetCfg: { tokenTtlSec: 3600, maxPerWindow: 5, windowSec: 300 },
+      registerCfg: { maxPerWindow: 100, windowSec: 3600 },
       welcomeLeagueId,
       bootstrapAdminEmail,
     });
