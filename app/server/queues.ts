@@ -92,3 +92,74 @@ export async function ensureResultsPollScheduler(intervalMs: number): Promise<vo
     {},
   );
 }
+
+// ── Estado de colas (T-14, ADR-0036: panel "Jobs y fuentes") ───────────────
+
+/** Estado de una cola para el panel de administración. */
+export interface QueueStatus {
+  name: string;
+  waiting: number;
+  active: number;
+  delayed: number;
+  completed: number;
+  failed: number;
+  /** Último job fallido (BullMQ guarda la historia; `null` si nunca falló). */
+  lastFailedJob: {
+    id: string | null;
+    name: string;
+    /** ISO (superjson-safe). */
+    failedAt: string | null;
+    failedReason: string | null;
+    attemptsMade: number;
+  } | null;
+}
+
+const statusQueues = new Map<string, Queue>();
+
+function getStatusQueue(name: string): Queue {
+  let queue = statusQueues.get(name);
+  if (!queue) {
+    // Lazy: solo se crea al consultar el estado (no al importar el módulo).
+    queue = new Queue(name, { connection: connection() });
+    statusQueues.set(name, queue);
+  }
+  return queue;
+}
+
+/**
+ * Counts + último fallo de una cola BullMQ (T-14). Propaga el error si no
+ * se puede leer (p. ej. Redis no disponible): el router lo convierte en un
+ * mensaje claro en español.
+ */
+export async function getQueueStatus(name: string): Promise<QueueStatus> {
+  const queue = getStatusQueue(name);
+  const counts = await queue.getJobCounts(
+    "waiting",
+    "active",
+    "delayed",
+    "completed",
+    "failed",
+  );
+  const [last] = await queue.getFailed(0, 0);
+  return {
+    name,
+    waiting: counts.waiting ?? 0,
+    active: counts.active ?? 0,
+    delayed: counts.delayed ?? 0,
+    completed: counts.completed ?? 0,
+    failed: counts.failed ?? 0,
+    lastFailedJob: last
+      ? {
+          id: last.id ?? null,
+          name: last.name,
+          // BullMQ: `finishedOn` = momento de fin (en un job fallido, el fallo).
+          failedAt:
+            last.finishedOn != null
+              ? new Date(last.finishedOn).toISOString()
+              : null,
+          failedReason: last.failedReason,
+          attemptsMade: last.attemptsMade,
+        }
+      : null,
+  };
+}

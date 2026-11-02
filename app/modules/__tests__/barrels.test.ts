@@ -64,10 +64,14 @@ describe("barrels de módulos (Fase 0, T-03)", () => {
     ]);
   });
 
-  it("jobs exporta los jobs de precios y de resultados (US-08/US-17)", () => {
+  it("jobs exporta los jobs de precios y de resultados + alertas (US-08/US-17, T-14)", () => {
     expect(Object.keys(jobs).sort()).toEqual([
       "PRICE_JOB_LOCK_TTL_SEC",
+      "alertBodyHtml",
+      "alertSubject",
       "applyPricesForGp",
+      "evaluateAlertTransition",
+      "isFinalFailure",
       "pollResults",
     ]);
   });
@@ -83,10 +87,12 @@ describe("barrels de módulos (Fase 0, T-03)", () => {
     ]);
   });
 
-  it("results exporta el núcleo puro, ResultsService y el adapter de la fuente (Fase 3, US-16/US-17)", () => {
+  it("results exporta el núcleo puro, ResultsService, el adapter y el health-check (Fase 3, US-16/US-17, T-14)", () => {
     expect(Object.keys(results).sort()).toEqual([
       "BONUS_CODES_BY_EVENT",
       "PENALTY_CODES_BY_EVENT",
+      "PULSELIVE_BASE_URL",
+      "PULSELIVE_PROBE_ENDPOINT",
       "PulseLiveResultsSource",
       "PulseLiveSourceError",
       "ResultsNormalizationError",
@@ -98,6 +104,7 @@ describe("barrels de módulos (Fase 0, T-03)", () => {
       "nextResultsVersion",
       "normalizePulseLiveClassification",
       "parseResultsVersion",
+      "probeSource",
       "resultEventLabel",
       "sameResultValues",
       "selectPulseLiveSession",

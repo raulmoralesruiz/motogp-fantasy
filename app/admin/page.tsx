@@ -9,6 +9,7 @@ import CalendarImportForm from "./calendar-import-form";
 import CreateCircuitForm from "./create-circuit-form";
 import CreateSeasonForm from "./create-season-form";
 import GpsSection from "./gps-section";
+import JobsSection from "./jobs-section";
 import MarketImportForm from "./market-import-form";
 import MarketSection from "./market-section";
 import ResultsSection from "./results-section";
@@ -28,10 +29,10 @@ const STATUS_LABELS: Record<string, string> = {
  * resultados por evento (ADR-0018). Solo `global_admin` ve el contenido; el
  * resto es rechazado server-side (403) — la UI es una vista (AGENTS.md §8).
  *
- * El panel se organiza en 7 secciones, cada una en su propia tarjeta
+ * El panel se organiza en 8 secciones, cada una en su propia tarjeta
  * (`.card`) para visualizarlo de forma separada:
- * temporadas, circuitos, GPs, calendario, importación de mercado, mercado y
- * resultados.
+ * temporadas, circuitos, GPs, calendario, importación de mercado, mercado,
+ * resultados y jobs y fuentes (monitoreo, T-14).
  */
 export default function AdminPage() {
   const me = trpc.auth.me.useQuery();
@@ -82,6 +83,9 @@ export default function AdminPage() {
               </li>
               <li>
                 <a href="#resultados">Resultados</a>
+              </li>
+              <li>
+                <a href="#jobs-fuentes">Jobs y fuentes</a>
               </li>
             </ul>
           </nav>
@@ -202,6 +206,18 @@ export default function AdminPage() {
             <div className="card">
               <h2>Resultados</h2>
               <ResultsSection seasons={seasons.data ?? []} />
+            </div>
+          </section>
+
+          <section id="jobs-fuentes">
+            <div className="card">
+              <h2>Jobs y fuentes</h2>
+              <p className="muted">
+                Estado de los jobs de fondo (T-10) y de la fuente de datos
+                (T-14, ADR-0036): colas, alertas activas, health-check de
+                PulseLive y Sentry.
+              </p>
+              <JobsSection />
             </div>
           </section>
         </>

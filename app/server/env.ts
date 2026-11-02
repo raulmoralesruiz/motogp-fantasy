@@ -73,6 +73,19 @@ const serverEnvSchema = z.object({
   // US-36 · Remitente verificado en Resend (p. ej.
   // `notificaciones@motogp.raulmorales.eu` tras verificar el dominio).
   EMAIL_FROM: z.string().default("Fantasy MotoGP <onboarding@resend.dev>"),
+  // T-14/ADR-0036 · Monitoreo: DSN de Sentry (self-hosted en TrueNAS o
+  // sentry.io). VACÍO ⇒ Sentry desactivado (los capturers son no-op;
+  // mismo espíritu "modo provisional" que RESEND_API_KEY, ADR-0009/0033).
+  // Es una URL pública (la clave del proyecto, no un secreto): se usa el
+  // prefijo NEXT_PUBLIC_ para que el SDK de cliente la inlinde en el build
+  // (patrón oficial de @sentry/nextjs) y servidor/worker la lean en runtime.
+  NEXT_PUBLIC_SENTRY_DSN: z.string().default(""),
+  // T-14/ADR-0036 · Destinatario de las alertas operativas (fallo final de
+  // job, umbral de fallos del polling/probe). VACÍO ⇒ sin canal de email
+  // (solo Sentry + log; el sink nunca lanza).
+  OPS_ALERT_EMAIL: z
+    .union([z.string().email(), z.literal("")])
+    .default(""),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

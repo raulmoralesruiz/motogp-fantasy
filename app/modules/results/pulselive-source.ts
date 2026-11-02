@@ -344,7 +344,7 @@ export function normalizePulseLiveClassification(
 
 // ── Implementación PulseLive (I/O fina, dependencias inyectadas) ───────────
 
-const PULSELIVE_BASE_URL = "https://api.motogp.pulselive.com/motogp/v1";
+export const PULSELIVE_BASE_URL = "https://api.motogp.pulselive.com/motogp/v1";
 /**
  * Categoría MotoGP en PulseLive (`legacy_id: 3`): se descubre en
  * `/results/categories` por ese identificador, no se hardcodea el UUID

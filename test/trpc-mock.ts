@@ -71,6 +71,7 @@ function defaultQueryResult(): Record<string, unknown> {
 function defaultMutationResult(): Record<string, unknown> {
   return {
     mutate: vi.fn(),
+    mutateAsync: vi.fn(),
     isPending: false,
     isError: false,
     isSuccess: false,

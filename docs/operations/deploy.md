@@ -180,3 +180,56 @@ Si el rollback es por un problema de código, también puedes
 | La web no carga por NPM              | proxy mal apuntado         | que apunte a `192.168.1.3:22020` (no a `:3000`)                     |
 | `migrate deploy` falla               | imagen sin `prisma/`       | reconstruir: `./deploy.sh`                                          |
 | CI en rojo por gitleaks              | alguien commiteó un secret | rota el secret, quítalo del repo (BFG/filter-repo) y vuelve a subir |
+
+## 8. Sentry (T-14, ADR-0036)
+
+La app captura errores en **Sentry** si hay DSN (`NEXT_PUBLIC_SENTRY_DSN`);
+vacía ⇒ desactivado (los capturers son no-op; las alertas de email y el panel
+siguen funcionando). El código es idéntico en las dos opciones — solo cambia
+el DSN:
+
+### Opción A (principal): self-hosted en este TrueNAS
+
+Stack oficial de Sentry (Docker). **Requisito:** ~6–10 GB de RAM libres y
+~20 GB de disco (es un stack de ~10 contenedores; si el NAS va justo, usa la
+opción B).
+
+```bash
+# 1. Descargar el stack oficial (crea docker-compose.yml + configs en el cwd)
+cd /mnt/data-nas
+curl -sSfL https://sentry.io/get-sentry/ | bash
+
+# 2. Arrancar (primera vez: crea la BD interna y arranca todo)
+cd /mnt/data-nas/sentry   # el directorio que el script haya creado
+docker compose -f docker-compose.yml up -d
+
+# 3. Wizard inicial (crear organización + proyecto): http://192.168.1.3:9000
+```
+
+- Persistencia: mover los volúmenes del stack a `/mnt/data-nas/sentry/…`
+  (bind-mounts, igual que `pgdata`) para no perder issues en un wipe del pool.
+- Acceso remoto (opcional): NPM → Proxy Host → `sentry.raulmorales.eu` →
+  `192.168.1.3:9000` (SSL, como la app).
+- Mantenimiento: el stack trae un worker de mantenimiento; vigilarlo en
+  `docker compose -f docker-compose.yml ps` (lo mismo que el runbook §7).
+
+### Opción B (alternativa ligera): free tier de sentry.io
+
+1. Cuenta en [sentry.io](https://sentry.io) (plan Developer: 5k errores/mes,
+   1 proyecto, retención 30 días).
+2. Crear el proyecto (Next.js) y copiar su **DSN**.
+3. Nada más: no hay infra que mantener.
+
+### Conectar la app (opción A o B)
+
+1. En el `.env` del servidor: `NEXT_PUBLIC_SENTRY_DSN="<la DSN del proyecto>"`.
+   La DSN es una **clave pública** del proyecto (no un secreto; gitleaks no
+   debería saltarla, y aunque lo haga, no da acceso al proyecto).
+2. `./deploy.sh` (rebuild: la DSN se inlinde en el SDK de cliente y la CSP
+   `connect-src` se amplía solo con el host del DSN — T-20 intacta).
+3. Verificar: `/admin` → "Jobs y fuentes" → "Sentry (errores)" = **Activo**
+   (runbook §8.1).
+
+**GDPR (ADR-0036):** `dataCollection` cerrada por diseño — sin usuarios,
+cookies, headers, query params ni bodies; solo stack traces + tags operativos
+(ruta tRPC, cola, GP). Los errores de nuestros usuarios no llevan PII.

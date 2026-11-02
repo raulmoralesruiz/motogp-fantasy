@@ -21,5 +21,6 @@
  *   (`market`); nunca al revés (dirección de dependencias: `jobs/` orquesta
  *   módulos).
  */
+export * from "./alerts";
 export * from "./prices";
 export * from "./results-poll";

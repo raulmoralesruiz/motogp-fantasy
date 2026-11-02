@@ -252,7 +252,62 @@ docker logs motogp-worker --since 1h | tail -20             # arranque + schedul
 
 ---
 
-## 8. Rotación de secrets
+## 8. Monitoreo y alertas (T-14, ADR-0036)
+
+**Qué se monitoriza** (tres superficies, todas opcionales por env — sin nada fijado, la app funciona igual):
+
+| Superficie | Qué | Dónde va |
+| --- | --- | --- |
+| **Errores (Sentry)** | Excepciones de la web (servidor + cliente), tRPC `INTERNAL_SERVER_ERROR` (los rechazos esperados `FORBIDDEN`/`NOT_FOUND`/`BAD_REQUEST` **no** se capturan), worker — con contexto (ruta tRPC, cola, GP) | Sentry (self-hosted en TrueNAS o sentry.io). **Desactivado** si `NEXT_PUBLIC_SENTRY_DSN` está vacío |
+| **Fallos (alertas)** | Fallo final de job (tras agotar 3 reintentos), auto-import que supera 3 fallos consecutivos, health-check de PulseLive (probe cada 5 min, **también fuera de ventana de GP**) que supera 3 fallos consecutivos, y su **recuperación** | Email a `OPS_ALERT_EMAIL` + Sentry + log. Sin destinatario ⇒ Sentry + log (el sink nunca lanza) |
+| **Estado puntual (panel)** | Counts de colas BullMQ + último fallo, alertas activas, probe de la fuente, estado de Sentry | Sección "Jobs y fuentes" de `/admin` (solo `global_admin`) |
+
+**Política anti-spam (núcleo puro `modules/jobs/alerts.ts`):** se alerta **solo en transición**: al cruzar el umbral (3 fallos consecutivos) y al recuperar. Mientras el fallo persiste **no se repite** (un ciclo de 5 min no produce un email por hora durante horas). El fallo final de job produce **un** email (no uno por reintento).
+
+### 8.1 Activar Sentry
+
+1. Instalar Sentry (infra, fuera del código — opciones completas en `deploy.md` §8): self-hosted en TrueNAS (opción principal; stack pesado, ~6–10 GB de RAM) o free tier de sentry.io (alternativa ligera).
+2. Crear el proyecto y copiar su **DSN**.
+3. En el `.env` del servidor: `NEXT_PUBLIC_SENTRY_DSN="https://key@sentry.mi-dominio/1"` (la DSN es una clave pública del proyecto, no un secreto).
+4. **Rebuild**: `./deploy.sh` — la DSN se inlinde en el SDK de cliente en el build y la CSP `connect-src` se amplía **solo** con el host del DSN.
+5. Verificar: panel `/admin` → "Jobs y fuentes" → "Sentry (errores)" debe mostrar **Activo**; provocar un error (o esperar uno real) y ver la issue en Sentry con sus tags (`trpc.path`, `alert.kind`, …).
+
+**GDPR (ADR-0036):** `dataCollection` cerrada — sin `userInfo`, sin cookies, sin headers, sin query params, sin bodies. Lo que viaja es el stack trace + los tags operativos.
+
+### 8.2 Configurar el email de alertas
+
+1. En el `.env` del servidor: `OPS_ALERT_EMAIL="ops@mi-dominio.eu"` (cualquier buzón; reutiliza Resend de US-36 — si `RESEND_API_KEY` está vacía, el "email" se loguea en el servidor: `docker logs motogp-worker | grep "\[alert\]"`).
+2. `docker compose -f docker-compose.prod.yml up -d worker web`.
+3. Vacío ⇒ sin canal de email (Sentry + log solo); nunca rompe el ciclo que dispara la alerta.
+
+**Asuntos (estables, filtrables en el buzón):** `[alerta motogp] source-poll-failure — …`, `source-poll-recovered`, `source-probe-failure`, `source-probe-recovered`, `job-failed`. Cada cuerpo lleva el dato clave (GP, evento, nº de fallos, motivo, cola) y una referencia al panel "Jobs y fuentes".
+
+### 8.3 Panel "Jobs y fuentes" (`/admin`)
+
+| Bloque | Qué muestra |
+| --- | --- |
+| Colas de jobs (BullMQ) | En espera / activos / diferidos (reintento) / completados / fallidos por cola + último job fallido (motivo, momento, intentos) |
+| Fuente de datos (PulseLive) | Última comprobación (momento + latencia), fallos consecutivos, último éxito, último error + **alertas activas** (auto-import sobre umbral) + botón **"Comprobar fuente ahora"** (probe a demanda, sin tocar el probe automático) |
+| Sentry (errores) | **Activo** (DSN fijado) / **Desactivado** (con la instrucción de activarlo) |
+
+Refresco automático cada 30 s. Los endpoints `admin.jobsStatus` (query) y `admin.sourceHealth` (mutation) son solo `global_admin` (403 `FORBIDDEN` a cualquier otro rol, 401 sin sesión).
+
+### 8.4 Ante una alerta
+
+| Alerta | Qué significa | Primeras acciones |
+| --- | --- | --- |
+| `source-poll-failure` | Auto-import de un GP/evento fallando 3 ciclos seguidos (≈ 15 min) | Panel "Jobs y fuentes" → "Comprobar fuente ahora"; si responde, esperar (llega la alerta de recuperación sola); si no, comprobar red desde el NAS: `curl -sS https://api.motogp.pulselive.com` |
+| `source-probe-failure` | PulseLive inalcanzable 3 probes seguidos (también fuera de ventana de GP) | Mismos pasos: probe manual + red; si hace falta, importar resultados **a mano** (§1) |
+| `job-failed` | Un job BullMQ agotó 3 reintentos | `docker compose -f docker-compose.prod.yml logs worker` → repetir la acción a mano: precios = panel "Aplicar fórmula" (§7); poll = esperar al siguiente ciclo |
+| `source-poll-recovered` / `source-probe-recovered` | La fuente volvió | Sin acción; comprobar que el GP pendiente se importó (panel Resultados) |
+
+**Alertas en los logs** (sin buzón configurado, o el sink falló): `docker logs motogp-worker --since 1h | grep "\[alert\]"`.
+
+**Sentry desactivado por defecto:** mientras `NEXT_PUBLIC_SENTRY_DSN` esté vacío, los errores solo van a los logs del contenedor (`motogp-web` / `motogp-worker`) y no se capturan issues. Las alertas de email + el panel funcionan igual (no dependen de Sentry).
+
+---
+
+## 9. Rotación de secrets
 
 > **Completo en `deploy.md` §6.** Resumen:
 
@@ -283,7 +338,7 @@ docker logs motogp-worker --since 1h | tail -20             # arranque + schedul
 
 ---
 
-## 9. Checklist post-deploy
+## 10. Checklist post-deploy
 
 Tras cada `./deploy.sh`:
 
@@ -297,15 +352,16 @@ Tras cada `./deploy.sh`:
 | BD migrada | `docker compose -f docker-compose.prod.yml exec postgres psql -U motogp -d motogp -c "SELECT count(*) FROM prisma_migrations;"` | `> 0` |
 | Redis vivo | `docker compose -f docker-compose.prod.yml exec redis redis-cli ping` | `PONG` |
 | Worker corriendo (T-10) | `docker inspect --format '{{.State.Status}}' motogp-worker` | `running` |
+| Monitoreo (T-14) | Panel `/admin` → "Jobs y fuentes" | Colas con counts; estado de Sentry coherente con `NEXT_PUBLIC_SENTRY_DSN` (DSN vacía ⇒ "Desactivado") |
 
 ---
 
-## 10. Contacto y escalación
+## 11. Contacto y escalación
 
 | Problema | Primer nivel | Escalado |
 | -------- | ------------ | -------- |
 | Resultados incorrectos | Admin → corrección manual | Contactar proveedor de datos |
 | BD corrupta | Restore de backup (§4) | — |
 | Deploy fallido | `./deploy.sh` (reintentar) | Revisar logs → `docker compose logs` |
-| Incidente de seguridad | Rotar secrets (§7) | — |
+| Incidente de seguridad | Rotar secrets (§9) | — |
 | Rendimiento / latencia | Reiniciar web (`docker compose restart web`) | Verificar recursos del NAS |

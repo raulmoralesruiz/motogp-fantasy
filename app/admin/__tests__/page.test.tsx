@@ -67,6 +67,20 @@ function mockList(hook: unknown, data: unknown) {
   });
 }
 
+/**
+ * Sección "Jobs y fuentes" (T-14): se deja resuelta para que sus
+ * 'Consultando…' no contamine los tests que cuentan elementos de carga.
+ */
+function mockJobsStatus() {
+  mockResult(trpc.admin.jobsStatus.useQuery, {
+    data: { queues: [], activeAlerts: [], probe: null, sentryEnabled: false },
+    isPending: false,
+    isError: false,
+    isSuccess: true,
+    refetch: vi.fn(),
+  });
+}
+
 describe("AdminPage", () => {
   beforeEach(() => resetTrpcMocks());
 
@@ -209,6 +223,7 @@ describe("AdminPage", () => {
     mockList(trpc.market.constructors.list.useQuery, []);
     mockList(trpc.market.teams.list.useQuery, []);
     mockList(trpc.market.prices.list.useQuery, []);
+    mockJobsStatus(); // T-14: también carga; solo la de temporadas pendiente
     render(<AdminPage />);
 
     expect(screen.getAllByText("Consultando…")).toHaveLength(1);
@@ -230,6 +245,7 @@ describe("AdminPage", () => {
     mockList(trpc.market.constructors.list.useQuery, []);
     mockList(trpc.market.teams.list.useQuery, []);
     mockList(trpc.market.prices.list.useQuery, []);
+    mockJobsStatus(); // T-14: también carga; solo la de circuitos pendiente
     render(<AdminPage />);
 
     expect(screen.getAllByText("Consultando…")).toHaveLength(1);
