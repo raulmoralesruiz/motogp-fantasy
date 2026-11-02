@@ -219,7 +219,40 @@ docker logs motogp-web --since 1h | grep '\[notification\]'
 
 ---
 
-## 7. Rotación de secrets
+## 7. Worker de background (T-10, ADR-0034)
+
+**Qué hace:** el contenedor `motogp-worker` (misma imagen que la web, otro CMD) consume las colas BullMQ de Redis:
+
+| Cola | Job | Cuándo |
+| --- | --- | --- |
+| `gp-prices` | `apply-formula` — aplica la fórmula de precios del GP (US-08) | Al publicarse el definitivo (`results.markDefinitive` encola; fire-and-forget — un fallo de cola **no** rompe el flujo) |
+| `results-poll` | Polling de resultados de PulseLive (US-17) | Job repeatable, cada 5 min (`PROVISIONAL_RESULTS_POLL` en `shared/config`) |
+
+El **recálculo de puntos no pasa por el worker** (se mantiene inline en el definitivo y en las correcciones — US-18/US-19).
+
+**Verificar que está corriendo:**
+
+```bash
+docker inspect --format '{{.State.Status}}' motogp-worker   # esperado: running
+docker logs motogp-worker --since 1h | tail -20             # arranque + scheduler
+```
+
+**Si el worker NO corre (crash-loop / parado):**
+
+1. Síntoma: **no hay disparo automático** de precios ni polling (la app sigue funcionando; los flujos manuales siguen disponibles).
+2. `docker compose -f docker-compose.prod.yml logs worker` → busca el error (candidatos: `REDIS_URL` no alcanzable, `DATABASE_URL` inválida, imagen antigua sin `worker/`).
+3. Reiniciar: `docker compose -f docker-compose.prod.yml restart worker` → volver a comprobar `running`.
+4. `deploy.sh` verifica el worker tras cada despliegue: si falló, el deploy **no** se da por bueno (revisar logs y `up -d` de nuevo).
+
+**Disparo manual de precios (fallback del job):** panel de admin → Precios por GP → "Aplicar fórmula" (o tRPC `market.prices.applyFormula`). El job y la acción manual usan el **mismo** servicio (`applyPricesForGp`): es idempotente — aplicar dos veces no duplica nada (la red de seguridad del lock).
+
+**Lock por GP:** `job:gp:lock:<gpId>` en Redis (TTL 120 s, semántica token — solo lo libera quien lo adquirió). Si un job encuentra el lock ocupado, el worker reintenta con backoff (3 intentos). Inspección: `docker compose -f docker-compose.prod.yml exec redis redis-cli KEYS 'job:gp:lock:*'`.
+
+**Rendimiento (CA de T-10):** GP completo con 1000 lineups recalculado en < 30 s (medida real ~1,2 s — `npm run test:load`).
+
+---
+
+## 8. Rotación de secrets
 
 > **Completo en `deploy.md` §6.** Resumen:
 
@@ -250,7 +283,7 @@ docker logs motogp-web --since 1h | grep '\[notification\]'
 
 ---
 
-## 8. Checklist post-deploy
+## 9. Checklist post-deploy
 
 Tras cada `./deploy.sh`:
 
@@ -263,10 +296,11 @@ Tras cada `./deploy.sh`:
 | tRPC health | `curl -s https://motogp.raulmorales.eu/api/trpc/health` | `{"ok":true}` |
 | BD migrada | `docker compose -f docker-compose.prod.yml exec postgres psql -U motogp -d motogp -c "SELECT count(*) FROM prisma_migrations;"` | `> 0` |
 | Redis vivo | `docker compose -f docker-compose.prod.yml exec redis redis-cli ping` | `PONG` |
+| Worker corriendo (T-10) | `docker inspect --format '{{.State.Status}}' motogp-worker` | `running` |
 
 ---
 
-## 9. Contacto y escalación
+## 10. Contacto y escalación
 
 | Problema | Primer nivel | Escalado |
 | -------- | ------------ | -------- |

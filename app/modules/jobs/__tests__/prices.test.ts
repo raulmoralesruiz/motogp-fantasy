@@ -19,21 +19,23 @@ import type { ApplyFormulaForGpResult, PriceService } from "@/modules/market";
 function makeFakeLockStore(options?: { occupied?: boolean }): {
   store: GpLockStore;
   acquired: string[];
-  released: string[];
+  released: Array<{ gpId: string; token: string }>;
   ttlSeen: number[];
 } {
   const acquired: string[] = [];
-  const released: string[] = [];
+  const released: Array<{ gpId: string; token: string }> = [];
   const ttlSeen: number[] = [];
+  let tokenCounter = 0;
   const store: GpLockStore = {
     async acquire(gpId, ttlSec) {
       ttlSeen.push(ttlSec);
-      if (options?.occupied) return false;
+      if (options?.occupied) return null;
       acquired.push(gpId);
-      return true;
+      tokenCounter += 1;
+      return `token-${tokenCounter}`;
     },
-    async release(gpId) {
-      released.push(gpId);
+    async release(gpId, token) {
+      released.push({ gpId, token });
     },
   };
   return { store, acquired, released, ttlSeen };
@@ -72,7 +74,7 @@ describe("applyPricesForGp (US-08 job de precios)", () => {
     expect(out.result).toBeDefined();
     expect(lock.acquired).toEqual([GP]);
     expect(lock.ttlSeen).toEqual([PRICE_JOB_LOCK_TTL_SEC]);
-    expect(lock.released).toEqual([GP]);
+    expect(lock.released).toEqual([{ gpId: GP, token: "token-1" }]);
     expect(apply).toHaveBeenCalledTimes(1);
     expect(apply).toHaveBeenCalledWith({ gpId: GP });
   });
@@ -130,6 +132,6 @@ describe("applyPricesForGp (US-08 job de precios)", () => {
     await expect(applyPricesForGp(GP, deps)).rejects.toBe(boom);
 
     expect(lock.acquired).toEqual([GP]);
-    expect(lock.released).toEqual([GP]);
+    expect(lock.released).toEqual([{ gpId: GP, token: "token-1" }]);
   });
 });

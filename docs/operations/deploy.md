@@ -11,6 +11,7 @@ Cómo desplegar y mantener **Fantasy MotoGP Independiente** en el TrueNAS
 | Contenedor        | Imagen                                           | Puerto                           | Datos                            |
 | ----------------- | ------------------------------------------------ | -------------------------------- | -------------------------------- |
 | `motogp-web`      | `motogp-web:<commit>` (la construye `deploy.sh`) | host `22020` → contenedor `3000` | —                                |
+| `motogp-worker`   | `motogp-web:<commit>` (misma imagen; `npm run worker` — T-10, ADR-0034) | solo red interna | —                                |
 | `motogp-postgres` | `postgres:16`                                    | solo red interna                 | `/mnt/data-nas/motogp/pgdata`    |
 | `motogp-redis`    | `redis:7`                                        | solo red interna                 | `/mnt/data-nas/motogp/redisdata` |
 

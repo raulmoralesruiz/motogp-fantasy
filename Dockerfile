@@ -55,6 +55,12 @@ COPY --from=build --chown=node:node /app/public ./public
 COPY --from=build --chown=node:node /app/prisma ./prisma
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/package.json ./package.json
+# Worker de background (T-10, ADR-0034): corre con tsx desde el código fuente
+# (resuelve los alias `@/*` del tsconfig en runtime). Necesita worker/, app/
+# (módulos que importa) y tsconfig.json (paths).
+COPY --from=build --chown=node:node /app/worker ./worker
+COPY --from=build --chown=node:node /app/app ./app
+COPY --from=build --chown=node:node /app/tsconfig.json ./tsconfig.json
 USER node
 EXPOSE 3000
 CMD ["node", "server.js"]

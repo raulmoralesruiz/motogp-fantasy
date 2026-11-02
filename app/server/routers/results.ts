@@ -24,10 +24,7 @@ import { LeagueService, type MyLeagueRanking } from "@/modules/leagues";
 import { NotificationService } from "@/modules/notifications";
 import {
   PulseLiveResultsSource,
-  PulseLiveSourceError,
   ResultsService,
-  type EventRefResolution,
-  type EventRefResolver,
   type MyGpResultsView,
   type ResultsSource,
   type SourceEventCatalog,
@@ -49,9 +46,15 @@ import {
   unlinkSourceInputSchema,
 } from "@/shared/validation/results";
 
+import { createEventRefResolver } from "../event-ref-resolver";
 import { prisma } from "../prisma";
+import { enqueueFireAndForget, enqueueGpPrices } from "../queues";
 import { adminProcedure, protectedProcedure, router } from "../trpc";
 import { createDefaultNotificationService } from "./notifications";
+
+// Re-export (los tests de `createEventRefResolver` lo importan desde el router;
+// la implementación vive en `app/server/event-ref-resolver.ts` — US-17, T-10).
+export { createEventRefResolver };
 
 export interface ResultsRouterDeps {
   prisma: PrismaClient;
@@ -66,6 +69,12 @@ export interface ResultsRouterDeps {
    * continúa sin notificar (tests que no cubren US-36).
    */
   notifications?: NotificationService;
+  /**
+   * Disparo automático de la fórmula de precios (T-10, ADR-0034): opcional —
+   * si no se inyecta, se usa un no-op (tests que no cubren el disparo). La
+   * producción inyecta `enqueueGpPrices` (cola BullMQ `gp-prices`).
+   */
+  enqueueGpPrices?: (gpId: string) => Promise<void>;
 }
 
 /**
@@ -93,33 +102,6 @@ export interface MyResultsView extends MyGpResultsView {
   leagues: MyLeagueGpRanking[];
 }
 
-/**
- * Resuelve el vínculo GP ↔ evento de la fuente para el adapter (DI,
- * ADR-0019): el adapter no toca la BD; la capa de router lo implementa.
- * `eventRef = null` → el GP no está vinculado (el adapter lanza
- * `SourceNotLinkedError`).
- */
-export function createEventRefResolver(db: PrismaClient): EventRefResolver {
-  return async (gpId: string): Promise<EventRefResolution | null> => {
-    const gp = await db.gp.findUnique({
-      where: { id: gpId },
-      select: {
-        name: true,
-        sourceRef: true,
-        season: { select: { year: true } },
-      },
-    });
-    if (!gp) {
-      throw new PulseLiveSourceError("El GP no existe.");
-    }
-    return {
-      seasonYear: gp.season.year,
-      eventRef: gp.sourceRef,
-      gpName: gp.name,
-    };
-  };
-}
-
 /** Router inyectable: los tests de integración lo montan con su propia BD. */
 export function createResultsRouter(deps: ResultsRouterDeps) {
   const source = deps.source;
@@ -134,6 +116,14 @@ export function createResultsRouter(deps: ResultsRouterDeps) {
   const leagues = new LeagueService({ prisma: deps.prisma });
   // US-22: GP anterior de la temporada (módulo `seasons`) para el delta.
   const seasons = new GpService({ prisma: deps.prisma });
+  // T-10 (ADR-0034): disparo automático de la fórmula de precios. Default
+  // no-op (tests que no cubren el disparo); producción inyecta `enqueueGpPrices`.
+  const enqueuePrices =
+    deps.enqueueGpPrices ??
+    ((gpId: string) => {
+      console.log(`[jobs] gp-prices sin configurar: no se encola GP ${gpId}`);
+      return Promise.resolve();
+    });
 
   // US-36 (ADR-0033): notifica a las ligas DESPUÉS del commit principal.
   // Un fallo de envío no rompe el flujo: el servicio ya audita los fallos
@@ -292,6 +282,10 @@ export function createResultsRouter(deps: ResultsRouterDeps) {
           await leagues.recalculateRankings(input.gpId, result.resultsVersion);
           // US-36: notifica a las ligas (después del commit principal).
           await notify("definitive_published", input.gpId, ctx.user.id, ctx.ip);
+          // T-10 (ADR-0034): disparo automático de la fórmula de precios
+          // (US-08). Fire-and-forget: un fallo de cola no rompe el flujo
+          // principal (el admin puede re-disparar con `market.prices.applyFormula`).
+          enqueueFireAndForget("gp-prices", enqueuePrices, input.gpId);
         }
         return result;
       }),
@@ -415,6 +409,9 @@ export function getDefaultResultsRouter() {
     // US-36 (ADR-0033): notificaciones por email al publicarse el definitivo
     // o aplicarse un recálculo (orquestación BFF sobre el módulo `notifications`).
     notifications: createDefaultNotificationService(prisma),
+    // T-10 (ADR-0034): disparo automático de la fórmula de precios al
+    // publicarse el definitivo (cola BullMQ `gp-prices`, US-08).
+    enqueueGpPrices,
   });
   return defaultRouter;
 }

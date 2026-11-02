@@ -48,10 +48,27 @@ PORT="$(sed -n 's/^WEB_HOST_PORT=//p' .env | tr -d '"')"
 PORT="${PORT:-22020}"
 for _ in $(seq 1 30); do
   if curl -fsS "http://localhost:$PORT/api/health" >/dev/null 2>&1; then
-    echo "OK: la web responde en http://localhost:$PORT/api/health (imagen $IMAGE:$TAG)."
-    exit 0
+    break
   fi
   sleep 2
 done
-echo "ERROR: la web no responde tras 60 s. Revisa: $COMPOSE logs web" >&2
-exit 1
+curl -fsS "http://localhost:$PORT/api/health" >/dev/null 2>&1 \
+  || { echo "ERROR: la web no responde tras 60 s. Revisa: $COMPOSE logs web" >&2; exit 1; }
+echo "OK: la web responde en http://localhost:$PORT/api/health (imagen $IMAGE:$TAG)."
+
+# ── 6. Worker de background (T-10, ADR-0034): verificar que queda corriendo ─
+# El worker no expone un puerto: comprobar que el contenedor está "running"
+# (un crash-loop quedaría en "restarting" y fallaría este check).
+echo "==> worker (motogp-worker)"
+for _ in $(seq 1 15); do
+  STATE="$(docker inspect --format '{{.State.Status}}' motogp-worker 2>/dev/null || echo missing)"
+  [ "$STATE" = "running" ] && break
+  sleep 2
+done
+STATE="$(docker inspect --format '{{.State.Status}}' motogp-worker 2>/dev/null || echo missing)"
+if [ "$STATE" != "running" ]; then
+  echo "ERROR: el worker no está corriendo (estado: $STATE). Revisa: $COMPOSE logs worker" >&2
+  exit 1
+fi
+echo "OK: el worker de background está corriendo."
+echo "DEPLOY COMPLETO (imagen $IMAGE:$TAG)."
