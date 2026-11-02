@@ -348,8 +348,8 @@ Tras cada `./deploy.sh`:
 | Páginas públicas | `curl -s -o /dev/null -w "%{http_code}" https://motogp.raulmorales.eu/` | `200` |
 | Directorio de ligas | `curl -s -o /dev/null -w "%{http_code}" https://motogp.raulmorales.eu/ligas` | `200` |
 | Login | `curl -s -o /dev/null -w "%{http_code}" https://motogp.raulmorales.eu/login` | `200` |
-| tRPC health | `curl -s https://motogp.raulmorales.eu/api/trpc/health` | `{"ok":true}` |
-| BD migrada | `docker compose -f docker-compose.prod.yml exec postgres psql -U motogp -d motogp -c "SELECT count(*) FROM prisma_migrations;"` | `> 0` |
+| tRPC health | `curl -s https://motogp.raulmorales.eu/api/trpc/health.check` | `{"status":"ok"}` (database.ok + redis.ok) |
+| BD migrada | `docker compose -f docker-compose.prod.yml exec postgres psql -U motogp -d motogp -c "SELECT count(*) FROM _prisma_migrations;"` | `> 0` |
 | Redis vivo | `docker compose -f docker-compose.prod.yml exec redis redis-cli ping` | `PONG` |
 | Worker corriendo (T-10) | `docker inspect --format '{{.State.Status}}' motogp-worker` | `running` |
 | Monitoreo (T-14) | Panel `/admin` → "Jobs y fuentes" | Colas con counts; estado de Sentry coherente con `NEXT_PUBLIC_SENTRY_DSN` (DSN vacía ⇒ "Desactivado") |
