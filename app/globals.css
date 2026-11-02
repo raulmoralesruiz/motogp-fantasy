@@ -379,9 +379,17 @@ a {
   background: rgba(225, 6, 0, 0.12);
 }
 
-/* Tabla de importación de resultados (panel admin, US-16). */
+/* Tabla de importación de resultados (panel admin, US-16).
+   En móvil la tabla es más ancha que el viewport (8 columnas): se hace
+   DESLIZABLE DENTRO de su contenedor en vez de ensanchar la página. Sin
+   esto el documento mide ~830 px de ancho y en emulación móvil Chromium
+   (y en un teléfono real) la página se desborda en horizontal y el punto
+   de clic se resuelve en coordenadas distintas a las del layout. */
 .results-table {
+  display: block;
   width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
   border-collapse: collapse;
   font-size: 0.9rem;
 }
@@ -418,4 +426,30 @@ a {
   font-size: 0.85rem;
   color: var(--fg);
   white-space: nowrap;
+}
+
+/* Touch targets (T-16, CA de testing.md §3): todos los controles interactivos
+   miden ≥ 44 px de alto para poder operar el flujo central con una mano en
+   móvil (iPhone SE 375 px). Incluye también los selects "huérfanos" del
+   builder de lineups (`.field` fuera de `.form`/`.filters`). */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.field select,
+.field input:not([type="checkbox"]):not([type="radio"]),
+.filters select,
+.filters input {
+  width: 100%;
+  min-height: 44px;
+}
+
+.button {
+  min-height: 44px;
+}
+
+.tab {
+  min-height: 44px;
 }

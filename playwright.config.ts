@@ -8,6 +8,9 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
   testDir: "./test/e2e",
+  // T-11: espera a la app sana, hace sitio en la liga de bienvenida (US-31)
+  // y crea el usuario E2E compartido (storageState para tests con sesión).
+  globalSetup: "./test/e2e/global-setup.ts",
   timeout: 30_000,
   expect: {
     timeout: 5_000,
@@ -26,13 +29,16 @@ export default defineConfig({
   projects: [
     {
       name: "mobile-360",
-      use: { ...devices["iPhone SE"] }, // 375 × 667
+      // WebKit (default de los devices iOS) no está disponible en este entorno;
+      // se fija Chromium con las mismas emulaciones de viewport/touch.
+      use: { ...devices["iPhone SE"], defaultBrowserType: "chromium" }, // 375 × 667
     },
     {
       name: "mobile-390",
       use: {
         ...devices["Pixel 5"], // 393 × 851
         viewport: { width: 390, height: 844 },
+        defaultBrowserType: "chromium",
       },
     },
     {
@@ -40,6 +46,7 @@ export default defineConfig({
       use: {
         ...devices["Galaxy S21"], // 412 × 915
         viewport: { width: 430, height: 932 },
+        defaultBrowserType: "chromium",
       },
     },
   ],

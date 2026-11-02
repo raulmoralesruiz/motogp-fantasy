@@ -12,9 +12,18 @@
  * - `docker compose up -d` (postgres + redis)
  * - `npm run dev` en localhost:3000
  * - Base de datos con al menos 1 temporada y 1 GP (seed:fiction)
+ *
+ * El builder de lineups requiere sesión (`protectedProcedure`, US-09):
+ * `globalSetup` crea un usuario E2E compartido y guarda su cookie en
+ * `auth-state.json` (storageState; ver `test/e2e/global-setup.ts`).
  */
 
-import { test, expect } from "@playwright/test";
+import path from "node:path";
+
+import { test, expect, type Page } from "@playwright/test";
+
+/** Sesión E2E compartida (la crea `globalSetup`; se ejecuta desde la raíz del repo). */
+const AUTH_STATE = path.join(process.cwd(), "test", "e2e", "auth-state.json");
 
 // ─────────────────────────── helpers ───────────────────────────
 
@@ -31,17 +40,20 @@ async function assertNoHorizontalOverflow(
   );
 }
 
-/** Verifica que todos los botones y selects tienen touch target ≥ 44px. */
-async function assertTouchTargets(
-  page: import("@playwright/test").Page,
-) {
+/**
+ * Verifica que los controles de la app (dentro de `<main>`) tienen touch
+ * target ≥ 44px (T-16). Se limita a `<main>` para no contar el widget de
+ * devtools de Next.js (solo aparece en dev y queda fuera de la app).
+ */
+async function assertTouchTargets(page: Page) {
   const violations: Array<{
     tag: string;
     class: string;
     width: number;
     height: number;
   }> = await page.evaluate(() => {
-    const interactive = document.querySelectorAll("button, select, input");
+    const root = document.querySelector("main") ?? document;
+    const interactive = root.querySelectorAll("button, select, input");
     const bad: Array<{
       tag: string;
       class: string;
@@ -64,9 +76,54 @@ async function assertTouchTargets(
   expect(violations).toEqual([]);
 }
 
+/**
+ * Abre el builder siguiendo el flujo real del usuario: `/lineups` →
+ * temporada → GP → presupuesto visible (`builder.data` cargado). Prueba
+ * temporada/GP hasta encontrar uno con mercado disponible.
+ */
+async function openBuilder(page: Page): Promise<void> {
+  await page.goto("/lineups");
+  await expect(page.getByRole("heading", { name: /Temporada y GP/i })).toBeVisible();
+
+  const seasonCount = (await page.locator("#season option").count()) - 1;
+  if (seasonCount < 1) {
+    throw new Error("E2E: no hay temporadas en la BD (¿seed:fiction ejecutado?)");
+  }
+
+  for (let s = 1; s <= seasonCount; s++) {
+    await page.selectOption("#season", { index: s });
+    await expect(page.locator("#gp")).toBeVisible();
+    // Espera a que termine de cargar la lista de GPs (>0 GPs).
+    try {
+      await expect
+        .poll(async () => (await page.locator("#gp option").count()) - 1, {
+          timeout: 5_000,
+        })
+        .toBeGreaterThan(0);
+    } catch {
+      continue; // temporada sin GPs: probar la siguiente
+    }
+    const gpCount = (await page.locator("#gp option").count()) - 1;
+    for (let g = 1; g <= gpCount; g++) {
+      await page.selectOption("#gp", { index: g });
+      try {
+        await expect(page.getByText(/Presupuesto:/i)).toBeVisible({ timeout: 4_000 });
+        return; // builder abierto
+      } catch {
+        /* GP sin mercado disponible: probar el siguiente */
+      }
+    }
+  }
+  throw new Error("E2E: no hay ningún GP con mercado disponible (¿seed:fiction ejecutado?)");
+}
+
 // ─────────────────────────── lineup builder ───────────────────────────
 
 test.describe("constructor de lineup — T-16", () => {
+  // El builder requiere sesión (`protectedProcedure`, US-09): se reutiliza el
+  // usuario E2E compartido de `globalSetup` (máx. 1 login contable por run;
+  // el rate-limit de login es 10/60 s por IP, US-01).
+  test.use({ storageState: AUTH_STATE });
   test("selector de temporada y GP cabe en viewport 375px", async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto("/lineups");
@@ -90,59 +147,62 @@ test.describe("constructor de lineup — T-16", () => {
 
   test("todos los campos del lineup son touch targets ≥ 44px en 375px", async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto("/lineups");
+    await openBuilder(page);
     await assertTouchTargets(page);
   });
 
   test("todos los campos del lineup son touch targets ≥ 44px en 390px", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/lineups");
+    await openBuilder(page);
     await assertTouchTargets(page);
   });
 
   test("todos los campos del lineup son touch targets ≥ 44px en 430px", async ({ page }) => {
     await page.setViewportSize({ width: 430, height: 932 });
-    await page.goto("/lineups");
+    await openBuilder(page);
     await assertTouchTargets(page);
   });
 
   test("botón 'Guardar lineup' es alcanzable en 375px", async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto("/lineups");
+    await openBuilder(page);
+    // El botón está deshabilitado hasta completar los 6 slots, pero debe estar en el DOM.
     const button = page.getByRole("button", { name: /Guardar lineup/i });
-    // El botón puede estar disabled (sin completar el formulario), pero debe estar en el DOM.
-    expect(button.count()).toBeGreaterThanOrEqual(1);
+    await expect(button).toHaveCount(1);
   });
 
   test("botón 'Guardar lineup' es alcanzable en 390px", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/lineups");
+    await openBuilder(page);
     const button = page.getByRole("button", { name: /Guardar lineup/i });
-    expect(button.count()).toBeGreaterThanOrEqual(1);
+    await expect(button).toHaveCount(1);
   });
 
   test("botón 'Guardar lineup' es alcanzable en 430px", async ({ page }) => {
     await page.setViewportSize({ width: 430, height: 932 });
-    await page.goto("/lineups");
+    await openBuilder(page);
     const button = page.getByRole("button", { name: /Guardar lineup/i });
-    expect(button.count()).toBeGreaterThanOrEqual(1);
+    await expect(button).toHaveCount(1);
   });
 
   test("información de presupuesto no se desborda en 375px", async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto("/lineups");
+    await openBuilder(page);
+    await expect(page.getByText(/Presupuesto:/i)).toBeVisible();
     await assertNoHorizontalOverflow(page);
   });
 
   test("información de presupuesto no se desborda en 390px", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/lineups");
+    await openBuilder(page);
+    await expect(page.getByText(/Presupuesto:/i)).toBeVisible();
     await assertNoHorizontalOverflow(page);
   });
 
   test("información de presupuesto no se desborda en 430px", async ({ page }) => {
     await page.setViewportSize({ width: 430, height: 932 });
-    await page.goto("/lineups");
+    await openBuilder(page);
+    await expect(page.getByText(/Presupuesto:/i)).toBeVisible();
     await assertNoHorizontalOverflow(page);
   });
 });

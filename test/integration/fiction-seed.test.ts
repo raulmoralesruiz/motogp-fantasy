@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import {
-  FICTION_RESULTS_VERSION,
   FICTION_SOURCE_NAME,
   seedFictionalSeason,
   type FictionWorld,
@@ -60,6 +59,13 @@ describe("T-22 · Dataset ficticio (economy.md §7) en BD real", () => {
     // 19 activos × (1 P0 + 6 GPs)
     expect(await prisma.price.count({ where: { assetId: { in: assetIds } } })).toBe(133);
     expect(await prisma.result.count({ where: { gpId: { in: gpIds } } })).toBe(66);
+    // Reglas versionadas de la temporada (sin reglas el builder no se
+    // puede computar — T-11, flujos E2E de lineup).
+    const rules = await prisma.seasonRule.findMany({
+      where: { seasonId: world.season.id },
+    });
+    expect(rules).toHaveLength(1);
+    expect(rules[0]?.version).toBe("provisional-v1");
   });
 
   it("todos los lineups fijos son completos (2 oro + 2 plata + 1 constructor + 1 equipo)", async () => {
@@ -92,7 +98,7 @@ describe("T-22 · Dataset ficticio (economy.md §7) en BD real", () => {
     }
   });
 
-  it("los resultados son provisionales con fuente y versión de auditoría", async () => {
+  it("los resultados son provisionales, con fuente de auditoría y sin results_version aún (ADR-0018)", async () => {
     const rows = await prisma.result.findMany({
       where: { gpId: { in: world.gps.map((g) => g.id) } },
     });
@@ -101,7 +107,9 @@ describe("T-22 · Dataset ficticio (economy.md §7) en BD real", () => {
       expect(row.status).toBe("provisional");
       expect(row.source).toBe("manual");
       expect(row.sourceName).toBe(FICTION_SOURCE_NAME);
-      expect(row.resultsVersion).toBe(FICTION_RESULTS_VERSION);
+      // ADR-0018/US-18: `results_version = null` hasta el primer recálculo
+      // (el `markDefinitive` asigna `rv-1`; `importEvent` lo hace igual).
+      expect(row.resultsVersion).toBeNull();
     }
   });
 

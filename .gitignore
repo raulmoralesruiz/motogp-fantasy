@@ -23,6 +23,12 @@ coverage/
 *.tsbuildinfo
 .vitest/
 
+# Artifacts E2E (T-11/T-16)
+playwright-report/
+test-results/
+test/e2e/auth-state.json
+test/e2e/admin-state.json
+
 # Sistema
 .DS_Store
 Thumbs.db

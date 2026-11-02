@@ -108,6 +108,7 @@ describe("US-18 · Definitivo + primer recálculo (PostgreSQL real)", () => {
   let r2: string;
   let r3: string;
   let r4: string;
+  let r5: string;
 
   // Eventos del GP del mundo (seedWorld crea solo la carrera, orderNum 1).
   let q2: string;
@@ -136,6 +137,7 @@ describe("US-18 · Definitivo + primer recálculo (PostgreSQL real)", () => {
       emailSender: new CapturingEmailSender(),
       appUrl: "http://localhost:3000",
       resetCfg: { tokenTtlSec: 3600, maxPerWindow: 5, windowSec: 300 },
+      registerCfg: { maxPerWindow: 100, windowSec: 3600 },
       bootstrapAdminEmail: ADMIN_EMAIL,
     });
     resultsRouter = createResultsRouter({ prisma });
@@ -144,6 +146,7 @@ describe("US-18 · Definitivo + primer recálculo (PostgreSQL real)", () => {
     r2 = world.riders[1].id;
     r3 = world.riders[2].id;
     r4 = world.riders[3].id;
+    r5 = world.riders[4].id;
 
     // Resto del fin de semana + Q1 (para los rechazos de evento no válido).
     q1 = (await prisma.weekendEvent.create({ data: { gpId: world.gp.id, type: "q1", orderNum: 2 } }))
@@ -1141,5 +1144,234 @@ describe("US-18 · Definitivo + primer recálculo (PostgreSQL real)", () => {
       where: { lineupId_resultsVersion: { lineupId: gpLineupId, resultsVersion: "rv-1" } },
     });
     expect(score).toBeDefined();
+  });
+
+  // ── T-11 (caso 3 del testing.md §3): piloto reemplazado → puntúa el que sale ──
+
+  it("caso 3 · piloto reemplazado a mitad de temporada: puntúa el que sale en ese GP", async () => {
+    // GP nuevo (ronda 8) + lineup (2 oro + 2 plata + ctor + equipo).
+    const gp = await prisma.gp.create({
+      data: {
+        seasonId: world.season.id,
+        round: 8,
+        name: `GP ${suffix} reemplazo piloto`,
+        circuitId: world.gp.circuitId,
+        date: new Date("2099-09-05T12:00:00Z"),
+      },
+    });
+    const race = await prisma.weekendEvent.create({
+      data: { gpId: gp.id, type: "race", orderNum: 1 },
+    });
+    await seedAffiliationsFor(gp.id);
+    const gpLineupId = await createLineupFor(gp.id);
+
+    // Reemplazo a mitad de temporada: el piloto original r1 (slot oro) queda
+    // lesionado → la exención de lesión reubica al reemplazo r5 en su slot.
+    const slots = await prisma.lineupSlot.findMany({ where: { lineupId: gpLineupId } });
+    const replacedSlot = slots.find(
+      (s) => s.slotType === "gold" && s.assetType === "rider" && s.assetId === r1,
+    );
+    if (!replacedSlot) throw new Error("Slot oro del lineup no encontrado");
+    await prisma.lineupSlot.update({ where: { id: replacedSlot.id }, data: { assetId: r5 } });
+
+    const { results } = await callerFor(ADMIN_IP, adminToken);
+    const importRes = await results.importEvent({
+      gpId: gp.id,
+      eventId: race.id,
+      entries: [
+        entry(r5, { position: 1, finished: true, bonuses: ["fastest-lap"] }),
+        entry(r2, { position: 2, finished: true }),
+      ],
+    });
+    expect(importRes).toMatchObject({ created: 2 });
+
+    const markRes = await results.markDefinitive({ gpId: gp.id });
+    expect(markRes).toMatchObject({
+      madeDefinitive: 2,
+      lineupsScored: 1,
+      resultsVersion: "rv-1",
+      noop: false,
+    });
+
+    // El lineup post-reemplazo: el slot de r1 pasó a ser del reemplazo (r5).
+    const afterSlots = await prisma.lineupSlot.findMany({ where: { lineupId: gpLineupId } });
+    const goldAfter = afterSlots.filter((s) => s.slotType === "gold").map((s) => s.assetId).sort();
+    expect(goldAfter).toHaveLength(2);
+    expect(goldAfter).toEqual(expect.arrayContaining([r2, r5]));
+    const silverAfter = afterSlots
+      .filter((s) => s.slotType === "silver")
+      .map((s) => s.assetId)
+      .sort();
+    expect(silverAfter).toHaveLength(2);
+    expect(silverAfter).toEqual(expect.arrayContaining([r3, r4]));
+
+    // Score definitivo del GP del reemplazo: puntuación al piloto que corre.
+    const score = await prisma.score.findUniqueOrThrow({
+      where: { lineupId_resultsVersion: { lineupId: gpLineupId, resultsVersion: "rv-1" } },
+    });
+    expect(score.userId).toBe(world.user.id);
+    expect(score.gpId).toBe(gp.id);
+    expect(score.rulesVersion).toBe("scoring-v1");
+    expect(Number(score.pointsTotal)).toBeGreaterThan(0);
+    const breakdown = score.breakdown as unknown as {
+      rulesVersion: string;
+      gold: Array<{ riderId: string; weight: number; points: number; breakdown: RiderBreakdown }>;
+      silver: Array<{ riderId: string; weight: number; points: number; breakdown: RiderBreakdown }>;
+      constructor: { id: string; points: number };
+      team: { id: string; points: number };
+      total: number;
+    };
+    expect(breakdown.rulesVersion).toBe("scoring-v1");
+    expect(breakdown.total).toBeCloseTo(Number(score.pointsTotal), 6);
+
+    const byRider = new Map<string, (typeof breakdown.gold)[number]>(
+      [...breakdown.gold, ...breakdown.silver].map((slot) => [slot.riderId, slot]),
+    );
+
+    // El piloto reemplazado (r1) NO puntúa en el lineup post-reemplazo.
+    expect(byRider.has(r1)).toBe(false);
+
+    // El reemplazo (r5) puntúa los puntos del GP: ganador (1º) + Vuelta rápida.
+    expect(byRider.get(r5)).toMatchObject({
+      weight: 1,
+      points: 33,
+      breakdown: {
+        q2: 0,
+        sprint: 0,
+        // Puntos de posición (25) + bonos (vuelta rápida 3 + ganador 5) = total.
+        mainRace: 25,
+        bonuses: expect.arrayContaining([
+          { code: "fastest-lap", points: 3 },
+          { code: "winner", points: 5 },
+        ]),
+        penalties: [],
+        total: 33,
+      },
+    });
+
+    // El otro ocupante del slot oro (r2) puntúa con su posición (P2).
+    expect(byRider.get(r2)).toMatchObject({
+      weight: 1,
+      points: 20,
+      breakdown: { q2: 0, sprint: 0, mainRace: 20, bonuses: [], penalties: [], total: 20 },
+    });
+  });
+
+  it("caso 11 · DQ posterior: 0 por posición + (−10), y la corrección recalcula (scoring.md §6)", async () => {
+    // GP nuevo (ronda 10) + lineup del usuario.
+    const gp = await prisma.gp.create({
+      data: {
+        seasonId: world.season.id,
+        round: 10,
+        name: `GP ${suffix} DQ posterior`,
+        circuitId: world.gp.circuitId,
+        date: new Date("2099-09-12T12:00:00Z"),
+      },
+    });
+    const race = await prisma.weekendEvent.create({
+      data: { gpId: gp.id, type: "race", orderNum: 1 },
+    });
+    await seedAffiliationsFor(gp.id);
+    const gpLineupId = await createLineupFor(gp.id);
+
+    const { results } = await callerFor(ADMIN_IP, adminToken);
+    // Carrera: r3 gana; r2 es P2 con DQ posterior (la descalificación se
+    // emite tras la carrera y se importa junto al resultado).
+    const importRes = await results.importEvent({
+      gpId: gp.id,
+      eventId: race.id,
+      entries: [
+        entry(r3, { position: 1, finished: true }),
+        entry(r2, { position: 2, finished: true, penalties: ["dq"] }),
+      ],
+    });
+    expect(importRes).toMatchObject({ created: 2 });
+
+    const markRes = await results.markDefinitive({ gpId: gp.id });
+    expect(markRes).toMatchObject({
+      madeDefinitive: 2,
+      lineupsScored: 1,
+      resultsVersion: "rv-1",
+      noop: false,
+    });
+
+    // Score rv-1: la DQ anula los puntos de posición de r2 (P2 = 20 → 0) y
+    // suma la penalización −10; NO se suma el DNF (la DQ tiene precedencia).
+    const score = await prisma.score.findUniqueOrThrow({
+      where: {
+        lineupId_resultsVersion: { lineupId: gpLineupId, resultsVersion: "rv-1" },
+      },
+    });
+    const breakdown = score.breakdown as unknown as {
+      gold: Array<{
+        riderId: string;
+        points: number;
+        breakdown: {
+          bonuses: Array<{ code: string; points: number }>;
+          penalties: Array<{ code: string; points: number }>;
+        };
+      }>;
+      silver: Array<{
+        riderId: string;
+        points: number;
+        breakdown: {
+          bonuses: Array<{ code: string; points: number }>;
+          penalties: Array<{ code: string; points: number }>;
+        };
+      }>;
+    };
+    const byRider = new Map(
+      [...breakdown.gold, ...breakdown.silver].map((slot) => [slot.riderId, slot]),
+    );
+    expect(byRider.get(r2)).toMatchObject({
+      points: -10,
+      breakdown: { bonuses: [], penalties: [{ code: "dq", points: -10 }] },
+    });
+
+    // Corrección (la DQ se retira): recálculo inline con nueva versión (rv-2)
+    // → r2 vuelve a puntuar su posición (P2 = 20) sin penalización.
+    const corrected = await results.importEvent({
+      gpId: gp.id,
+      eventId: race.id,
+      entries: [entry(r2, { position: 2, finished: true })],
+      reason: "retirada de la DQ por apelación",
+    });
+    expect(corrected).toMatchObject({
+      corrected: 1,
+      recalculated: true,
+      resultsVersion: "rv-2",
+      lineupsScored: 1,
+    });
+
+    // Auditoría: corrección + recálculo del GP.
+    expect(
+      await prisma.auditLog.count({
+        where: { action: "results.correct", entityId: race.id },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.auditLog.count({
+        where: { action: "results.recalculated", entityId: gp.id },
+      }),
+    ).toBe(1);
+
+    const scoreRv2 = await prisma.score.findUniqueOrThrow({
+      where: {
+        lineupId_resultsVersion: { lineupId: gpLineupId, resultsVersion: "rv-2" },
+      },
+    });
+    const b2 = scoreRv2.breakdown as unknown as {
+      gold: Array<{ riderId: string; points: number; breakdown: { penalties: Array<{ code: string }> } }>;
+      silver: Array<{ riderId: string; points: number; breakdown: { penalties: Array<{ code: string }> } }>;
+    };
+    const byRider2 = new Map(
+      [...b2.gold, ...b2.silver].map((slot) => [slot.riderId, slot]),
+    );
+    expect(byRider2.get(r2)?.points).toBeCloseTo(20, 6);
+    expect(byRider2.get(r2)?.breakdown.penalties).toEqual([]);
+
+    // Histórico conservado (invariante 7): el Score rv-1 (con la DQ) sigue
+    // disponible y difiere del rv-2.
+    expect(Number(score.pointsTotal)).not.toBeCloseTo(Number(scoreRv2.pointsTotal), 6);
   });
 });

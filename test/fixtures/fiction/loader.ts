@@ -24,12 +24,11 @@ import type {
   User,
   WeekendEvent,
 } from "@prisma/client";
+import { PROVISIONAL_SEASON_RULES } from "../../../app/shared/config/season-rules";
 import { loadFictionDataset, type FictionDataset } from "./index.js";
 
 /** Nombre+versión de la fuente de los resultados sembrados (auditoría). */
 export const FICTION_SOURCE_NAME = "fixture-ficticio-v1";
-/** Versión de resultados de la siembra inicial. */
-export const FICTION_RESULTS_VERSION = "fiction-v1";
 
 export interface FictionWorld {
   season: Season;
@@ -94,6 +93,18 @@ export async function seedFictionalSeason(
   // 1. Temporada + GPs (circuito propio por GP) + evento de carrera.
   const season = await prisma.season.create({
     data: { name: ds.season.name, year: ds.season.year },
+  });
+  // Reglas versionadas de temporada (US-04): toda temporada real tiene al
+  // menos una versión de reglas; sin ellas el builder/presupuesto no se
+  // puede computar (LineupService.latestRules → "La temporada no tiene
+  // reglas publicadas."). El dataset ficticio usa las reglas provisionales
+  // que la app distribuye por defecto (B=100, t=0.25, cmax=8, ADR-0030).
+  await prisma.seasonRule.create({
+    data: {
+      seasonId: season.id,
+      version: "provisional-v1",
+      rules: PROVISIONAL_SEASON_RULES,
+    },
   });
   const gps: Gp[] = [];
   const events: WeekendEvent[] = [];
@@ -254,7 +265,10 @@ export async function seedFictionalSeason(
         riderId: requireId(riderDbId, res.riderId, "piloto"),
         position: res.position,
         status: "provisional" as const,
-        resultsVersion: FICTION_RESULTS_VERSION,
+        // ADR-0018/US-18: las filas importadas antes del primer recálculo
+        // tienen `results_version = null`; la asigna el primer recálculo
+        // (rv-1) al marcar el GP definitivo. (`importEvent` lo hace igual.)
+        resultsVersion: null,
         source: "manual" as const,
         sourceName: FICTION_SOURCE_NAME,
         raw: { riderId: res.riderId, position: res.position, status: res.status },

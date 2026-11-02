@@ -115,6 +115,7 @@ describe("US-09 · Lineups: composición, coste y cambios (PostgreSQL real)", ()
       emailSender: new CapturingEmailSender(),
       appUrl: "http://localhost:3000",
       resetCfg: { tokenTtlSec: 3600, maxPerWindow: 5, windowSec: 300 },
+      registerCfg: { maxPerWindow: 100, windowSec: 3600 },
       bootstrapAdminEmail: ADMIN_EMAIL,
     });
     lineupsRouter = createLineupsRouter({ prisma });
@@ -852,6 +853,102 @@ describe("US-09 · Lineups: composición, coste y cambios (PostgreSQL real)", ()
       code: "PRECONDITION_FAILED",
       message: "El GP está cerrado (lockout): no se pueden guardar lineups.",
     });
+  });
+
+  // T-11 (testing.md §2.6 · US-13): carga del lockout — N usuarios guardando
+  // en la ventana de cierre → ninguno se aplica tras el cierre (sin condiciones
+  // de carrera). GP dedicado en estado `scheduled` (ventana abierta).
+
+  it("T-11 · carga: N usuarios guardando en la ventana de cierre → ninguno se aplica tras el cierre", async () => {
+    // GP de carga, ventana abierta (scheduled, sin lockout).
+    const gpLoad = await prisma.gp.create({
+      data: {
+        seasonId: world.season.id,
+        round: 99,
+        name: `GP ${suffix} CARGA`,
+        circuitId: world.gp.circuitId,
+        date: new Date("2099-07-20T12:00:00Z"),
+      },
+    });
+    // Afiliaciones + precios del GP de carga (mismo patrón que `world.gp`).
+    await Promise.all([
+      ...[world.riders[0].id, world.riders[1].id, world.riders[4].id, riderXId].map(
+        (riderId) =>
+          prisma.riderAffiliation.create({
+            data: { gpId: gpLoad.id, riderId, teamId: teamA.id, constructorId: ctorA.id },
+          }),
+      ),
+      ...[world.riders[2].id, world.riders[3].id].map((riderId) =>
+        prisma.riderAffiliation.create({
+          data: { gpId: gpLoad.id, riderId, teamId: teamBId, constructorId: ctorBId },
+        }),
+      ),
+    ]);
+    await seedGpPrices(gpLoad.id);
+
+    // N=5 usuarios guardan (concurrente) en la ventana abierta → todos aplican.
+    const saveInWindow = async (token: string, ip: string) => {
+      const { lineups } = await callerFor(ip, token);
+      return lineups.save(
+        lineupInput(gpLoad.id, [r1.id, r2.id], [r3.id, r4.id], ctorA.id, teamA.id),
+      );
+    };
+    const saved = await Promise.all([
+      saveInWindow(mariaToken, USER_IP),
+      saveInWindow(carlosToken, USER2_IP),
+      saveInWindow(luisToken, "198.51.100.60"),
+      saveInWindow(saraToken, "198.51.100.61"),
+      saveInWindow(pabloToken, "198.51.100.62"),
+    ]);
+    for (const res of saved) {
+      expect(res).toMatchObject({ gpId: gpLoad.id, firstSave: true, cost: 80 });
+    }
+
+    // El admin cierra el GP (transición `scheduled → locked`).
+    await prisma.gp.update({ where: { id: gpLoad.id }, data: { status: "locked" } });
+
+    // N usuarios intentan guardar tras el cierre (concurrente) → ninguno aplica.
+    const loadUsers: Array<{ name: string; token: string; ip: string }> = [
+      { name: "maria", token: mariaToken, ip: USER_IP },
+      { name: "carlos", token: carlosToken, ip: USER2_IP },
+      { name: "luis", token: luisToken, ip: "198.51.100.60" },
+      { name: "sara", token: saraToken, ip: "198.51.100.61" },
+      { name: "pablo", token: pabloToken, ip: "198.51.100.62" },
+    ];
+    const attempts: Array<{ code?: string; message?: string }> = await Promise.all(
+      loadUsers.map(async ({ token, ip }) => {
+        const { lineups } = await callerFor(ip, token);
+        try {
+          await lineups.save(
+            lineupInput(gpLoad.id, [r1.id, r2.id], [r3.id, r4.id], ctorA.id, teamA.id),
+          );
+          return { code: "OK", message: "el save debería estar bloqueado" };
+        } catch (e) {
+          return e as { code?: string; message?: string };
+        }
+      }),
+    );
+    for (const e of attempts) {
+      expect(e).toMatchObject({
+        code: "PRECONDITION_FAILED",
+        message: "El GP está cerrado (lockout): no se pueden guardar lineups.",
+      });
+    }
+
+    // Ningún guardado post-cierre se aplicó: los lineups siguen intactos y las
+    // movimientos de presupuesto siguen siendo los del primer save (base+carry+spend).
+    const gpLoadLineups = await prisma.lineup.findMany({ where: { gpId: gpLoad.id } });
+    expect(gpLoadLineups).toHaveLength(5);
+    for (const lu of gpLoadLineups) {
+      expect(await prisma.lineupSlot.count({ where: { lineupId: lu.id } })).toBe(6);
+    }
+    const movementsCount = await prisma.budgetMovement.count({
+      where: { gpId: gpLoad.id },
+    });
+    expect(movementsCount).toBe(15); // 5 usuarios × 3 movimientos del primer save
+
+    // Restaura el estado para no contaminar el resto de la suite.
+    await prisma.gp.update({ where: { id: gpLoad.id }, data: { status: "scheduled" } });
   });
 
   it("GP inexistente: NOT_FOUND", async () => {
