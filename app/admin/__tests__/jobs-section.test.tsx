@@ -172,6 +172,59 @@ describe("JobsSection (T-14, ADR-0036)", () => {
     expect(screen.getByText(/Activo: los errores/)).toBeInTheDocument();
   });
 
+  it("probe sin éxito registrado: 'sin éxito registrado' + último error", () => {
+    mockStatus({
+      isPending: false,
+      isError: false,
+      data: {
+        queues: QUEUES,
+        activeAlerts: [],
+        probe: {
+          consecutiveFailures: 2,
+          lastError: "timeout (test)",
+          lastAttemptAt: "2026-11-02T10:00:00.000Z",
+          lastSuccessAt: null,
+          lastLatencyMs: null,
+        },
+        sentryEnabled: false,
+      },
+    });
+    render(<JobsSection />);
+
+    expect(screen.getByText(/sin éxito registrado/)).toBeInTheDocument();
+    expect(screen.getByText(/fallos consecutivos/)).toBeInTheDocument();
+    expect(screen.getByText("timeout (test)")).toBeInTheDocument();
+  });
+
+  it("alerta activa sin error: no muestra el motivo", () => {
+    mockStatus({
+      isPending: false,
+      isError: false,
+      data: {
+        queues: [],
+        activeAlerts: [
+          {
+            gpId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            event: "sprint",
+            source: "pulselive",
+            consecutiveFailures: 4,
+            lastError: null,
+            lastAttemptAt: "2026-11-02T09:00:00.000Z",
+            lastSuccessAt: null,
+          },
+        ],
+        probe: null,
+        sentryEnabled: false,
+      },
+    });
+    render(<JobsSection />);
+
+    // La alerta muestra GP + número de fallos…
+    expect(screen.getByText(/4 fallos/)).toBeInTheDocument();
+    // …pero NO el motivo (alerta con `lastError: null`).
+    expect(screen.queryByText(/HTTP 503/)).not.toBeInTheDocument();
+  });
+
   describe('botón "Comprobar fuente ahora" (admin.sourceHealth)', () => {
     it("ok: alerta de éxito con la latencia", async () => {
       mockStatus({ isPending: false, isError: false, data: STATUS_OK });

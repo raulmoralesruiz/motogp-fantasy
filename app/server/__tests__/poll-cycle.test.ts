@@ -335,6 +335,49 @@ describe("runResultsPollCycle · fallos del polling (T-14, ADR-0036)", () => {
     expect(send).toHaveBeenCalledTimes(1);
   });
 
+  it("fallo que persiste sobre el umbral (3 → 4): NO alerta de recuperación", async () => {
+    const { sink, send } = makeSink();
+    const { prisma } = makePrisma({
+      gps: [{ id: "gp-1", name: "GP de Indonesia" }],
+      failingBefore: [
+        {
+          gpId: "gp-1",
+          event: "race",
+          source: "pulselive",
+          consecutiveFailures: THRESHOLD,
+        },
+      ],
+      after: [
+        {
+          gpId: "gp-1",
+          event: "race",
+          source: "pulselive",
+          consecutiveFailures: THRESHOLD + 1,
+        },
+      ],
+    });
+    const { importEventFromSource, recordSourceFailure } = makeService({
+      importFails: true,
+      newFailureCount: THRESHOLD + 1,
+    });
+
+    const out = await runResultsPollCycle(NOW, {
+      ...baseDeps(true),
+      prisma: prisma as PrismaClient,
+      resultsService: { importEventFromSource, recordSourceFailure } as ResultsPollService,
+      alertSink: sink as AlertSink,
+    });
+
+    // Siguiendo en fallo sobre el umbral: ni nueva alerta de fallo (el
+    // cruce ya se avisó)...
+    expect(out.poll.outcomes).toEqual([
+      expect.objectContaining({ kind: "failed" }),
+    ]);
+    // ...ni alerta de recuperación (sigue caído).
+    expect(out.alerts).toEqual([]);
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it("sin alertas activas previas: solo la consulta de failingBefore (1 llamada)", async () => {
     const { prisma, sourceStateFindMany } = makePrisma({ gps: [] });
 

@@ -18,7 +18,7 @@
  * (patrón `jobs-lock.test.ts`).
  */
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   CapturingEmailSender,
@@ -135,9 +135,16 @@ describe("T-14 · admin.jobsStatus + admin.sourceHealth (ADR-0036)", () => {
     return token;
   }
 
-  /** Ctx con sesión activa de admin/user + caller del router admin. */
-  async function callerAs(isAdmin: boolean, ip = "198.51.100.2") {
+  /**
+   * Ctx con sesión activa de admin/user + caller del router admin.
+   * Cada login usa SU IP (patrón rbac.test.ts): el rate-limit anti fuerza
+   * bruta es 5 intentos/min/IP, y esta suite vuelve a loguear por test —
+   * compartir IP dispararía "Estás enviando demasiadas peticiones.".
+   */
+  let loginIp = 10;
+  async function callerAs(isAdmin: boolean) {
     const em = isAdmin ? adminEmail : userEmail;
+    const ip = `198.51.100.${loginIp++}`;
     const loginCtx = await ctxFor(ip);
     await authRouter.createCaller(loginCtx).login({ email: em, password: PASSWORD });
     const token = tokenFrom(loginCtx.pendingCookies);
@@ -297,6 +304,33 @@ describe("T-14 · admin.jobsStatus + admin.sourceHealth (ADR-0036)", () => {
       const out = await fakeFail().createCaller(ctx).sourceHealth();
       expect(out.ok).toBe(false);
       expect(out.error).toContain("fetch failed");
+    });
+
+    it("probe por defecto: la implementación real con el fetch global", async () => {
+      // `adminRouter` se creó SIN `probeSourceImpl`: la mutación usa la
+      // implementación por defecto (`probeSource`) con el fetch global —
+      // el camino que recorre la app en producción. Solo se simula fetch.
+      const urls: string[] = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string) => {
+          urls.push(url);
+          return new Response(JSON.stringify([{ id: "s2026" }]), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }),
+      );
+      try {
+        const { ctx } = await callerAs(true);
+        const out = await adminRouter.createCaller(ctx).sourceHealth();
+        expect(out).toMatchObject({ ok: true, error: null });
+        expect(out.latencyMs).toBeTypeOf("number");
+        // Sondeó el endpoint ligero del adapter (no otro).
+        expect(urls[0]).toContain("/results/seasons");
+      } finally {
+        vi.unstubAllGlobals();
+      }
     });
   });
 });
