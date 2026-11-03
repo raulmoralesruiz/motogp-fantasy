@@ -157,9 +157,11 @@ Si el rollback es por un problema de código, también puedes
 
 ## 6. Backups y mantenimiento
 
-- **La BD vive en `/mnt/data-nas/motogp/pgdata`.** Haz snapshots periódicos del
-  dataset en TrueNAS (o una copia del directorio). La prueba de restore es la
-  tarea T-13 del backlog.
+- **Backups (T-13, ADR-0037):** `backup.sh` (raíz del repo) hace un `pg_dump -Fc`
+  diario (03:17 UTC, cron de `raul`) con retención 30 días + 12 meses y log
+  auditable en `/mnt/data-nas/motogp/backups/backup.log`. `restore-check.sh`
+  verifica el restore en una BD scratch (no toca producción). Procedimiento
+  completo y restore de emergencia: runbook §4.
 - Logs: `docker compose -f docker-compose.prod.yml logs -f web`
   (o Portainer → Containers → motogp-web → Logs).
 - Imágenes huérfanas: `docker image prune` de vez en cuando (con cuidado:

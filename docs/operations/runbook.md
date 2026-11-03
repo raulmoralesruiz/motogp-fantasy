@@ -98,54 +98,64 @@ curl https://motogp.raulmorales.eu/api/trpc/leagues.ranking \
 
 ---
 
-## 4. Restaurar backup de la BD
+## 4. Backups y restore de la BD (T-13, ADR-0037)
 
-### 4.1 Desde snapshot del pool (TrueNAS)
+### 4.1 Backup automático (diario, 03:17 UTC)
 
-1. Identificar el snapshot: `zfs list -t snapshot | grep motogp-pgdata`.
-2. Verificar integridad: `zfs diff <snapshot1> <snapshot2>`.
-3. Detener el contenedor de la app:
-   ```bash
-   docker compose -f docker-compose.prod.yml stop web
-   ```
-4. Restaurar:
-   ```bash
-   zfs rollback <snapshot>
-   ```
-   O copiar desde otro snapshot:
-   ```bash
-   zfs send <snapshot-antiguo> | zfs receive /mnt/data-nas/motogp/pgdata
-   ```
-5. Arrancar la app:
-   ```bash
-   ./deploy.sh
-   ```
+`backup.sh` (raíz del repo, desplegado en `/mnt/data-nas/www/motogp/`):
 
-### 4.2 Desde archivo de dump (pg_dump)
+- `pg_dump -Fc` de la BD `motogp` (dump lógico consistente; la app no se detiene).
+- Verificación al crear: tamaño mínimo + `pg_restore --list` ≥ 30 tablas (un dump corrupto **falla en el backup**, no en el restore).
+- Retención (D-11, PROVISIONAL): **30 días** en `backups/daily/` + **12 meses** en `backups/monthly/` (promoción automática del 1º del mes).
+- `flock`: nunca dos backups a la vez. Log: una línea por backup en `backups/backup.log` (fichero, tamaño, sha256, nº de tablas, status).
 
-1. Copiar el dump al servidor:
-   ```bash
-   scp motogp-backup.sql root@192.168.1.3:/tmp/
-   ```
-2. Detener la app:
-   ```bash
-   docker compose -f docker-compose.prod.yml stop web
-   ```
-3. Restaurar:
-   ```bash
-   docker compose -f docker-compose.prod.yml exec postgres \
-     pg_restore -U motogp -d motogp --clean --if-exists /tmp/motogp-backup.sql
-   ```
-4. Arrancar la app:
-   ```bash
-   ./deploy.sh
-   ```
-
-**Verificar post-restore:**
+**Instalación (una vez, usuario `raul`, sin sudo):**
 
 ```bash
-curl -s https://motogp.raulmorales.eu/api/health | jq .
+mkdir -p /mnt/data-nas/motogp/backups    # ANTES del cron (la redirección de log necesita el directorio)
+chmod +x /mnt/data-nas/www/motogp/backup.sh
+(crontab -l 2>/dev/null; echo '17 3 * * * /mnt/data-nas/www/motogp/backup.sh >> /mnt/data-nas/motogp/backups/cron.log 2>&1') | crontab -
 ```
+
+Verificar la instalación: `crontab -l | grep backup.sh`.
+Verificar que corre (última línea = la fecha de hoy o ayer): `tail -1 /mnt/data-nas/motogp/backups/backup.log`.
+
+### 4.2 Prueba de restore (verificada, no destructiva)
+
+`restore-check.sh` restaura el dump (por defecto el más reciente de `daily/`) en una **BD scratch** `motogp_restore_check` — la BD de producción no se toca — y compara por tabla contra la BD en vivo: nº de filas + `md5` de las filas ordenadas. Tablas volátiles (`sessions`, `audit_log`, `password_reset_tokens`, `source_state`) pueden diferir por uso normal ("OK (volátil)"); el resto DEBEN ser idénticas. Sale `RESTORE-OK` (exit 0) o `RESTORE-FAIL` (exit ≠ 0).
+
+```bash
+./restore-check.sh                    # dump más reciente de daily/
+./restore-check.sh <ruta-a-un-dump>   # p. ej. uno mensual
+```
+
+**Última ejecución verificada en producción (2026-11-03):** `RESTORE-OK` — 35/35 tablas (29 usuarios, 244 resultados, 2179 afiliaciones, 350 eventos…); única diferencia: `source_state` (OK volátil, el worker la actualiza cada ciclo).
+
+### 4.3 Restore real de emergencia (dump → BD de producción)
+
+Solo tras un incidente (borrado accidental, migración rota, bug de truncado). **Hace reemplazar la BD de producción** — los datos creados entre el backup y ahora se pierden (ventana de recuperación ≈ 24 h con backup diario).
+
+1. **Elegir el dump:** `ls -lt /mnt/data-nas/motogp/backups/daily/ | head` (o `monthly/` si es más antiguo).
+2. **Probar ANTES el restore** (scratch, no destructivo): `./restore-check.sh /mnt/data-nas/motogp/backups/daily/<dump>`. Si no sale `RESTORE-OK`, no continuar.
+3. **Detener la app** (evita escrituras durante el restore):
+   ```bash
+   docker compose -p motogp -f docker-compose.prod.yml stop web worker
+   ```
+4. **Restaurar sobre `motogp`:**
+   ```bash
+   docker exec -i motogp-postgres pg_restore -v -e --single-transaction \
+     -U motogp -d motogp --clean --if-exists < /mnt/data-nas/motogp/backups/daily/<dump>
+   ```
+5. **Arrancar la app:**
+   ```bash
+   docker compose -p motogp -f docker-compose.prod.yml start web worker
+   ```
+6. **Verificar post-restore:**
+   ```bash
+   curl -s https://motogp.raulmorales.eu/api/health | jq .
+   docker exec motogp-postgres psql -U motogp -d motogp -Atc \
+     'SELECT count(*) FROM users'   # coherente con el pre-incidente
+   ```
 
 ---
 

@@ -66,9 +66,12 @@
 
 ### 1.10 Backup y restore
 
-- **Backups** automáticos de PostgreSQL (diarios + PITR si la plataforma lo permite).
-- **Prueba de restore** periódica (un task del backlog).
-- **Retención** definida (PROVISIONAL: 30 días diarios + 12 meses mensuales).
+> **Operativo (T-13, ADR-0037, 2026-11-03):** `backup.sh` (dump `pg_dump -Fc` diario 03:17 UTC + verificación al crear + retención + log auditable) y `restore-check.sh` (restore verificado en BD scratch, no destructivo) en la raíz del repo; procedimiento completo en runbook §4.
+
+- **Backups** automáticos de PostgreSQL: diarios (PITR como mejora futura — ADR-0037 §Reversibilidad).
+- **Prueba de restore**: `restore-check.sh` (fingerprint por tabla contra la BD en vivo; verificado en producción 2026-11-03).
+- **Retención** definida (PROVISIONAL: 30 días diarios + 12 meses mensuales — D-11 cerrada).
+- **Riesgo residual aceptado:** los dumps viven en la misma pool que los datos (raidz1, tolera 1 disco); copia off-site como mejora natural.
 
 ### 1.11 Privacidad y eliminación de cuenta (GDPR)
 
