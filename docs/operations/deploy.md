@@ -159,7 +159,7 @@ Si el rollback es por un problema de código, también puedes
 
 - **Backups (T-13, ADR-0037):** `backup.sh` (raíz del repo) hace un `pg_dump -Fc`
   diario (03:17 UTC, cron de `raul`) con retención 30 días + 12 meses y log
-  auditable en `/mnt/data-nas/motogp/backups/backup.log`. `restore-check.sh`
+  auditable en `/mnt/data-nas/backups/motogp/backup.log`. `restore-check.sh`
   verifica el restore en una BD scratch (no toca producción). Procedimiento
   completo y restore de emergencia: runbook §4.
 - Logs: `docker compose -f docker-compose.prod.yml logs -f web`

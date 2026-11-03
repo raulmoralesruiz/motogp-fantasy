@@ -29,7 +29,7 @@ cd "$(dirname "$0")"
 COMPOSE="docker compose -p motogp -f docker-compose.prod.yml"
 DB="motogp"
 SCRATCH="motogp_restore_check"
-BACKUP_ROOT="${MOTOGP_BACKUP_ROOT:-/mnt/data-nas/motogp/backups}"
+BACKUP_ROOT="${MOTOGP_BACKUP_ROOT:-/mnt/data-nas/backups/motogp}"
 VOLATILE=" sessions audit_log password_reset_tokens source_state "
 
 # ── 0. Dump a probar ────────────────────────────────────────────────────────

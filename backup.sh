@@ -17,9 +17,9 @@
 #   ./backup.sh
 #
 # Cron (usuario raul, ver runbook §4.1):
-#   17 3 * * * /mnt/data-nas/www/motogp/backup.sh >> /mnt/data-nas/motogp/backups/cron.log 2>&1
+#   17 3 * * * /mnt/data-nas/www/motogp/backup.sh >> /mnt/data-nas/backups/motogp/cron.log 2>&1
 #
-# El backup queda en /mnt/data-nas/motogp/backups/ (pool data-nas raidz1,
+# El backup queda en /mnt/data-nas/backups/motogp/ (pool data-nas raidz1,
 # tolera 1 disco). Protege contra incidentes lógicos de la BD (borrado,
 # migración rota, mal restore, ransomware lógico); NO es protección contra
 # la pérdida total del NAS (residual — ver ADR-0037 §5).
@@ -33,7 +33,7 @@ COMPOSE="docker compose -p motogp -f docker-compose.prod.yml"
 DB="motogp"
 PG_CONTAINER="motogp-postgres"
 
-BACKUP_ROOT="${MOTOGP_BACKUP_ROOT:-/mnt/data-nas/motogp/backups}"
+BACKUP_ROOT="${MOTOGP_BACKUP_ROOT:-/mnt/data-nas/backups/motogp}"
 DAILY_KEEP="${MOTOGP_DAILY_KEEP:-30}"
 MONTHLY_KEEP="${MOTOGP_MONTHLY_KEEP:-12}"
 

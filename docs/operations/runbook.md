@@ -112,13 +112,13 @@ curl https://motogp.raulmorales.eu/api/trpc/leagues.ranking \
 **Instalación (una vez, usuario `raul`, sin sudo):**
 
 ```bash
-mkdir -p /mnt/data-nas/motogp/backups    # ANTES del cron (la redirección de log necesita el directorio)
+mkdir -p /mnt/data-nas/backups/motogp    # ANTES del cron (la redirección de log necesita el directorio)
 chmod +x /mnt/data-nas/www/motogp/backup.sh
-(crontab -l 2>/dev/null; echo '17 3 * * * /mnt/data-nas/www/motogp/backup.sh >> /mnt/data-nas/motogp/backups/cron.log 2>&1') | crontab -
+(crontab -l 2>/dev/null; echo '17 3 * * * /mnt/data-nas/www/motogp/backup.sh >> /mnt/data-nas/backups/motogp/cron.log 2>&1') | crontab -
 ```
 
 Verificar la instalación: `crontab -l | grep backup.sh`.
-Verificar que corre (última línea = la fecha de hoy o ayer): `tail -1 /mnt/data-nas/motogp/backups/backup.log`.
+Verificar que corre (última línea = la fecha de hoy o ayer): `tail -1 /mnt/data-nas/backups/motogp/backup.log`.
 
 ### 4.2 Prueba de restore (verificada, no destructiva)
 
@@ -135,8 +135,8 @@ Verificar que corre (última línea = la fecha de hoy o ayer): `tail -1 /mnt/dat
 
 Solo tras un incidente (borrado accidental, migración rota, bug de truncado). **Hace reemplazar la BD de producción** — los datos creados entre el backup y ahora se pierden (ventana de recuperación ≈ 24 h con backup diario).
 
-1. **Elegir el dump:** `ls -lt /mnt/data-nas/motogp/backups/daily/ | head` (o `monthly/` si es más antiguo).
-2. **Probar ANTES el restore** (scratch, no destructivo): `./restore-check.sh /mnt/data-nas/motogp/backups/daily/<dump>`. Si no sale `RESTORE-OK`, no continuar.
+1. **Elegir el dump:** `ls -lt /mnt/data-nas/backups/motogp/daily/ | head` (o `monthly/` si es más antiguo).
+2. **Probar ANTES el restore** (scratch, no destructivo): `./restore-check.sh /mnt/data-nas/backups/motogp/daily/<dump>`. Si no sale `RESTORE-OK`, no continuar.
 3. **Detener la app** (evita escrituras durante el restore):
    ```bash
    docker compose -p motogp -f docker-compose.prod.yml stop web worker
@@ -144,7 +144,7 @@ Solo tras un incidente (borrado accidental, migración rota, bug de truncado). *
 4. **Restaurar sobre `motogp`:**
    ```bash
    docker exec -i motogp-postgres pg_restore -v -e --single-transaction \
-     -U motogp -d motogp --clean --if-exists < /mnt/data-nas/motogp/backups/daily/<dump>
+     -U motogp -d motogp --clean --if-exists < /mnt/data-nas/backups/motogp/daily/<dump>
    ```
 5. **Arrancar la app:**
    ```bash
