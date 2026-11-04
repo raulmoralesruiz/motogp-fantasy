@@ -60,6 +60,10 @@ const serverEnvSchema = z.object({
   // (minúsculas) recibe `global_admin`. Vacío → nadie lo recibe. Debe
   // fijarse antes del primer registro con ese email (BD nueva).
   BOOTSTRAP_ADMIN_EMAIL: z.string().default(""),
+  // D-07/ADR-0039 · 2FA TOTP: parámetros OPERATIVOS del segundo factor (no
+  // reglas de juego: no viven en `season_rules`, AGENTS.md §1.3).
+  TOTP_CHALLENGE_TTL_SEC: z.coerce.number().int().positive().default(300),
+  TOTP_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
   // US-31 · Alta automática en una liga pública de bienvenida. Es un UUID
   // operativo del servidor (nunca un dato del cliente). Vacío = desactivado.
   WELCOME_LEAGUE_ID: z

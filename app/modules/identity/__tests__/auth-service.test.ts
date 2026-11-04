@@ -14,6 +14,7 @@ import type { PrismaClient } from "@prisma/client";
 import { AuthService } from "../auth-service";
 import { LogEmailSender } from "../email";
 import { InMemoryRateLimitStore } from "../rate-limit";
+import { InMemoryTotpChallengeStore } from "../totp";
 
 const cfg = {
   // RateLimitConfig (login): valores de test, sin efecto en este caso.
@@ -30,6 +31,9 @@ const cfg = {
   registerMaxPerWindow: 100,
   registerWindowSec: 3600,
   appUrl: "https://app.test",
+  // 2FA TOTP (D-07, ADR-0039): valores de test.
+  totpChallengeTtlSec: 300,
+  totpMaxAttempts: 5,
 };
 
 describe("AuthService.resetPassword (T-24)", () => {
@@ -53,6 +57,7 @@ describe("AuthService.resetPassword (T-24)", () => {
     const service = new AuthService({
       prisma,
       rateLimit: new InMemoryRateLimitStore(),
+      totp: new InMemoryTotpChallengeStore(),
       emailSender: new LogEmailSender(),
       cfg,
     });

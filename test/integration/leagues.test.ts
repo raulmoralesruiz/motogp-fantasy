@@ -26,7 +26,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { PrismaClient } from "@prisma/client";
 
-import { InMemoryRateLimitStore } from "../../app/modules/identity";
+import { InMemoryRateLimitStore, InMemoryTotpChallengeStore } from "../../app/modules/identity";
 import {
   LeagueService,
   addLeagueMemberInTransaction,
@@ -1794,6 +1794,8 @@ describe("US-23 · Router leagues (glue BFF)", () => {
     authRouter = auth.createAuthRouter({
       prisma,
       rateLimit: new InMemoryRateLimitStore(),
+      totp: new InMemoryTotpChallengeStore(),
+      totpCfg: { challengeTtlSec: 300, maxAttempts: 5 },
       sessionTtlSec: 3600,
       secureCookie: true,
       rateLimitCfg: {

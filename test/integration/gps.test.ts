@@ -36,7 +36,7 @@ process.env.REDIS_URL ??= "redis://localhost:6379/0"; // dummy: lazyConnect, no 
 const { createAuthRouter } = await import("../../app/server/routers/auth");
 const { createSeasonsRouter } = await import("../../app/server/routers/seasons");
 const { createContext } = await import("../../app/server/trpc");
-const { InMemoryRateLimitStore } = await import("../../app/modules/identity");
+const { InMemoryRateLimitStore, InMemoryTotpChallengeStore } = await import("../../app/modules/identity");
 
 /**
  * Fuente de calendario de test (sin red): 3 GPs en Falsia. R1 y R2
@@ -138,6 +138,8 @@ describe("US-05 · Circuitos, GPs y calendario (PostgreSQL real)", () => {
     authRouter = createAuthRouter({
       prisma,
       rateLimit: new InMemoryRateLimitStore(),
+      totp: new InMemoryTotpChallengeStore(),
+      totpCfg: { challengeTtlSec: 300, maxAttempts: 5 },
       sessionTtlSec: 3600,
       secureCookie: true,
       rateLimitCfg: {

@@ -42,7 +42,7 @@ const { createDashboardRouter } = await import(
   "../../app/server/routers/dashboard"
 );
 const { createContext } = await import("../../app/server/trpc");
-const { InMemoryRateLimitStore } = await import("../../app/modules/identity");
+const { InMemoryRateLimitStore, InMemoryTotpChallengeStore } = await import("../../app/modules/identity");
 const { PROVISIONAL_SEASON_RULES } = await import(
   "../../app/shared/config/season-rules"
 );
@@ -81,6 +81,8 @@ describe("US-15 · Dashboard (PostgreSQL real)", () => {
     authRouter = createAuthRouter({
       prisma,
       rateLimit: new InMemoryRateLimitStore(),
+      totp: new InMemoryTotpChallengeStore(),
+      totpCfg: { challengeTtlSec: 300, maxAttempts: 5 },
       sessionTtlSec: 3600,
       secureCookie: true,
       rateLimitCfg: {

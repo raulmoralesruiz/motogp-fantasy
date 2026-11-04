@@ -9,12 +9,17 @@
  * de `global_admin` por env en el registro (ADR-0010).
  * US-03 (hecho): perfil/GDPR — exportación de datos + eliminación de
  * cuenta por anonimización (ADR-0016).
+ * D-07 (hecho, ADR-0039): 2FA TOTP — núcleo puro `core/totp.ts` (RFC 6238),
+ * retos de login (store inyectable), matriculación/confirmación/desactivación.
  */
 export * from "./account-service";
 export * from "./auth-service";
+export * from "./core/totp";
 export * from "./email";
 export * from "./password";
 export * from "./rate-limit";
 export * from "./reset-tokens";
 export * from "./roles";
 export * from "./sessions";
+export * from "./totp";
+export * from "./totp-qr";

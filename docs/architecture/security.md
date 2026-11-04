@@ -107,6 +107,6 @@
 ## 5. Decisiones pendientes
 
 - ~~Política exacta de retención/anonimización al eliminar cuenta.~~ **Resuelta: ADR-0016** (anonimización, 2026-10-20).
-- Si se habilita 2FA para `global_admin` (recomendado: sí).
+- ~~Si se habilita 2FA para `global_admin` (recomendado: sí).~~ **Resuelta: ADR-0039** (2026-11-04, cierra D-07): **2FA TOTP (RFC 6238) opcional por cuenta, recomendado para `global_admin`** — login de 2 pasos (reto de vida corta + código de la app de autenticación), doble presupuesto de intentos (por reto `TOTP_MAX_ATTEMPTS` y por cuenta reutilizando el bloqueo del login), re-autenticación con contraseña en matricular/desactivar, auditoría `totp.*`, cleanup GDPR al borrar cuenta. La cuenta de `global_admin` debe activarlo (sección `/perfil → Seguridad`); el recovery manual está en el runbook.
 - Separación de deberes en el marcado de resultados definitivos.
 - Periodo exacto de retención de backups y logs.

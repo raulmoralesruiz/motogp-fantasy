@@ -21,7 +21,10 @@ process.env.REDIS_URL = "redis://localhost:6379/0";
 process.env.SESSION_COOKIE_SECURE = "false";
 
 const { createAuthRouter, getDefaultAuthRouter } = await import("../auth");
-const { InMemoryRateLimitStore } = await import("@/modules/identity");
+const {
+  InMemoryRateLimitStore,
+  InMemoryTotpChallengeStore,
+} = await import("@/modules/identity");
 
 function ctxSinToken(): Context {
   return {
@@ -48,6 +51,8 @@ describe("auth router (glue de producción, T-24)", () => {
     const authRouter = createAuthRouter({
       prisma: {} as never,
       rateLimit: new InMemoryRateLimitStore(),
+      totp: new InMemoryTotpChallengeStore(),
+      totpCfg: { challengeTtlSec: 300, maxAttempts: 5 },
       sessionTtlSec: 3_600,
       secureCookie: false,
       rateLimitCfg: {

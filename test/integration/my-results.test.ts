@@ -42,7 +42,7 @@ const { createAuthRouter } = await import("../../app/server/routers/auth");
 const { createResultsRouter } = await import("../../app/server/routers/results");
 const { createSeasonsRouter } = await import("../../app/server/routers/seasons");
 const { createContext } = await import("../../app/server/trpc");
-const { InMemoryRateLimitStore } = await import("../../app/modules/identity");
+const { InMemoryRateLimitStore, InMemoryTotpChallengeStore } = await import("../../app/modules/identity");
 
 const suffix = randomUUID().slice(0, 8);
 const ADMIN_EMAIL = `admin-${suffix}@test.local`;
@@ -116,6 +116,8 @@ describe("US-22 · Resultados y ranking (PostgreSQL real)", () => {
     authRouter = createAuthRouter({
       prisma,
       rateLimit: new InMemoryRateLimitStore(),
+      totp: new InMemoryTotpChallengeStore(),
+      totpCfg: { challengeTtlSec: 300, maxAttempts: 5 },
       sessionTtlSec: 3600,
       secureCookie: true,
       rateLimitCfg: {

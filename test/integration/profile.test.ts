@@ -22,6 +22,7 @@ const {
   anonymizedEmail,
   anonymizedUsername,
   InMemoryRateLimitStore,
+  InMemoryTotpChallengeStore,
   logEmailSender,
 } = await import("../../app/modules/identity");
 const { createContext } = await import("../../app/server/trpc");
@@ -54,6 +55,8 @@ describe("US-03 · perfil y GDPR (PostgreSQL real)", () => {
     authRouter = createAuthRouter({
       prisma,
       rateLimit: store,
+      totp: new InMemoryTotpChallengeStore(),
+      totpCfg: { challengeTtlSec: 300, maxAttempts: 5 },
       sessionTtlSec: SESSION_TTL_SEC,
       secureCookie: true,
       rateLimitCfg: RATE_CFG,

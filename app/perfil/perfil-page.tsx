@@ -9,6 +9,8 @@ import { Alert, Button, Field } from "@/shared/components";
 import { trpc } from "@/trpc/client";
 import { zodIssues } from "@/trpc/errors";
 
+import { TotpSection } from "./totp-section";
+
 /** Descarga un objeto como archivo JSON en el navegador (US-03). */
 function downloadJson(data: unknown, filename: string) {
   const blob = new Blob([JSON.stringify(data, null, 2)], {
@@ -185,6 +187,9 @@ export default function PerfilPage() {
           </Button>
         </form>
       )}
+
+      <h2>Seguridad (autenticación en dos pasos)</h2>
+      <TotpSection enabled={meData.totpEnabled} enrolled={meData.totpEnrolled} />
 
       <h2>Privacidad (RGPD)</h2>
       <p className="muted">

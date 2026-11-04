@@ -9,10 +9,12 @@
  * Las dependencias se inyectan (prisma, store, config): el servicio se
  * prueba sin los singletons de la app.
  */
+import { randomBytes } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { appendAudit } from "@/modules/admin";
+import { base32Encode, buildOtpAuthUri, verifyTotpCode } from "./core/totp";
 import type { EmailSender } from "./email";
 import { getDummyHash, hashPassword, verifyPassword } from "./password";
 import { evaluateResetToken, generateResetToken, hashResetToken } from "./reset-tokens";
@@ -23,6 +25,7 @@ import {
   type RateLimitConfig,
   type RateLimitStore,
 } from "./rate-limit";
+import { TOTP_ISSUER, type TotpChallengeStore } from "./totp";
 
 export interface AuthServiceConfig extends RateLimitConfig {
   /** Vigencia de la sesión en segundos. */
@@ -49,11 +52,26 @@ export interface AuthServiceConfig extends RateLimitConfig {
    * Vacío/ausente → nadie lo recibe.
    */
   bootstrapAdminEmail?: string;
+  /**
+   * 2FA TOTP (D-07, ADR-0039): vigencia en segundos del reto de login
+   * (se emite tras validar la contraseña en una cuenta con 2FA activo).
+   */
+  totpChallengeTtlSec: number;
+  /**
+   * 2FA TOTP (D-07, ADR-0039): intentos de código por reto antes de
+   * invalidar el reto (los fallos además alimentan el bloqueo por cuenta).
+   */
+  totpMaxAttempts: number;
 }
 
 export interface AuthServiceDeps {
   prisma: PrismaClient;
   rateLimit: RateLimitStore;
+  /**
+   * Store de retos TOTP (D-07, ADR-0039): Redis en producción, in-memory en
+   * tests. Frontera de I/O inyectable como `rateLimit`.
+   */
+  totp: TotpChallengeStore;
   /** Enviador de emails (US-02; provisional: `logEmailSender`, ADR-0009). */
   emailSender: EmailSender;
   cfg: AuthServiceConfig;
@@ -73,6 +91,22 @@ export interface AuthResult {
   user: PublicUser;
   /** Token opaco para la cookie de sesión. */
   sessionToken: string;
+}
+
+/**
+ * Login (D-07, ADR-0039): dos formas de terminar.
+ * - Sin 2FA (o ya verificado): `sessionToken` listo para la cookie.
+ * - 2FA activo: `totpRequired` + reto opaco (`totpToken`) y SIN sesión;
+ *   la sesión solo existe tras `verifyTotp`.
+ */
+export interface LoginResult {
+  user: PublicUser;
+  /** Token opaco para la cookie de sesión (null si falta el segundo factor). */
+  sessionToken: string | null;
+  /** true si la cuenta exige el código de la app de autenticación. */
+  totpRequired: boolean;
+  /** Reto de vida corta para `verifyTotp` (solo si `totpRequired`). */
+  totpToken: string | null;
 }
 
 const USER_INCLUDE = {
@@ -204,11 +238,13 @@ export class AuthService {
    * Login con anti fuerza bruta (CA de US-01):
    * 1) bloqueo de cuenta (tiene prioridad), 2) rate limit por IP,
    * 3) verificación de credenciales.
+   * 2FA (D-07, ADR-0039): si la cuenta lo tiene activo, el paso 3 emite un
+   * reto corto en lugar de sesión; `verifyTotp` canjea el código por sesión.
    */
   async login(
     input: { email: string; password: string },
     meta: { ip: string },
-  ): Promise<AuthResult> {
+  ): Promise<LoginResult> {
     const { prisma, rateLimit, cfg } = this.deps;
     // El email ya viene normalizado (minúsculas) por el esquema Zod.
     const account = input.email;
@@ -253,13 +289,258 @@ export class AuthService {
       throw new TRPCError({ code: "UNAUTHORIZED", message: "Credenciales incorrectas." });
     }
 
+    // 3) 2FA (D-07, ADR-0039): la cuenta con TOTP activo no recibe sesión
+    //    con la contraseña sola. Se emite un reto opaco de vida corta; la
+    //    sesión solo existe tras `verifyTotp` (presupuesto de intentos +
+    //    bloqueo por cuenta reutilizando `rateLimit`).
+    if (user.totpEnabledAt !== null && user.totpSecret) {
+      // Una contraseña correcta NO es autenticación completa mientras el
+      // 2.º factor está pendiente: el contador de fallos de la cuenta NO se
+      // resetea aquí (lo resetea `verifyTotp` al canjear el código). Si se
+      // reseteara, un atacante con la contraseña rotaría retos infinitamente
+      // (login → fallo de código → login → …) y haría fuerza bruta del
+      // segundo factor sin que la cuenta se bloqueara (ADR-0039).
+      const totpToken = await this.deps.totp.issue(user.id, cfg.totpChallengeTtlSec);
+      return {
+        user: toPublicUser(user),
+        sessionToken: null,
+        totpRequired: true,
+        totpToken,
+      };
+    }
+
+    // Autenticación completa (sin 2.º factor): la contraseña correcta
+    // reinicia el contador de fallos de la cuenta (US-01).
     await rateLimit.resetFailures(account);
     const session = await createSession(prisma, {
       userId: user.id,
       ttlSec: cfg.sessionTtlSec,
       ip: meta.ip,
     });
+    return {
+      user: toPublicUser(user),
+      sessionToken: session.token,
+      totpRequired: false,
+      totpToken: null,
+    };
+  }
+
+  /**
+   * Segundo factor del login (D-07, ADR-0039): canjea el código TOTP por
+   * sesión.
+   *
+   * - El reto debe existir y no estar expirado (error genérico en cualquier
+   *   caso inválido: no se revela cuál fue).
+   * - Presupuesto por reto: `totpMaxAttempts` códigos (al agotarse, el reto
+   *   se invalida y hay que volver a login).
+   * - Los fallos de código TAMBIÉN alimentan el bloqueo por cuenta existente
+   *   (`recordFailure`/`shouldLockAccount`, security.md §1.6): un atacante
+   *   con la contraseña no puede hacer fuerza bruta del 6 dígitos sin
+   *   bloquear la cuenta (5 fallos → 15 min por defecto).
+   * - Código correcto: sesión, reto consumido y fallos en cero.
+   */
+  async verifyTotp(
+    token: string,
+    code: string,
+    meta: { ip: string },
+  ): Promise<AuthResult> {
+    const { prisma, rateLimit, cfg } = this.deps;
+
+    const userId = await this.deps.totp.resolve(token);
+    if (!userId) throw this.invalidCodeError();
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: USER_INCLUDE,
+    });
+    if (!user || user.isAnonymized || !user.totpSecret) {
+      throw this.invalidCodeError();
+    }
+
+    // Bloqueo por cuenta (reutilizado del login): si los fallos de código
+    // la han bloqueado, ni siquiera se evalúa el código.
+    const account = user.email;
+    const lockRemainingSec = await rateLimit.lockRemainingSec(account);
+    if (lockRemainingSec > 0) {
+      throw this.lockedError(lockRemainingSec);
+    }
+
+    const failures = await this.deps.totp.failureCount(token);
+    if (failures >= cfg.totpMaxAttempts) throw this.invalidCodeError();
+
+    if (!verifyTotpCode(user.totpSecret, code, Date.now())) {
+      const challengeFailures = await this.deps.totp.recordFailure(token);
+      const accountFailures = await rateLimit.recordFailure(account);
+      if (shouldLockAccount(accountFailures, cfg)) {
+        await rateLimit.lockAccount(account, cfg.lockoutSec);
+        await this.deps.totp.consume(token);
+        throw this.lockedError(cfg.lockoutSec);
+      }
+      if (challengeFailures >= cfg.totpMaxAttempts) {
+        await this.deps.totp.consume(token);
+      }
+      throw this.invalidCodeError();
+    }
+
+    await rateLimit.resetFailures(account);
+    await this.deps.totp.consume(token);
+    const session = await createSession(prisma, {
+      userId: user.id,
+      ttlSec: cfg.sessionTtlSec,
+      ip: meta.ip,
+    });
     return { user: toPublicUser(user), sessionToken: session.token };
+  }
+
+  /**
+   * Matricula el 2FA (D-07, ADR-0039): genera el secreto y lo deja en
+   * estado PENDIENTE (`totp_enabled_at = null`): solo `confirmTotp` con un
+   * código válido lo activa. Requiere la contraseña actual (operación
+   * sensible; re-autenticación, security.md §1.11).
+   *
+   * Re-matricular (ya activo) sustituye el secreto y vuelve a dejarlo
+   * pendiente: el dispositivo nuevo debe confirmarse antes de que el 2FA
+   * siga protegiendo la cuenta.
+   */
+  async enrollTotp(
+    userId: string,
+    password: string,
+    meta: { ip: string },
+  ): Promise<{ secret: string; otpauthUri: string }> {
+    const { prisma } = this.deps;
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || user.isAnonymized) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Cuenta no encontrada." });
+    }
+    if (!(await verifyPassword(password, user.passwordHash))) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "La contraseña no es correcta.",
+      });
+    }
+
+    // 20 bytes aleatorios (160 bits) → base32 (32 caracteres).
+    const secret = base32Encode(randomBytes(20));
+    const wasEnabled = user.totpEnabledAt !== null;
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: { totpSecret: secret, totpEnabledAt: null },
+      });
+      // Auditoría (T-09): acción sensible (seguridad de la cuenta).
+      await appendAudit(tx, {
+        actorId: user.id,
+        action: "totp.enrolled",
+        entity: "user",
+        entityId: user.id,
+        beforeData: { totpEnabled: wasEnabled },
+        afterData: { totpEnabled: false, hasSecret: true },
+        ip: meta.ip,
+      });
+    });
+
+    const otpauthUri = buildOtpAuthUri({
+      issuer: TOTP_ISSUER,
+      account: user.email,
+      secretBase32: secret,
+    });
+    return { secret, otpauthUri };
+  }
+
+  /**
+   * Confirma la matriculación (D-07, ADR-0039): un código TOTP válido
+   * activa el 2FA (`totp_enabled_at = now`). Sin secreto pendiente →
+   * PRECONDITION_FAILED (matricular primero).
+   */
+  async confirmTotp(
+    userId: string,
+    code: string,
+    meta: { ip: string },
+  ): Promise<{ enabled: true }> {
+    const { prisma } = this.deps;
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || user.isAnonymized) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Cuenta no encontrada." });
+    }
+    if (!user.totpSecret) {
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: "Matricula primero el segundo factor (escanea el QR o introduce el secreto).",
+      });
+    }
+    if (!verifyTotpCode(user.totpSecret, code, Date.now())) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "El código no es válido.",
+      });
+    }
+
+    const now = new Date(Date.now());
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: { totpEnabledAt: now },
+      });
+      await appendAudit(tx, {
+        actorId: user.id,
+        action: "totp.enabled",
+        entity: "user",
+        entityId: user.id,
+        afterData: { totpEnabled: true, enabledAt: now },
+        ip: meta.ip,
+      });
+    });
+    return { enabled: true };
+  }
+
+  /**
+   * Desactiva el 2FA (D-07, ADR-0039): borra secreto y activación. Requiere
+   * la contraseña actual (quitar una capa de seguridad exige
+   * re-autenticación, como `deleteAccount`, ADR-0016).
+   */
+  async disableTotp(
+    userId: string,
+    password: string,
+    meta: { ip: string },
+  ): Promise<{ enabled: false }> {
+    const { prisma } = this.deps;
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || user.isAnonymized) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Cuenta no encontrada." });
+    }
+    if (!user.totpSecret && user.totpEnabledAt === null) {
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: "La autenticación en dos pasos no está activa.",
+      });
+    }
+    if (!(await verifyPassword(password, user.passwordHash))) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "La contraseña no es correcta.",
+      });
+    }
+
+    const wasEnabled = user.totpEnabledAt !== null;
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: { totpSecret: null, totpEnabledAt: null },
+      });
+      await appendAudit(tx, {
+        actorId: user.id,
+        action: "totp.disabled",
+        entity: "user",
+        entityId: user.id,
+        beforeData: { totpEnabled: wasEnabled },
+        afterData: { totpEnabled: false, hasSecret: false },
+        ip: meta.ip,
+      });
+    });
+    return { enabled: false };
   }
 
   /**
@@ -381,6 +662,18 @@ export class AuthService {
     return new TRPCError({
       code: "FORBIDDEN",
       message: `Demasiados intentos fallidos. Vuelve a intentarlo en ${minutes} min.`,
+    });
+  }
+
+  /**
+   * Error genérico del segundo factor (D-07): el mismo mensaje para reto
+   * inexistente/expirado, código incorrecto y presupuesto agotado (no
+   * revelar cuál fue el caso).
+   */
+  private invalidCodeError(): TRPCError {
+    return new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "El código no es válido o ha caducado.",
     });
   }
 }

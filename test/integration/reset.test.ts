@@ -17,7 +17,7 @@ process.env.REDIS_URL ??= "redis://localhost:6379/0"; // dummy: lazyConnect, no 
 
 const { createAuthRouter } = await import("../../app/server/routers/auth");
 const { createContext } = await import("../../app/server/trpc");
-const { hashResetToken, InMemoryRateLimitStore } =
+const { hashResetToken, InMemoryRateLimitStore, InMemoryTotpChallengeStore } =
   await import("../../app/modules/identity");
 
 const suffix = randomUUID().slice(0, 8);
@@ -53,6 +53,8 @@ describe("US-02 · logout y recuperación de contraseña (PostgreSQL real)", () 
     authRouter = createAuthRouter({
       prisma,
       rateLimit: store,
+      totp: new InMemoryTotpChallengeStore(),
+      totpCfg: { challengeTtlSec: 300, maxAttempts: 5 },
       sessionTtlSec: SESSION_TTL_SEC,
       secureCookie: true,
       rateLimitCfg: RATE_CFG,

@@ -209,6 +209,10 @@ export class AccountService {
           email: anonymizedEmail(user.id),
           username: anonymizedUsername(user.id),
           passwordHash: ANONYMIZED_PASSWORD_SENTINEL,
+          // D-07/ADR-0039: el 2FA (secreto + activación) también se limpia
+          // con la cuenta (no queda material para adivinar códigos).
+          totpSecret: null,
+          totpEnabledAt: null,
           isAnonymized: true,
           anonymizedAt: now,
         },

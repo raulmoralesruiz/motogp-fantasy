@@ -75,7 +75,7 @@ process.env.REDIS_URL ??= "redis://localhost:6379/0"; // dummy: lazyConnect, no 
 const { createAuthRouter } = await import("../../app/server/routers/auth");
 const { createResultsRouter } = await import("../../app/server/routers/results");
 const { createContext } = await import("../../app/server/trpc");
-const { InMemoryRateLimitStore } = await import("../../app/modules/identity");
+const { InMemoryRateLimitStore, InMemoryTotpChallengeStore } = await import("../../app/modules/identity");
 const {
   PulseLiveSourceError,
   ResultsService,
@@ -261,6 +261,8 @@ describe("US-17 · Importación automática de resultados desde la fuente (Postg
     authRouter = createAuthRouter({
       prisma,
       rateLimit: new InMemoryRateLimitStore(),
+      totp: new InMemoryTotpChallengeStore(),
+      totpCfg: { challengeTtlSec: 300, maxAttempts: 5 },
       sessionTtlSec: 3600,
       secureCookie: true,
       rateLimitCfg: {

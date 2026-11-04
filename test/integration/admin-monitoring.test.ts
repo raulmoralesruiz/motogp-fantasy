@@ -37,7 +37,7 @@ const { adminRouter, createAdminRouter } = await import(
   "../../app/server/routers/admin"
 );
 const { createContext } = await import("../../app/server/trpc");
-const { InMemoryRateLimitStore } = await import("../../app/modules/identity");
+const { InMemoryRateLimitStore, InMemoryTotpChallengeStore } = await import("../../app/modules/identity");
 const { redisProbeStateStore } = await import(
   "../../app/server/probe-state-redis"
 );
@@ -63,6 +63,8 @@ describe("T-14 · admin.jobsStatus + admin.sourceHealth (ADR-0036)", () => {
     authRouter = createAuthRouter({
       prisma,
       rateLimit: new InMemoryRateLimitStore(),
+      totp: new InMemoryTotpChallengeStore(),
+      totpCfg: { challengeTtlSec: 300, maxAttempts: 5 },
       sessionTtlSec: 3600,
       secureCookie: true,
       rateLimitCfg: {

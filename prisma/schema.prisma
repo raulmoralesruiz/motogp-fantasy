@@ -166,6 +166,11 @@ model User {
   email        String    @unique
   passwordHash String    @map("password_hash")
   username     String    @unique
+  // D-07/ADR-0039 · 2FA TOTP (RFC 6238): secreto base32 (solo si está
+  // matriculado) + instante de activación (null = matriculado sin confirmar
+  // o desactivado). Se limpia en la anonimización (ADR-0016).
+  totpSecret   String?   @map("totp_secret")
+  totpEnabledAt DateTime? @map("totp_enabled_at") @db.Timestamptz
   // GDPR (security.md §1.11, política D-06): eliminación = anonimización.
   isAnonymized Boolean   @default(false) @map("is_anonymized")
   anonymizedAt DateTime? @map("anonymized_at") @db.Timestamptz

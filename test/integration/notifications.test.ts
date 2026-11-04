@@ -45,7 +45,7 @@ const { createAuthRouter } = await import("../../app/server/routers/auth");
 const { createResultsRouter } = await import("../../app/server/routers/results");
 const { createNotificationsRouter } = await import("../../app/server/routers/notifications");
 const { createContext } = await import("../../app/server/trpc");
-const { InMemoryRateLimitStore } = await import("../../app/modules/identity");
+const { InMemoryRateLimitStore, InMemoryTotpChallengeStore } = await import("../../app/modules/identity");
 
 const suffix = randomUUID().slice(0, 8);
 const email = (name: string) => `${name}-${suffix}@test.local`;
@@ -101,6 +101,8 @@ describe("US-36 · Notificaciones por email (PostgreSQL real)", () => {
     authRouter = createAuthRouter({
       prisma,
       rateLimit: new InMemoryRateLimitStore(),
+      totp: new InMemoryTotpChallengeStore(),
+      totpCfg: { challengeTtlSec: 300, maxAttempts: 5 },
       sessionTtlSec: 3600,
       secureCookie: true,
       rateLimitCfg: {

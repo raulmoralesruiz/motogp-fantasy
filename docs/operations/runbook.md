@@ -317,7 +317,30 @@ Refresco automático cada 30 s. Los endpoints `admin.jobsStatus` (query) y `admi
 
 ---
 
-## 9. Rotación de secrets
+## 9. Recovery de 2FA del `global_admin` (D-07, ADR-0039)
+
+**Síntoma:** el `global_admin` no puede entrar porque ha perdido el dispositivo 2FA (la app de autenticación en el móvil) o porque la cuenta quedó bloqueada tras 5 códigos erróneos.
+
+El 2FA vive en `users` (`totp_secret` + `totp_enabled_at`). Desactivarlo es una **acción manual, excepcional y auditada por el operador**:
+
+1. **Solo si la cuenta está bloqueada:** limpiar el bloqueo en Redis (o esperar la ventana de 15 min). La clave usa el email normalizado de la cuenta (ver `app/server/rate-limit-redis.ts`):
+   ```
+   docker compose -f docker-compose.prod.yml exec redis redis-cli DEL "rl:login:lock:<email>" "rl:login:fail:<email>"
+   ```
+2. **Desactivar el 2FA de la cuenta** en la BD de producción:
+   ```
+   docker compose -f docker-compose.prod.yml exec postgres psql -U motogp -d motogp \
+     -c "UPDATE users SET totp_secret = NULL, totp_enabled_at = NULL WHERE id = '<uuid-del-admin>';"
+   ```
+   Efecto: la cuenta vuelve a entrar con contraseña sola (el 2.º factor deja de exigirse).
+3. El admin entra y **re-matrícula el dispositivo nuevo** desde `/perfil → Seguridad` (matricular + confirmar con la app nueva).
+4. **Auditar la acción:** registrarla en el log de incidentes (quién, cuándo, por qué). El UPDATE manual no genera entrada en `audit_log` (operación excepcional de operador, ADR-0039 §3).
+
+> **No usar** esto como vía rápida para saltarse un fallo de código por un typo: esperar el desbloqueo (15 min) y reintentar; el recovery completo (paso 2) solo es para dispositivo perdido o cuenta comprometida.
+
+---
+
+## 10. Rotación de secrets
 
 > **Completo en `deploy.md` §6.** Resumen:
 
@@ -348,7 +371,7 @@ Refresco automático cada 30 s. Los endpoints `admin.jobsStatus` (query) y `admi
 
 ---
 
-## 10. Checklist post-deploy
+## 11. Checklist post-deploy
 
 Tras cada `./deploy.sh`:
 
@@ -366,12 +389,13 @@ Tras cada `./deploy.sh`:
 
 ---
 
-## 11. Contacto y escalación
+## 12. Contacto y escalación
 
 | Problema | Primer nivel | Escalado |
 | -------- | ------------ | -------- |
 | Resultados incorrectos | Admin → corrección manual | Contactar proveedor de datos |
 | BD corrupta | Restore de backup (§4) | — |
 | Deploy fallido | `./deploy.sh` (reintentar) | Revisar logs → `docker compose logs` |
-| Incidente de seguridad | Rotar secrets (§9) | — |
+| Incidente de seguridad | Rotar secrets (§10) | — |
+| `global_admin` sin acceso (2FA) | Recovery de 2FA (§9) | — |
 | Rendimiento / latencia | Reiniciar web (`docker compose restart web`) | Verificar recursos del NAS |

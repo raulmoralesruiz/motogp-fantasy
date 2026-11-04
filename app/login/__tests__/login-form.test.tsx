@@ -19,7 +19,8 @@ vi.mock("next/navigation", () =>
 
 import { trpc } from "@/trpc/client";
 
-function loginOptions(): { onSuccess?: () => void } {
+type LoginData = { totpRequired?: boolean; totpToken?: string | null };
+function loginOptions(): { onSuccess?: (data?: LoginData) => void } {
   return asMockFn(trpc.auth.login.useMutation).mock.calls[0]?.[0] ?? {};
 }
 
@@ -111,5 +112,92 @@ describe("LoginForm", () => {
     });
     render(<LoginForm />);
     expect(screen.getByRole("button", { name: "Iniciando sesión…" })).toBeDisabled();
+  });
+});
+
+describe("LoginForm · segundo factor (D-07, ADR-0039)", () => {
+  beforeEach(() => {
+    resetTrpcMocks();
+    resetNavigationMocks();
+  });
+
+  it("si el login devuelve un reto: pide el código y NO redirige", async () => {
+    mockResult(trpc.auth.login.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+    });
+    const verify = vi.fn();
+    mockResult(trpc.auth.verifyTotp.useMutation, {
+      mutate: verify,
+      isPending: false,
+      isError: false,
+    });
+    render(<LoginForm />);
+
+    await act(async () => {
+      loginOptions().onSuccess?.({ totpRequired: true, totpToken: "reto-123" });
+    });
+
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Código de verificación")).toBeInTheDocument();
+  });
+
+  it("envía el código en verifyTotp y redirige al éxito", async () => {
+    mockResult(trpc.auth.login.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+    });
+    const verify = vi.fn();
+    mockResult(trpc.auth.verifyTotp.useMutation, {
+      mutate: verify,
+      isPending: false,
+      isError: false,
+    });
+    render(<LoginForm />);
+
+    await act(async () => {
+      loginOptions().onSuccess?.({ totpRequired: true, totpToken: "reto-123" });
+    });
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Código de verificación"), "123456");
+    await user.click(screen.getByRole("button", { name: "Verificar" }));
+
+    expect(verify).toHaveBeenCalledWith({ token: "reto-123", code: "123456" });
+    // El onSuccess es el del COMPONENTE (capturado por el mock).
+    const verifyOptions: { onSuccess?: () => void } =
+      asMockFn(trpc.auth.verifyTotp.useMutation).mock.calls[0]?.[0] ?? {};
+    await act(async () => {
+      verifyOptions.onSuccess?.();
+    });
+    expect(navigation.push).toHaveBeenCalledWith("/");
+  });
+
+  it("muestra el error del segundo factor (código inválido/caducado)", async () => {
+    const error = clientError("El código no es válido o ha caducado.", {
+      code: "UNAUTHORIZED",
+      message: "El código no es válido o ha caducado.",
+    });
+    mockResult(trpc.auth.login.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+    });
+    mockResult(trpc.auth.verifyTotp.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error,
+    });
+    render(<LoginForm />);
+
+    // Pasar al paso 2 (reto) antes de comprobar el error del paso 2.
+    await act(async () => {
+      loginOptions().onSuccess?.({ totpRequired: true, totpToken: "reto-123" });
+    });
+    expect(
+      screen.getByRole("alert").textContent,
+    ).toContain("El código no es válido o ha caducado.");
   });
 });

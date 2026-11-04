@@ -38,7 +38,7 @@ const { createLeaguesRouter } = await import("../../app/server/routers/leagues")
 const { createResultsRouter } = await import("../../app/server/routers/results");
 const { adminRouter } = await import("../../app/server/routers/admin");
 const { createContext } = await import("../../app/server/trpc");
-const { InMemoryRateLimitStore } = await import("../../app/modules/identity");
+const { InMemoryRateLimitStore, InMemoryTotpChallengeStore } = await import("../../app/modules/identity");
 
 const suffix = randomUUID().slice(0, 8);
 const email = (name: string) => `${name}-${suffix}@test.local`;
@@ -76,6 +76,8 @@ describe("T-12 · Revisión de seguridad (PostgreSQL real)", () => {
     authRouter = createAuthRouter({
       prisma,
       rateLimit: new InMemoryRateLimitStore(),
+      totp: new InMemoryTotpChallengeStore(),
+      totpCfg: { challengeTtlSec: 300, maxAttempts: 5 },
       sessionTtlSec: 3600,
       secureCookie: true,
       rateLimitCfg: {

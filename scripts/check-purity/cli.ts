@@ -25,6 +25,7 @@ const MODULE_ROOTS = [
   "app/modules/lineups/core",
   "app/modules/results/core",
   "app/modules/leagues/core",
+  "app/modules/identity/core",
 ];
 /** Directorios permitidos fuera del módulo. */
 const ALLOWED_EXTERNAL_DIRS = ["app/shared/types"];
@@ -69,7 +70,7 @@ function main(): void {
 
   if (violations.length === 0) {
     console.log(
-      `✅ Check de pureza: ${files.length} archivos auditados (economy, scoring, lineups/core, results/core, leagues/core) — sin violaciones.`,
+      `✅ Check de pureza: ${files.length} archivos auditados (economy, scoring, lineups/core, results/core, leagues/core, identity/core) — sin violaciones.`,
     );
     return;
   }

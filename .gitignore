@@ -29,6 +29,9 @@ test-results/
 test/e2e/auth-state.json
 test/e2e/admin-state.json
 
+# Herramientas de agente (skill scripts, etc.)
+.opencode/
+
 # Sistema
 .DS_Store
 Thumbs.db

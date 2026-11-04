@@ -23,6 +23,8 @@ export interface PublicUser {
   displayName: string | null;
   roles: string[];
   createdAt: Date;
+  /** 2FA TOTP activo en la cuenta (D-07, ADR-0039). Nunca el secreto. */
+  totpEnabled: boolean;
 }
 
 export function toPublicUser(user: SessionUser): PublicUser {
@@ -33,6 +35,7 @@ export function toPublicUser(user: SessionUser): PublicUser {
     displayName: user.profile?.displayName ?? null,
     roles: user.userRoles.map((ur) => ur.role.name),
     createdAt: user.createdAt,
+    totpEnabled: user.totpEnabledAt !== null,
   };
 }
 

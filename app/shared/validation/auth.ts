@@ -73,6 +73,39 @@ export const resetPasswordInputSchema = z.object({
   password: passwordSchema,
 });
 
+/**
+ * D-07/ADR-0039 · Segundo factor: código TOTP de 6 dígitos (el formato del
+ * default del servidor; el núcleo admite 4–8 por si cambia la config).
+ */
+export const totpCodeSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{6}$/, "El código debe tener 6 dígitos");
+
+/**
+ * D-07/ADR-0039 · Verificación del código del reto de login.
+ * El token es opaco: sin validación de formato (un token inválido recibe
+ * el mismo error genérico del servidor).
+ */
+export const verifyTotpInputSchema = z.object({
+  token: z
+    .string()
+    .trim()
+    .min(1, "El reto ha caducado. Vuelve a iniciar sesión.")
+    .max(128, "El reto ha caducado. Vuelve a iniciar sesión."),
+  code: totpCodeSchema,
+});
+
+/** D-07/ADR-0039 · Matriculación/desactivación: re-autenticación. */
+export const totpPasswordInputSchema = z.object({
+  password: passwordSchema,
+});
+
+/** D-07/ADR-0039 · Confirmación de la matriculación (código de la app). */
+export const totpConfirmInputSchema = z.object({
+  code: totpCodeSchema,
+});
+
 export type RegisterInput = z.infer<typeof registerInputSchema>;
 export type LoginInput = z.infer<typeof loginInputSchema>;
 export type RequestResetInput = z.infer<typeof requestResetInputSchema>;

@@ -48,6 +48,10 @@ export function createProfileRouter(deps: ProfileRouterDeps) {
       displayName: ctx.user.profile?.displayName ?? null,
       roles: ctx.user.userRoles.map((ur) => ur.role.name),
       createdAt: ctx.user.createdAt,
+      // D-07/ADR-0039 · 2FA TOTP: `enabled` = activo (exige código en el
+      // login); `enrolled` = hay secreto matriculado (pending hasta confirm).
+      totpEnabled: ctx.user.totpEnabledAt !== null,
+      totpEnrolled: ctx.user.totpSecret !== null,
     })),
 
     /** Actualiza el nombre visible del perfil. */

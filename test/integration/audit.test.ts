@@ -25,7 +25,7 @@ process.env.REDIS_URL ??= "redis://localhost:6379/0"; // dummy: lazyConnect, no 
 
 const { createAuthRouter } = await import("../../app/server/routers/auth");
 const { createContext } = await import("../../app/server/trpc");
-const { InMemoryRateLimitStore } = await import("../../app/modules/identity");
+const { InMemoryRateLimitStore, InMemoryTotpChallengeStore } = await import("../../app/modules/identity");
 
 const suffix = randomUUID().slice(0, 8);
 const email = (name: string) => `${name}-${suffix}@test.local`;
@@ -43,6 +43,8 @@ describe("T-09 · Auditoría append-only (PostgreSQL real)", () => {
     authRouter = createAuthRouter({
       prisma,
       rateLimit: new InMemoryRateLimitStore(),
+      totp: new InMemoryTotpChallengeStore(),
+      totpCfg: { challengeTtlSec: 300, maxAttempts: 5 },
       sessionTtlSec: 3600,
       secureCookie: true,
       rateLimitCfg: {
