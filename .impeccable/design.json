@@ -1,0 +1,315 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-04T17:19:53Z",
+  "title": "Design System: Fantasy MotoGP — Independiente",
+  "extensions": {
+    "colorMeta": {
+      "starting-light-red": {
+        "role": "primary",
+        "displayName": "Rojo de salida",
+        "canonical": "#e10600",
+        "tonalRamp": [
+          "oklch(15% 0.055 27)",
+          "oklch(25% 0.105 27)",
+          "oklch(35% 0.155 27)",
+          "oklch(45% 0.195 27)",
+          "oklch(55% 0.215 27)",
+          "oklch(67% 0.195 27)",
+          "oklch(80% 0.135 27)",
+          "oklch(92% 0.06 27)"
+        ]
+      },
+      "starting-light-red-deep": {
+        "role": "primary",
+        "displayName": "Rojo de salida profundo",
+        "canonical": "#b30500",
+        "tonalRamp": [
+          "oklch(12% 0.045 27)",
+          "oklch(22% 0.09 27)",
+          "oklch(32% 0.135 27)",
+          "oklch(42% 0.175 27)",
+          "oklch(50% 0.195 27)",
+          "oklch(62% 0.185 27)",
+          "oklch(76% 0.13 27)",
+          "oklch(90% 0.06 27)"
+        ]
+      },
+      "pit-night-blue": {
+        "role": "neutral",
+        "displayName": "Azul noche de boxes",
+        "canonical": "#0b0f14",
+        "tonalRamp": [
+          "oklch(12% 0.012 250)",
+          "oklch(22% 0.016 250)",
+          "oklch(32% 0.018 250)",
+          "oklch(42% 0.018 250)",
+          "oklch(52% 0.016 250)",
+          "oklch(64% 0.013 250)",
+          "oklch(78% 0.009 250)",
+          "oklch(92% 0.005 250)"
+        ]
+      },
+      "telemetry-screen": {
+        "role": "neutral",
+        "displayName": "Pantalla de telemetría",
+        "canonical": "#10151c",
+        "tonalRamp": [
+          "oklch(14% 0.013 252)",
+          "oklch(24% 0.017 252)",
+          "oklch(34% 0.019 252)",
+          "oklch(44% 0.019 252)",
+          "oklch(54% 0.017 252)",
+          "oklch(66% 0.014 252)",
+          "oklch(79% 0.01 252)",
+          "oklch(92% 0.005 252)"
+        ]
+      },
+      "track-line-gray": {
+        "role": "neutral",
+        "displayName": "Gris de pista",
+        "canonical": "#21262d",
+        "tonalRamp": [
+          "oklch(16% 0.01 250)",
+          "oklch(26% 0.013 250)",
+          "oklch(36% 0.014 250)",
+          "oklch(46% 0.014 250)",
+          "oklch(56% 0.012 250)",
+          "oklch(67% 0.01 250)",
+          "oklch(80% 0.007 250)",
+          "oklch(93% 0.004 250)"
+        ]
+      },
+      "sign-white": {
+        "role": "neutral",
+        "displayName": "Blanco de letrero",
+        "canonical": "#e6edf3",
+        "tonalRamp": [
+          "oklch(15% 0.012 230)",
+          "oklch(25% 0.016 230)",
+          "oklch(35% 0.018 230)",
+          "oklch(45% 0.018 230)",
+          "oklch(55% 0.016 230)",
+          "oklch(68% 0.013 230)",
+          "oklch(82% 0.009 230)",
+          "oklch(94% 0.005 230)"
+        ]
+      },
+      "timing-gray": {
+        "role": "neutral",
+        "displayName": "Gris de cronometraje",
+        "canonical": "#8b949e",
+        "tonalRamp": [
+          "oklch(15% 0.01 235)",
+          "oklch(25% 0.014 235)",
+          "oklch(35% 0.016 235)",
+          "oklch(45% 0.017 235)",
+          "oklch(55% 0.015 235)",
+          "oklch(67% 0.012 235)",
+          "oklch(81% 0.008 235)",
+          "oklch(93% 0.004 235)"
+        ]
+      },
+      "flag-green": {
+        "role": "semantic",
+        "displayName": "Verde de bandera",
+        "canonical": "#3fb950",
+        "tonalRamp": [
+          "oklch(15% 0.05 145)",
+          "oklch(25% 0.085 145)",
+          "oklch(35% 0.115 145)",
+          "oklch(45% 0.135 145)",
+          "oklch(55% 0.14 145)",
+          "oklch(68% 0.125 145)",
+          "oklch(81% 0.09 145)",
+          "oklch(93% 0.045 145)"
+        ]
+      },
+      "flag-red": {
+        "role": "semantic",
+        "displayName": "Rojo de bandera",
+        "canonical": "#f85149",
+        "tonalRamp": [
+          "oklch(15% 0.055 25)",
+          "oklch(25% 0.1 25)",
+          "oklch(35% 0.14 25)",
+          "oklch(47% 0.16 25)",
+          "oklch(60% 0.155 25)",
+          "oklch(72% 0.125 25)",
+          "oklch(83% 0.08 25)",
+          "oklch(93% 0.04 25)"
+        ]
+      },
+      "warning-amber": {
+        "role": "semantic",
+        "displayName": "Ámbar de aviso",
+        "canonical": "#d29922",
+        "tonalRamp": [
+          "oklch(15% 0.045 80)",
+          "oklch(25% 0.075 80)",
+          "oklch(36% 0.1 80)",
+          "oklch(48% 0.115 80)",
+          "oklch(60% 0.115 80)",
+          "oklch(72% 0.1 80)",
+          "oklch(83% 0.07 80)",
+          "oklch(93% 0.035 80)"
+        ]
+      },
+      "info-blue": {
+        "role": "semantic",
+        "displayName": "Azul informativo",
+        "canonical": "#58a6ff",
+        "tonalRamp": [
+          "oklch(15% 0.055 250)",
+          "oklch(25% 0.095 250)",
+          "oklch(36% 0.125 250)",
+          "oklch(48% 0.14 250)",
+          "oklch(60% 0.135 250)",
+          "oklch(72% 0.115 250)",
+          "oklch(83% 0.075 250)",
+          "oklch(93% 0.035 250)"
+        ]
+      },
+      "on-accent-white": {
+        "role": "neutral",
+        "displayName": "Blanco puro",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "oklch(15% 0 0)",
+          "oklch(25% 0 0)",
+          "oklch(35% 0 0)",
+          "oklch(45% 0 0)",
+          "oklch(55% 0 0)",
+          "oklch(68% 0 0)",
+          "oklch(82% 0 0)",
+          "oklch(97% 0 0)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Solo títulos de página (h1); marca exactamente una palabra en rojo de salida." },
+      "headline": { "displayName": "Headline", "purpose": "Encabezados de sección (h2)." },
+      "title": { "displayName": "Title", "purpose": "Títulos de tarjeta (h3)." },
+      "body": { "displayName": "Body", "purpose": "Todo el texto de lectura." },
+      "label": { "displayName": "Label", "purpose": "Etiquetas de campo y anotaciones secundarias en gris de cronometraje." },
+      "mono": { "displayName": "Mono", "purpose": "Editores de reglas JSON y payloads crudos; única aparición de la pila monoespaciada." }
+    },
+    "shadows": [],
+    "motion": [],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Botón de acción primario (relleno rojo de salida); dentro y fuera de formularios.",
+      "html": "<button class=\"ds-btn-primary\">Guardar lineup</button>",
+      "css": ".ds-btn-primary { background: var(--accent, #e10600); color: #fff; padding: 0.65rem 1rem; font-family: system-ui, -apple-system, \"Segoe UI\", sans-serif; font-size: 1rem; font-weight: 600; border: none; border-radius: 6px; min-height: 44px; cursor: pointer; } .ds-btn-primary:hover:not(:disabled) { background: #b30500; } .ds-btn-primary:focus-visible { outline: 2px solid var(--accent, #e10600); outline-offset: 1px; } .ds-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }"
+    },
+    {
+      "name": "CTA de tarjeta",
+      "kind": "button",
+      "refersTo": "cta-link",
+      "description": "Enlace con forma de botón primario: la acción principal de cada tarjeta del dashboard.",
+      "html": "<a class=\"ds-cta\" href=\"#lineups\">Componer mi lineup</a>",
+      "css": ".ds-cta { display: inline-block; margin-top: 0.6rem; padding: 0.6rem 1rem; font-family: system-ui, -apple-system, \"Segoe UI\", sans-serif; font-size: 0.95rem; font-weight: 600; color: #fff; background: var(--accent, #e10600); border-radius: 6px; text-decoration: none; } .ds-cta:hover { background: #b30500; } .ds-cta:focus-visible { outline: 2px solid var(--accent, #e10600); outline-offset: 1px; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Contenedor elevado de dashboard y panel: pantalla de telemetría con filete de 1 px.",
+      "html": "<div class=\"ds-card\"><h3>Próximo GP</h3><ul><li><strong>J5 · Gran Premio</strong></li><li class=\"ds-card-muted\">Cierra en 2 h 14 min</li></ul></div>",
+      "css": ".ds-card { background: #10151c; border: 1px solid #21262d; border-radius: 8px; padding: 0.9rem 1rem; color: var(--fg, #e6edf3); font-family: system-ui, -apple-system, \"Segoe UI\", sans-serif; } .ds-card h3 { margin: 0 0 0.5rem; font-size: 1rem; } .ds-card ul { margin: 0; padding-left: 1.25rem; } .ds-card li { margin: 0.3rem 0; } .ds-card-muted { color: var(--muted, #8b949e); }"
+    },
+    {
+      "name": "Campo de formulario",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Etiqueta + input + error en línea; el patrón de todos los formularios.",
+      "html": "<div class=\"ds-field\"><label for=\"ds-email\">Correo electrónico</label><input id=\"ds-email\" type=\"email\" placeholder=\"tu@correo.es\"><p class=\"ds-field-error\">Introduce un correo válido.</p></div>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: 0.3rem; max-width: 22rem; font-family: system-ui, -apple-system, \"Segoe UI\", sans-serif; } .ds-field label { font-size: 0.9rem; color: var(--muted, #8b949e); } .ds-field input { padding: 0.55rem 0.7rem; font-size: 1rem; color: var(--fg, #e6edf3); background: #10151c; border: 1px solid #21262d; border-radius: 6px; min-height: 44px; } .ds-field input:focus { outline: 2px solid var(--accent, #e10600); outline-offset: 1px; } .ds-field-error { margin: 0; font-size: 0.85rem; color: var(--bad, #f85149); }"
+    },
+    {
+      "name": "Tabs de tipo de activo",
+      "kind": "chip",
+      "refersTo": "tab",
+      "description": "Pestañas de conmutación (pilotos/constructores/equipos); la activa se rellena de rojo.",
+      "html": "<div class=\"ds-tabs\" role=\"group\" aria-label=\"Tipo de activo\"><button class=\"ds-tab\" aria-pressed=\"false\">Pilotos</button><button class=\"ds-tab\" aria-pressed=\"true\">Constructores</button><button class=\"ds-tab\" aria-pressed=\"false\">Equipos</button></div>",
+      "css": ".ds-tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; font-family: system-ui, -apple-system, \"Segoe UI\", sans-serif; } .ds-tab { padding: 0.45rem 0.9rem; font-size: 0.95rem; color: var(--fg, #e6edf3); background: #10151c; border: 1px solid #21262d; border-radius: 6px; min-height: 44px; cursor: pointer; } .ds-tab:hover { border-color: var(--accent, #e10600); } .ds-tab[aria-pressed=\"true\"] { color: #fff; background: var(--accent, #e10600); border-color: var(--accent, #e10600); } .ds-tab:focus-visible { outline: 2px solid var(--accent, #e10600); outline-offset: 1px; }"
+    },
+    {
+      "name": "Alertas de estado",
+      "kind": "custom",
+      "refersTo": "alert-warning",
+      "description": "Cuatro variantes de mensaje de estado; solo el éxito va sin caja (texto verde).",
+      "html": "<div class=\"ds-alerts\"><p class=\"ds-alert ds-alert-warning\">El lockout de este GP cierra pronto.</p><p class=\"ds-alert ds-alert-info\">Puntuación provisional: calculada con los resultados importados hasta ahora.</p><p class=\"ds-alert ds-alert-error\">No se pudo cargar el dashboard.</p><p class=\"ds-alert ds-alert-success\">Perfil actualizado.</p></div>",
+      "css": ".ds-alerts { display: flex; flex-direction: column; gap: 0.5rem; font-family: system-ui, -apple-system, \"Segoe UI\", sans-serif; } .ds-alert { margin: 0; padding: 0.6rem 0.8rem; font-size: 0.9rem; border-radius: 6px; } .ds-alert-warning { color: #d29922; background: rgba(210, 153, 34, 0.1); border: 1px solid rgba(210, 153, 34, 0.4); } .ds-alert-info { color: #58a6ff; background: rgba(88, 166, 255, 0.1); border: 1px solid rgba(88, 166, 255, 0.4); } .ds-alert-error { color: var(--bad, #f85149); background: rgba(248, 81, 73, 0.1); border: 1px solid rgba(248, 81, 73, 0.4); } .ds-alert-success { padding: 0; color: var(--ok, #3fb950); }"
+    },
+    {
+      "name": "Row action (fantasma)",
+      "kind": "button",
+      "refersTo": "row-action",
+      "description": "Acción secundaria de fila (ver detalle / cerrar): borde y texto rojos, sin relleno.",
+      "html": "<button class=\"ds-row-action\">Ver detalle</button>",
+      "css": ".ds-row-action { padding: 0.15rem 0.5rem; font-size: 0.85rem; font-family: system-ui, -apple-system, \"Segoe UI\", sans-serif; color: var(--accent, #e10600); background: none; border: 1px solid var(--accent, #e10600); border-radius: 5px; cursor: pointer; } .ds-row-action:hover { background: rgba(225, 6, 0, 0.12); } .ds-row-action:focus-visible { outline: 2px solid var(--accent, #e10600); outline-offset: 1px; }"
+    },
+    {
+      "name": "Status list",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "Lista de datos con filas separadas por filetes: versiones de reglas, historial, estado de servicios.",
+      "html": "<ul class=\"ds-status\"><li><strong>Temporada 2026</strong> — reglas scoring-v1</li><li class=\"ds-status-muted\">Sin resultados aún</li><li class=\"ds-status-bad\">Cerrado (lockout)</li></ul>",
+      "css": ".ds-status { list-style: none; margin: 0.5rem 0 0; padding: 0; border: 1px solid #21262d; border-radius: 8px; overflow: hidden; color: var(--fg, #e6edf3); font-family: system-ui, -apple-system, \"Segoe UI\", sans-serif; } .ds-status li { padding: 0.6rem 1rem; border-bottom: 1px solid #21262d; } .ds-status li:last-child { border-bottom: none; } .ds-status-muted { color: var(--muted, #8b949e); } .ds-status-bad { color: var(--bad, #f85149); }"
+    },
+    {
+      "name": "Navegación ancla",
+      "kind": "nav",
+      "refersTo": "tab",
+      "description": "Barra fija de chips del panel admin; el borde se enciende en rojo al pasar el cursor.",
+      "html": "<nav class=\"ds-anchor-nav\" aria-label=\"Secciones\"><a href=\"#temporadas\">Temporadas</a><a href=\"#circuitos\">Circuitos</a><a href=\"#resultados\">Resultados</a></nav>",
+      "css": ".ds-anchor-nav { display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0.5rem; background: var(--bg, #0b0f14); border: 1px solid #21262d; border-radius: 8px; font-family: system-ui, -apple-system, \"Segoe UI\", sans-serif; } .ds-anchor-nav a { padding: 0.45rem 0.8rem; font-size: 0.9rem; color: var(--fg, #e6edf3); background: #10151c; border: 1px solid #21262d; border-radius: 6px; text-decoration: none; } .ds-anchor-nav a:hover { border-color: var(--accent, #e10600); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "El Muro de Boxes",
+    "overview": "Este sistema es lo que ve el muro de boxes a las once de la noche: pantallas de telemetría oscuras donde cada píxel se gana su sitio y un solo rojo que solo se enciende cuando algo va a pasar. Fantasy MotoGP — Independiente es una superficie de operación — leer el mercado, componer un lineup contra el reloj, auditar por qué una puntuación es la que es — y el mundo visual sigue esa lógica: oscuridad para reducir el ruido, rojo como señal, datos legibles bajo presión de tiempo. El carácter es **preciso y operativo**: nervio de competición contenido, cero espectáculo.\n\nEl sistema es **plano por convicción**: sin sombras, sin degradados, sin cristales esmerilados. La profundidad procede de una escalera de superficies (azul noche de boxes → pantalla de telemetría) separada por filetes de 1 px. La densidad es calmada: una sola columna de 56 rem, interlínea 1.5 y canales generosos; lo que no cabe en pantalla se desliza dentro de su contenedor, nunca ensancha la página. Todo se renderiza con la pila de fuentes del sistema: cero fuentes licenciadas, cero imágenes de marca (compromiso duradero del producto: identidad propia, sin MotoGP).\n\nAnti-referencia confirmada: la estética de casino y apuestas con neones —el producto no tiene apuestas con dinero real— y el desorden gráfico de las retransmisiones deportivas. La única jugada expresiva es **la palabra roja**: cada título de página destaca exactamente una palabra en rojo de salida.",
+    "keyCharacteristics": [
+      "**Plano por convicción:** sin sombras ni degradados; la profundidad es escalón de superficie + filete de 1 px.",
+      "**Rojo como señal, nunca como decoración:** acciones, enlaces, foco y una palabra del título; nada más.",
+      "**Datos primero:** tablas y desgloses legibles; lo ancho se desliza dentro de su contenedor.",
+      "**Mano sobre el móvil:** objetivos táctiles ≥ 44 px y ritmo vertical de 0.3/0.5/0.9/1/1.25 rem.",
+      "**Semántica estricta:** verde de bandera = bien/sube; rojo de bandera = error/baja; gris de cronometraje = ausencia."
+    ],
+    "rules": [
+      { "name": "La Regla de la Señal", "body": "El rojo de salida significa acción o marca, nunca decoración: como máximo un relleno rojo protagonista por región de pantalla y una palabra roja por título. Su rareza es el mensaje.", "section": "colors" },
+      { "name": "La Regla del Tinte 10/40", "body": "Los fondos de alerta son el color de estado al 10% de opacidad con borde del mismo color al 40% (rgba(…, 0.1) / rgba(…, 0.4)); el color sólido del estado aparece solo como texto.", "section": "colors" },
+      { "name": "La Regla de la Pareja Semántica", "body": "Verde y rojo solo cargan significado (bien/error, sube/baja); el gris de cronometraje marca la ausencia («Consultando…», «—», «sin posición»). Ninguno de los tres decora.", "section": "colors" },
+      { "name": "La Regla de la Palabra Roja", "body": "Todo h1 destaca exactamente una palabra con el acento («Fantasy MotoGP *Independiente*», «Inicia *sesión*»). Una palabra: nunca dos, nunca el título entero.", "section": "typography" },
+      { "name": "La Regla del Peso Cerrado", "body": "Solo existen tres pesos: 400 (lectura y etiquetas), 600 (acciones y cabeceras de tabla) y 700 (títulos). No se introduce ningún otro.", "section": "typography" },
+      { "name": "La Regla de los 44", "body": "Todo control interactivo mide ≥ 44 px de alto (botones, pestañas, inputs, selects): el flujo central debe poder operarse con una mano en un iPhone SE de 375 px.", "section": "layout" },
+      { "name": "La Regla del Scroll Contenido", "body": "Una tabla que no cabe se desliza dentro de su propia caja (overflow-x: auto); nunca ensancha la página — un desborde horizontal en móvil desplaza los puntos de clic fuera de sus controles.", "section": "layout" },
+      { "name": "La Regla de la Columna Única", "body": "Una columna centrada de 56 rem: las secciones se apilan en vertical y solo la rejilla del dashboard se abre en varias columnas.", "section": "layout" },
+      { "name": "La Regla Plana", "body": "Ningún box-shadow, ningún degradado, ningún glow. Si algo debe destacar, cambia de escalón de superficie o de color de borde; nunca de altura.", "section": "elevation" },
+      { "name": "La Regla de los Tres Radios", "body": "5/6/8 px y nada más: ni 0 px ni píldora. La forma se reconoce antes que el color.", "section": "shapes" }
+    ],
+    "dos": [
+      "**Do** mantener el rojo escaso: una acción primaria por región de pantalla y una palabra roja por título.",
+      "**Do** explicar por escrito todo control bloqueado o deshabilitado (motivo de bloqueo explícito y accionable).",
+      "**Do** construir la profundidad con la escalera de superficies (lienzo → pantalla de telemetría) y filetes de 1 px antes que con cualquier otro recurso.",
+      "**Do** respetar los ≥ 44 px de alto en controles y el ritmo de 0.3/0.5/0.9/1/1.25 rem.",
+      "**Do** dejar que los datos anchos se deslicen dentro de su contenedor.",
+      "**Do** usar los colores semánticos solo para su semántica (pareja verde/rojo/gris de ausencia).",
+      "**Do** redactar la UI, los errores y los motivos de rechazo en español (compromiso del producto)."
+    ],
+    "donts": [
+      "**Don't** añadir sombras, degradados, glassmorphism ni glow: el sistema es plano por convicción.",
+      "**Don't** usar la estética de casino/apuestas con neones (anti-referencia confirmada) ni lenguaje visual de juego con dinero real.",
+      "**Don't** rellenar grandes áreas con el rojo de acento ni usar verde/rojo decorativamente.",
+      "**Don't** introducir radios de píldora, círculos ni esquinas de 0 px: la escala es 5/6/8 px.",
+      "**Don't** renderizar tablas más anchas que el viewport ni ensanchar el documento en móvil.",
+      "**Don't** usar branding, logos ni datos licenciados de MotoGP (compromiso duradero: identidad propia).",
+      "**Don't** introducir tipografías de pago o licenciadas: la pila del sistema es deliberada."
+    ]
+  }
+}
