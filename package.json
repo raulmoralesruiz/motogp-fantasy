@@ -10,6 +10,7 @@
     "start": "next start",
     "worker": "tsx worker/index.ts",
     "check:purity": "tsx scripts/check-purity/cli.ts",
+  "audit:ci": "tsx scripts/audit-gate/cli.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

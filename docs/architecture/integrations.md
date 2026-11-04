@@ -167,7 +167,7 @@ interface NormalizedSeasonCalendar {
 
 ## 7. Decisiones pendientes
 
-- Frecuencia exacta de polling durante el fin de semana.
-- Si se usa webhook (si la fuente lo ofrece) en lugar de polling.
+- ~~Frecuencia exacta de polling durante el fin de semana.~~ — **cerrado (D-09, 2026-11-03, ADR-0019 addendum)**: **5 min** (`PROVISIONAL_RESULTS_POLL.intervalMinutes` en `shared/config`, operativa desde US-17/ADR-0019; test de contrato en `app/shared/config/__tests__/results-poll.test.ts`).
+- ~~Si se usa webhook (si la fuente lo ofrece) en lugar de polling.~~ — **cerrado (D-09, 2026-11-03, ADR-0019 addendum)**: **PulseLive no ofrece webhook** → el mecanismo es polling por diseño (contrato `ResultsSource`); se revisará si cambia la fuente (p. ej. Sportradar, US-33).
 - Contratos concretos con Sportradar (cuando haya tracción).
 - Política de retención de `raw` (payload original) por auditoría.

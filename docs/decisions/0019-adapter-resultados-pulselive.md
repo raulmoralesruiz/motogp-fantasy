@@ -164,3 +164,9 @@ PulseLive nunca declara resultados «definitivos» (eso es decisión admin en el
 - **Reporte y auditoría:** `market.imported` (y el resumen de la UI) ganan `riderMappingsCreated/Updated/Skipped`.
 
 **Impacto.** `market-service.ts` (`importMarket` crea/actualiza `rider_mappings` + contadores), `MarketImportReport` (3 campos), UI `market-import-form.tsx` (muestra los mapeos), tests de integración (`market-import.test.ts`: creación, idempotencia, self-correcting, sin `sourceId`). **Procedimiento operativo:** al importar un mercado nuevo, los mapeos se crean solos; el auto-import de resultados ya asocia las clasificaciones a los pilotos sin mapeo manual.
+
+## Addendum (2026-11-03): D-09 cerrada — frecuencia de polling fijada (5 min) y webhook descartado
+
+**Decisión (D-09, `integrations.md` §7).** (1) **Frecuencia de polling: 5 min**, fijada como valor definitivo (la PROVISIONAL de US-17 queda ratificada): operativa desde el worker BullMQ (T-10: job repeatable `results-poll` con cadencia `PROVISIONAL_RESULTS_POLL.intervalMinutes`) y con test de contrato que fija valores + esquema (`app/shared/config/__tests__/results-poll.test.ts`). Ventana `[now − 48h, now + 24h]` y umbral de alerta 3 igualmente ratificados. (2) **Webhook: no** — PulseLive (fuente del MVP) no ofrece webhook; el mecanismo de actualización sigue siendo **polling por diseño** sobre el contrato `ResultsSource` (adapter pattern: una fuente push se integraría como adapter, no como cambio de arquitectura). Se revisará la decisión si cambia la fuente (p. ej. Sportradar, US-33).
+
+**Sin código nuevo:** la frecuencia ya estaba fija y operativa; este addendum solo registra la decisión y cierra D-09 (backlog + `integrations.md` §7 actualizados).

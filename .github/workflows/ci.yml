@@ -35,6 +35,12 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
 
+      # T-21 (ADR-0038): gate de vulnerabilidades (high/critical). Fallo si
+      # aparece un hallazgo NO cubierto por audit-baseline.json (excepciones
+      # conocidas justificadas, cierre en T-23) o una entrada obsoleta.
+      - name: "npm audit — gate de vulnerabilidades (T-21, ADR-0038)"
+        run: npm run audit:ci
+
       - name: Lint
         run: npm run lint
 

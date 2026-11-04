@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "$comentario": "Gate de vulnerabilidades de dependencias (T-21, ADR-0038). Vigila SOLO high/critical (low/moderate los gestiona Dependabot: patch/minor semanales). Cada entrada exige motivo y cierre; al cerrarse el hallazgo se elimina la entrada EN EL MISMO COMMIT (el gate falla si una entrada queda obsoleta). No añadir entradas sin revisión explícita.",
+  "threshold": ["high", "critical"],
+  "known": [
+    {
+      "package": "next",
+      "severity": "critical",
+      "reason": "GHSA-2464-fhr4-w9xw (RCE vía Image Optimization con SVG) y GHSA-p3m5-59mp-jv5r (DoS vía Server Actions): superficie no utilizada — la app no usa next/image ni acciones de servidor ('use server'); la API es tRPC sobre route handlers y la UI no procesa SVG de terceros.",
+      "closure": "T-23 (next 16)"
+    },
+    {
+      "package": "zod",
+      "severity": "high",
+      "reason": "GHSA-mrhx-c7xc-m3w5 (exhaustión de memoria validando colecciones grandes): superficie acotada — los inputs validan longitudes con .max() y los arrays tienen tamaño acotado por reglas de juego (lineups 2+2+1+1; import de resultados con tope de entradas por evento).",
+      "closure": "T-23 (zod 4)"
+    },
+    {
+      "package": "vitest",
+      "severity": "critical",
+      "reason": "GHSA-5xrq-8626-4rwp (Vitest UI server) y GHSA-82fw-gwwq-j7x9 (path traversal en @vitest/mocker): solo toolchain de tests (devDependency; no se empaqueta en producción).",
+      "closure": "T-23 (vitest 5)"
+    },
+    {
+      "package": "vite",
+      "severity": "high",
+      "reason": "GHSA-4w7w-66w2-5vf9 (path traversal en deps optimizadas) y GHSA-v6wh-96g9-6wx3/698v-4r3x-3vcv/r825-w8mm-5pxw (launch-editor, solo Windows): solo toolchain de tests/build (devDependency; no se empaqueta).",
+      "closure": "T-23 (vitest 5)"
+    },
+    {
+      "package": "tinypool",
+      "severity": "critical",
+      "reason": "GHSA-5gmw-xhrv-c9v3 y GHSA-85c8-ppgw-ccpr (prototype pollution → RCE): dependencia de vitest, solo toolchain de tests (devDependency; no se empaqueta).",
+      "closure": "T-23 (vitest 5)"
+    },
+    {
+      "package": "@vitest/coverage-v8",
+      "severity": "critical",
+      "reason": "Toolchain de cobertura de tests (devDependency; no se empaqueta); desaparece al actualizar vitest.",
+      "closure": "T-23 (vitest 5)"
+    },
+    {
+      "package": "prisma",
+      "severity": "high",
+      "reason": "CLI/generador de Prisma (devDependency); el runtime de producción usa @prisma/client, que no aparece en el audit.",
+      "closure": "T-23 (prisma 7)"
+    },
+    {
+      "package": "@prisma/config",
+      "severity": "high",
+      "reason": "Dependencia de la CLI de prisma (devDependency; no se empaqueta).",
+      "closure": "T-23 (prisma 7)"
+    },
+    {
+      "package": "deepmerge-ts",
+      "severity": "high",
+      "reason": "GHSA-ggr8-5vv4-36mx (stack exhaustion al mergear grafos recursivos): dependencia de @prisma/config, solo toolchain de desarrollo.",
+      "closure": "T-23 (prisma 7)"
+    },
+    {
+      "package": "postcss",
+      "severity": "high",
+      "reason": "GHSA-qx2v-qp2m-jg93 (XSS en stringify), GHSA-6g55-p6wh-862q / GHSA-fxqj-rqcc-2cmp / GHSA-r28c-9q8g-f849 (sourceMappingURL): transitive de next (build de CSS); la app no sirve ni inyecta el CSS stringificado por el servidor.",
+      "closure": "T-23 (next 16)"
+    },
+    {
+      "package": "undici",
+      "severity": "high",
+      "reason": "GHSA-4qv8-2p9j-2685 (DoS EventSource), GHSA-f72v-6w45-q472 (SRI bypass), GHSA-xjj6-f33q-929c (DoS content-encodings), GHSA-4w7w-5xrc-9h26 (cache poisoning): dependencias de dev (jsdom en tests UI, testcontainers en integración); no se empaqueta en producción.",
+      "closure": "T-23 (toolchain)"
+    }
+  ]
+}
