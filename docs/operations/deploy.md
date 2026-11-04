@@ -181,7 +181,7 @@ Si el rollback es por un problema de código, también puedes
 | `git pull` pide contraseña           | falta la config SSH        | revisa `~/.ssh/config` (bloque `Host github-motogp`)                |
 | La web no carga por NPM              | proxy mal apuntado         | que apunte a `192.168.1.3:22020` (no a `:3000`)                     |
 | `migrate deploy` falla               | imagen sin `prisma/`       | reconstruir: `./deploy.sh`                                          |
-| CI en rojo por gitleaks              | alguien commiteó un secret | rota el secret, quítalo del repo (BFG/filter-repo) y vuelve a subir |
+| CI en rojo por gitleaks              | secret, o falso positivo (vector de test/fixture) | mira el job summary: si es un secret real, rótalo, quítalo del repo (BFG/filter-repo) y vuelve a subir; si es un falso positivo, evalúa una excepción **documentada** en `.gitleaks.toml` (ADR-0040) |
 
 ## 8. Sentry (T-14, ADR-0036)
 

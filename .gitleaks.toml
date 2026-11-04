@@ -1,0 +1,37 @@
+# Config de Gitleaks — escaneo de secrets en CI (T-19).
+#
+# Extiende las reglas por defecto de gitleaks (`[extend] path = "default"`).
+# Solo excepciones documentadas y justificadas. Una entrada nueva exige:
+# descripción del motivo + referencia a la decisión (ADR/backlog) que lo justifica.
+#
+# Contexto (2026-11-04): con gitleaks 8.30.1 (la "latest" que usa la acción),
+# la regla `generic-api-key` producía falsos positivos en (a) los fixtures de
+# tests PulseLive — datos anonimizados del contrato de la fuente, con campos
+# `riders_api_uuid` y UUIDs — y (b) los vectores de test del TOTP de D-07
+# (ejemplo canónico base32 del RFC 4648 como secreto de test + contraseñas de
+# prueba). Ningún secreto real. Ver ADR-0040.
+
+title = "motogp-fantasy — gitleaks"
+
+[extend]
+useDefault = true
+
+# Fixtures de tests del adapter PulseLive (ADR-0019; testing.md §3: sin PII
+# ni datos reales de usuarios). Datos anonimizados del contrato de la fuente.
+[[allowlists]]
+description = "Fixtures PulseLive: datos anonimizados de tests (ADR-0019, testing.md §3)"
+paths = [
+  "(^|/)test/fixtures/pulselive/.*\\.json$",
+]
+
+# Vectores de test TOTP (ADR-0039, D-07): el secreto `GEZDGNBVGY3TQOJQ…` es
+# el ejemplo canónico del RFC 4648/4226 (no es un secreto: es público) y
+# `clave-de-prueba-123` es una contraseña de test. Valores fijos para la
+# reproducibilidad de los tests; fuera de estos archivos no se permite.
+[[allowlists]]
+description = "Vectores de test TOTP (RFC 4648/4226, ADR-0039) y contraseñas de test"
+paths = [
+  "(^|/)app/modules/identity/core/__tests__/totp\\.test\\.ts$",
+  "(^|/)app/modules/identity/__tests__/auth-service-2fa\\.test\\.ts$",
+  "(^|/)app/perfil/__tests__/totp-section\\.test\\.tsx$",
+]

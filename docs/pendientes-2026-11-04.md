@@ -21,7 +21,7 @@
 - Migración `20261104120000_user_totp` (verificada: aplica limpia en NAS/CI).
 - **Puertas:** lint 0, typecheck, pureza, unit 880/880, UI 501/501, build OK, **integración 496/496 (NAS, Testcontainers, PostgreSQL real)** (incluida la corrección del setup: `waitForTcp` + reintento acotado del `migrate deploy` — race de publicación de puerto en el daemon del NAS que causaba P1001), `audit:ci` 0 nuevos.
 - Docs: ADR-0039, `security.md` §5 (resuelta), `backlog.md` D-07 (Hecho), runbook §9 (recovery de 2FA del `global_admin`), `estado-actual.md`, `.env.example`/`.env.prod.example` (`TOTP_CHALLENGE_TTL_SEC`/`TOTP_MAX_ATTEMPTS`), AGENTS.md (estado + ADR map 0039).
-- **Pendiente:** commit + push (permiso del usuario) y CI de GitHub (también la de `7f89d31`).
+- **Commit + push: ✅ (`c1bc607`, 2026-11-04).** CI de `c1bc607`: 2 jobs en rojo (Gitleaks: falsos positivos sobre vectores de test con la "latest" sin pin; gate de cobertura 99.65% < 99.9%: el borde Redis de 2FA no estaba cubierto) → **corregidos en el árbol de trabajo (2026-11-04): ADR-0040** (pin `GITLEAKS_VERSION: 8.30.1` en CI + `.gitleaks.toml` con 2 excepciones documentadas y acotadas) **+ 19 tests nuevos** (borde Redis de 2FA, ramas NOT_FOUND del servicio, estados/errores de la UI de 2FA). Puertas finales: lint 0, typecheck, pureza, unit 893, UI 507, build, **cobertura 99.9283% ≥ 99.9% (NAS, Testcontainers, 171/171 archivos)**, gitleaks 8.30.1 simulando el modo exacto de la acción → 0 hallazgos (control positivo: un secret inyectado fuera de las rutas exentas sigue detectado). **Pendiente: commit + push del fix (permiso del usuario) y CI en verde.**
 
 ## Bloque 3 — Operación (producción en "modo provisional")
 

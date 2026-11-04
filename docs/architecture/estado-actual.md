@@ -57,7 +57,8 @@
 ├── instrumentation.ts          # Sentry en el servidor Next (T-14): `register()` + `onRequestError` (Server Components/middleware/route handlers); sin DSN no inicializa
 ├── instrumentation-client.ts   # Sentry en el cliente (T-14): init solo si hay DSN (se hornea en el build) + `dataCollection` cerrada (GDPR)
 ├── sentry.server.config.ts     # Sentry runtime nodejs (T-14): init solo si hay DSN + `dataCollection` cerrada (GDPR)
-├── .github/workflows/ci.yml    # CI: calidad + docker smoke + gitleaks
+├── .github/workflows/ci.yml    # CI: calidad + docker smoke + gitleaks (versión pin en CI — ADR-0040)
+├── .gitleaks.toml              # Gitleaks: extiende reglas por defecto + excepciones documentadas (T-19, ADR-0040)
 ├── Dockerfile                  # Imagen de producción (web + worker — T-10, ADR-0034): runner con `worker/`, `app/` y `tsconfig.json` (tsx resuelve `@/*`)
 ├── docker-compose.yml          # Infra local: PostgreSQL 16 + Redis 7
 ├── docker-compose.prod.yml     # Producción: web + **worker** (T-10, ADR-0034) + PostgreSQL 16 + Redis 7
@@ -335,7 +336,7 @@ Ya no hay módulos vacíos: `leagues` está implementado (US-15 + US-21 + US-23 
 
 1. `quality`: lint → **gate de vulnerabilidades (`npm audit`, high/critical contra `audit-baseline.json` — T-21, ADR-0038)** → typecheck → **tests fusionados (unit + integración + UI) con gate de cobertura global 99.9%** (Testcontainers, PostgreSQL real) → **check de pureza** → build (T-24, ADR-0011 addendum).
 2. `docker`: build de la imagen + smoke HTTP (cabeceras de seguridad + CORS).
-3. `secrets`: gitleaks (T-19).
+3. `secrets`: gitleaks (T-19) — versión pin en CI (`GITLEAKS_VERSION: 8.30.1`) y excepciones documentadas en `.gitleaks.toml` (ADR-0040).
 
 **Check de pureza** (`scripts/check-purity/`, T-03): scanner AST (API del compilador TypeScript, sin falsos positivos por comentarios) que falla si `economy`/`scoring` o los núcleos `lineups/core` y `results/core` (4 raíces) importan I/O de Node, infraestructura de la app, resuelven imports fuera del módulo (solo se permite `app/shared/types`; el núcleo de `lineups` puede además importar `economy`) o usan el reloj (`Date.now()`, `new Date()`). Se ejecuta dentro de `npm run build` **y** en CI: un módulo puro que impurea **rompe el build**.
 

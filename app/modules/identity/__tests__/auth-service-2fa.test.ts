@@ -300,6 +300,23 @@ describe("AuthService · 2FA TOTP (D-07, ADR-0039)", () => {
         service.login({ email: account, password: PASSWORD }, { ip: IP }),
       ).rejects.toMatchObject({ code: "FORBIDDEN" });
     });
+
+    it("reto de un usuario que ya no existe en la BD: error genérico de código (sin fugas)", async () => {
+      pinClock();
+      const secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+      const { service, prisma, totp } = makeService(
+        makeUser({ passwordHash, totpSecret: secret, totpEnabledAt: new Date(T0) }),
+      );
+      const token = await totp.issue("u-borrado", 300);
+      // El reto es válido, pero el usuario desapareció (p. ej. anonimizado)
+      // tras emitirlo: se trata como código inválido, sin revelar por qué.
+      prisma.user.findUnique.mockResolvedValueOnce(null);
+
+      await expect(service.verifyTotp(token, "123456", { ip: IP })).rejects.toMatchObject({
+        code: "UNAUTHORIZED",
+        message: expect.stringContaining("no es válido"),
+      });
+    });
   });
 
   describe("enrollTotp (matriculación)", () => {
@@ -336,6 +353,15 @@ describe("AuthService · 2FA TOTP (D-07, ADR-0039)", () => {
       expect(secret).not.toBe(oldSecret);
       expect(user.totpEnabledAt).toBeNull(); // debe confirmarse de nuevo
     });
+
+    it("usuario inexistente: NOT_FOUND (no revela si la cuenta existe)", async () => {
+      const { service, prisma } = makeService(makeUser({ passwordHash }));
+      prisma.user.findUnique.mockResolvedValueOnce(null);
+
+      await expect(
+        service.enrollTotp("fantasma@liga.com", PASSWORD, { ip: IP }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
   });
 
   describe("confirmTotp (activación)", () => {
@@ -363,6 +389,18 @@ describe("AuthService · 2FA TOTP (D-07, ADR-0039)", () => {
       await expect(
         service.confirmTotp("u-admin", "123456", { ip: IP }),
       ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    });
+
+    it("usuario inexistente: NOT_FOUND", async () => {
+      pinClock();
+      const { service, prisma } = makeService(
+        makeUser({ passwordHash, totpSecret: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ" }),
+      );
+      prisma.user.findUnique.mockResolvedValueOnce(null);
+
+      await expect(
+        service.confirmTotp("u-fantasma", "123456", { ip: IP }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
     });
   });
 
@@ -398,6 +436,21 @@ describe("AuthService · 2FA TOTP (D-07, ADR-0039)", () => {
       await expect(
         service.disableTotp("u-admin", PASSWORD, { ip: IP }),
       ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    });
+
+    it("usuario inexistente: NOT_FOUND", async () => {
+      const { service, prisma } = makeService(
+        makeUser({
+          passwordHash,
+          totpSecret: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+          totpEnabledAt: new Date(T0),
+        }),
+      );
+      prisma.user.findUnique.mockResolvedValueOnce(null);
+
+      await expect(
+        service.disableTotp("u-fantasma", PASSWORD, { ip: IP }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
     });
   });
 });

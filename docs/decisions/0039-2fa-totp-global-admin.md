@@ -2,7 +2,7 @@
 
 - **Estado:** Aceptado (2026-11-04)
 - **Fecha:** 2026-11-04
-- **Relacionado:** D-07 (backlog: "2FA para `global_admin` (recomendado: sí)"), `security.md` §1.6/§5/§1.11, US-01 (auth + anti fuerza bruta), T-09 (auditoría), T-12/ADR-0035 (patrón de rate limit por IP), ADR-0016 (anonimización GDPR — la limpieza de `totp_secret`/`totp_enabled_at` al borrar cuenta), ADR-0038 (gate de `npm audit`: `qrcode` entra en el baseline si tiene hallazgos), `testing.md` (capa de tests del núcleo puro).
+- **Relacionado:** D-07 (backlog: "2FA para `global_admin` (recomendado: sí)"), `security.md` §1.6/§5/§1.11, US-01 (auth + anti fuerza bruta), T-09 (auditoría), T-12/ADR-0035 (patrón de rate limit por IP), ADR-0016 (anonimización GDPR — la limpieza de `totp_secret`/`totp_enabled_at` al borrar cuenta), ADR-0038 (gate de `npm audit`: `qrcode` entra en el baseline si tiene hallazgos), `testing.md` (capa de tests del núcleo puro), ADR-0040 (los vectores de test TOTP llevan una excepción documentada en el gate de gitleaks).
 
 ## Problema
 

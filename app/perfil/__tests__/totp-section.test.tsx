@@ -129,4 +129,113 @@ describe("TotpSection (D-07, ADR-0039)", () => {
 
     expect(screen.getByRole("alert").textContent).toContain("La contraseña no es correcta.");
   });
+
+  it("activo: al desactivar con éxito invalida profile.me (el estado llega del servidor)", async () => {
+    mockResult(trpc.auth.totp.disable.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+    });
+    const { queryClient } = renderTotp({ enabled: true, enrolled: true });
+    const spy = vi.spyOn(queryClient, "invalidateQueries");
+
+    // Simula el éxito del servidor: el onSuccess del componente se ejecuta.
+    const options = (
+      trpc.auth.totp.disable.useMutation as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls[0]?.[0] as { onSuccess?: () => void };
+    await act(async () => {
+      options?.onSuccess?.();
+    });
+
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it("pendiente: al confirmar con éxito invalida profile.me", async () => {
+    mockResult(trpc.auth.totp.enroll.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+      onSuccess: vi.fn(),
+    });
+    mockResult(trpc.auth.totp.confirm.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+    });
+    const { queryClient } = renderTotp({ enabled: false, enrolled: true });
+    const spy = vi.spyOn(queryClient, "invalidateQueries");
+
+    const options = (
+      trpc.auth.totp.confirm.useMutation as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls[0]?.[0] as { onSuccess?: () => void };
+    await act(async () => {
+      options?.onSuccess?.();
+    });
+
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it("pendiente: error de confirmación por campo (Zod) junto al campo del código", () => {
+    const error = clientError("Entrada no válida.", {
+      zod: { issues: [{ path: ["code"], message: "El código debe tener 6 dígitos." }] },
+    });
+    mockResult(trpc.auth.totp.confirm.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error,
+    });
+    renderTotp({ enabled: false, enrolled: true });
+
+    expect(screen.getByText("El código debe tener 6 dígitos.")).toBeInTheDocument();
+    // El mensaje genérico no se repite en una alerta (ya está por campo).
+    expect(screen.queryByText("Entrada no válida.")).not.toBeInTheDocument();
+  });
+
+  it("pendiente: error general de confirmación (sin issues de Zod) en alerta", () => {
+    const error = clientError("El código no es válido o ha caducado.", {
+      code: "UNAUTHORIZED",
+    });
+    mockResult(trpc.auth.totp.confirm.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error,
+    });
+    renderTotp({ enabled: false, enrolled: true });
+
+    expect(screen.getByRole("alert").textContent).toContain(
+      "El código no es válido o ha caducado.",
+    );
+  });
+
+  it("activo: error de desactivación por campo (Zod) junto al campo de contraseña", () => {
+    const error = clientError("Entrada no válida.", {
+      zod: { issues: [{ path: ["password"], message: "La contraseña es obligatoria." }] },
+    });
+    mockResult(trpc.auth.totp.disable.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error,
+    });
+    renderTotp({ enabled: true, enrolled: true });
+
+    expect(screen.getByText("La contraseña es obligatoria.")).toBeInTheDocument();
+  });
+
+  it("activo: error general de desactivación (contraseña incorrecta) en alerta", () => {
+    const error = clientError("La contraseña no es correcta.", {
+      code: "UNAUTHORIZED",
+    });
+    mockResult(trpc.auth.totp.disable.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error,
+    });
+    renderTotp({ enabled: true, enrolled: true });
+
+    expect(screen.getByRole("alert").textContent).toContain("La contraseña no es correcta.");
+  });
 });

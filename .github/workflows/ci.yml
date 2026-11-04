@@ -171,3 +171,8 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Version fijada: la acción usa la "latest" si no se pin, y un
+          # cambio de reglas entre commits hizo fallar un CI verde anterior
+          # (falsos positivos, ADR-0040). Subir la version: revisar reglas
+          # nuevas y, si procede, actualizar .gitleaks.toml (excepciones).
+          GITLEAKS_VERSION: 8.30.1
