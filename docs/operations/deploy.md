@@ -86,6 +86,20 @@ chmod 600 .env
 > El `.env` vive en el servidor, fuera del repo. CI lo protege con gitleaks
 > por si alguien lo commitea por error (T-19).
 
+> **Peligro documentado (incident 2026-11-04):** el `.env` de producción existe
+> **solo en el NAS**. Al sincronizar el árbol del repo al NAS para correr tests
+> (`rsync --delete`), el `.env` de desarrollo local sobreescribió el de
+> producción (valores placeholder: `cambiar-este-seguro…`, `localhost`, …).
+> **Re regla:** cualquier `rsync` del árbol al NAS debe excluir siempre
+> `--exclude .env` (y `.env.local`, `.env.bak-*`). Recuperación en caso de
+> incidente (los contenedores en curso conservan los valores originales en
+> memoria mientras no se reinicien): `docker inspect --format '{{json
+> .Config.Env}}' motogp-web` (y `motogp-postgres` para `POSTGRES_*`) +
+> `docker port motogp-web` (puerto host) → reescribir el `.env` con la
+> plantilla `.env.prod.example` y validar con `docker compose config`. El
+> 2026-11-04 se restauró así, íntegro (el `.env` sobrescrito quedó archivado
+> como `.env.bak-dev-overwrite-*` junto al de producción).
+
 ## 2. Primer despliegue
 
 ```bash
