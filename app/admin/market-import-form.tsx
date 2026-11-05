@@ -23,10 +23,7 @@ interface MarketImportFormProps {
  *    los constructores, equipos, pilotos y afiliaciones en una
  *    transacción atómica, saltando lo que ya existe.
  */
-export default function MarketImportForm({
-  seasons,
-  onImported,
-}: MarketImportFormProps) {
+export default function MarketImportForm({ seasons, onImported }: MarketImportFormProps) {
   const utils = trpc.useUtils();
   const importMarket = trpc.market.market.import.useMutation({
     onSuccess: onImported,
@@ -68,9 +65,8 @@ export default function MarketImportForm({
   return (
     <div className="form">
       <p className="muted">
-        Importa constructores, equipos y pilotos desde PulseLive (ADR-0013).
-        El paso 1 solo lee (preview); el paso 2 crea los activos y salta
-        los que ya existen.
+        Importa constructores, equipos y pilotos desde PulseLive. El paso 1
+        solo lee (preview); el paso 2 crea los activos y salta los que ya existen.
       </p>
 
       <form onSubmit={onFetch} noValidate>
@@ -92,10 +88,9 @@ export default function MarketImportForm({
 
       {preview && (
         <p className="muted">
-          Mercado {preview.year} (fuente: {preview.source.name}{" "}
-          {preview.source.version}): {preview.constructors.length} constructores,{" "}
-          {preview.teams.length} equipos, {preview.riders.length} pilotos,{" "}
-          {preview.affiliations.length} afiliaciones.
+          Mercado {preview.year} (fuente: {preview.source.name} {preview.source.version}):{" "}
+          {preview.constructors.length} constructores, {preview.teams.length} equipos,{" "}
+          {preview.riders.length} pilotos, {preview.affiliations.length} afiliaciones.
         </p>
       )}
 
@@ -131,7 +126,9 @@ export default function MarketImportForm({
           <ul className="status">
             {preview.riders.map((rider) => (
               <li key={rider.sourceId ?? rider.name}>
-                <strong>{rider.name} {rider.surname}</strong>
+                <strong>
+                  {rider.name} {rider.surname}
+                </strong>
                 {rider.number !== null ? ` (#${rider.number})` : ""}
                 {rider.countryIso ? ` (${rider.countryIso})` : ""}
               </li>
@@ -146,7 +143,8 @@ export default function MarketImportForm({
           <ul className="status">
             {preview.affiliations.map((aff) => (
               <li key={aff.riderSourceId}>
-                rider: {aff.riderSourceId.slice(0, 8)}… → equipo: {aff.teamSourceId.slice(0, 8)}…
+                rider: {aff.riderSourceId.slice(0, 8)}… → equipo:{" "}
+                {aff.teamSourceId.slice(0, 8)}…
               </li>
             ))}
           </ul>
@@ -155,9 +153,9 @@ export default function MarketImportForm({
 
       {preview && (
         <div className="field">
-          <label htmlFor="importSeasonId">Importar en la temporada</label>
+          <label htmlFor="marketImportSeasonId">Importar en la temporada</label>
           <select
-            id="importSeasonId"
+            id="marketImportSeasonId"
             value={seasonId}
             onChange={(event) => setSeasonId(event.target.value)}
           >
@@ -186,9 +184,8 @@ export default function MarketImportForm({
           Importado: {importMarket.data.constructorsCreated} constructores creados,{" "}
           {importMarket.data.constructorsSkipped} saltados;{" "}
           {importMarket.data.teamsCreated} equipos creados,{" "}
-          {importMarket.data.teamsSkipped} saltados;{" "}
-          {importMarket.data.ridersCreated} pilotos creados,{" "}
-          {importMarket.data.ridersSkipped} saltados;{" "}
+          {importMarket.data.teamsSkipped} saltados; {importMarket.data.ridersCreated}{" "}
+          pilotos creados, {importMarket.data.ridersSkipped} saltados;{" "}
           {importMarket.data.affiliationsCreated} afiliaciones creadas,{" "}
           {importMarket.data.affiliationsSkipped} saltadas;{" "}
           {importMarket.data.riderMappingsCreated} mapeos de piloto creados,{" "}
@@ -197,10 +194,9 @@ export default function MarketImportForm({
           <br />
           <em>
             Las afiliaciones y los mapeos de piloto (fuente → piloto) se crean
-            automáticamente para todos los GPs de la temporada: con ellos el
-            auto-import de resultados asocia las clasificaciones a los pilotos
-            sin mapeo manual. A continuación puedes calcular el P0 automático
-            desde el panel de precios.
+            automáticamente para todos los GPs de la temporada: con ellos el auto-import
+            de resultados asocia las clasificaciones a los pilotos sin mapeo manual. A
+            continuación puedes calcular el P0 automático desde el panel de precios.
           </em>
         </Alert>
       )}

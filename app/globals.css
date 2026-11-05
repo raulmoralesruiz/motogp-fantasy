@@ -4,6 +4,10 @@
   --fg: #e6edf3;
   --muted: #8b949e;
   --accent: #e10600;
+  /* Acento para TEXTO PEQUEÑO: el rojo de salida sólido no llega a 4.5:1
+     sobre el lienzo nocturno; esta variante aclarada sí (AA). Los rellenos
+     y bordes siguen en --accent. */
+  --accent-text: #ff4438;
   --ok: #3fb950;
   --bad: #f85149;
 }
@@ -75,7 +79,8 @@ h2 {
 }
 
 a {
-  color: var(--accent);
+  /* Texto pequeño en rojo: --accent-text (variante aclarada, AA 4.5:1). */
+  color: var(--accent-text);
 }
 
 /* Formularios (US-01: registro y login) */
@@ -97,12 +102,16 @@ a {
   color: var(--muted);
 }
 
-.form input[type="email"],
-.form input[type="text"],
-.form input[type="password"],
-.form input[type="date"],
-.form input[type="number"],
-.form select {
+/* Piel del control (selector base, P2 polish): válida dentro y fuera de
+   `.form` — los selects del ritual, los inputs de precios/afiliaciones/GPs
+   y todos los `datetime-local` se ven iguales que en un formulario. */
+input[type="email"],
+input[type="text"],
+input[type="password"],
+input[type="date"],
+input[type="datetime-local"],
+input[type="number"],
+select {
   padding: 0.55rem 0.7rem;
   font-size: 1rem;
   color: var(--fg);
@@ -130,7 +139,16 @@ a {
   padding-left: 1.25rem;
 }
 
-.form input:focus {
+.form input:focus,
+.form select:focus,
+.form textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Foco visible del sistema (DESIGN.md: contorno de 2 px del acento con
+   1 px de separación) en todo control interactivo con teclado. */
+:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
@@ -157,7 +175,20 @@ a {
   color: var(--bad);
 }
 
-.form .form-error {
+/* Alert (componente <Alert>): skins tintadas 10 % fondo / 40 % borde —
+   válidas dentro y fuera de `.form` (P2 audit: errores/éxitos del panel
+   anunciados por `role` y con caja). */
+.alert-ok {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.9rem;
+  color: var(--ok);
+  background: rgba(63, 185, 80, 0.1);
+  border: 1px solid rgba(63, 185, 80, 0.4);
+  border-radius: 6px;
+}
+
+.alert-error {
   margin: 0;
   padding: 0.6rem 0.8rem;
   font-size: 0.9rem;
@@ -216,6 +247,22 @@ a {
   font-size: 1rem;
 }
 
+/* Escala tipográfica cerrada (DESIGN.md): h4 = Subhead (0.9 rem/600) y
+   h5 = Label (0.9 rem/400, gris de cronometraje). Ningún nivel cae por
+   debajo del texto de lectura. */
+h4 {
+  margin: 0.9rem 0 0.3rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+h5 {
+  margin: 0.5rem 0 0.3rem;
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+
 .card ul {
   margin: 0;
   padding-left: 1.25rem;
@@ -264,7 +311,9 @@ a {
 }
 
 .anchor-nav a {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px; /* T-16: target táctil ≥ 44 px (P2 audit). */
   padding: 0.45rem 0.8rem;
   font-size: 0.9rem;
   color: var(--fg);
@@ -290,13 +339,145 @@ a {
   cursor: pointer;
 }
 
-.button:hover:not(:disabled) {
+.button:hover:not(:disabled):not([aria-disabled="true"]) {
   background: #b30500;
 }
 
-.button:disabled {
+.button:disabled,
+.button[aria-disabled="true"] {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* Motivo de bloqueo: escrito junto al control deshabilitado (DESIGN.md:
+   nunca un control bloqueado sin explicación). */
+.button-disabled-reason {
+  margin-left: 0.5rem;
+  font-size: 0.85rem;
+}
+
+/* Acción secundaria (neutra): filete de gris de pista, sin relleno de
+   acento — la opción segura de un diálogo de confirmación. */
+.button-secondary {
+  min-height: 44px;
+  padding: 0.65rem 1rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid #21262d;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.button-secondary:hover:not(:disabled):not([aria-disabled="true"]) {
+  border-color: var(--muted);
+}
+
+.button-secondary:disabled,
+.button-secondary[aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.form .button-secondary {
+  margin-top: 0.3rem;
+}
+
+/* Confirmación con impacto (patrón del sistema): aviso + impacto escrito +
+   «Sí, …»/«No, volver». Plana: solo escalón de superficie y filete. */
+.confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: rgba(11, 15, 20, 0.7);
+}
+
+.confirm-dialog {
+  width: 100%;
+  max-width: 26rem;
+  padding: 0.9rem 1rem;
+  background: #10151c;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+}
+
+.confirm-title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.confirm-dialog p {
+  margin: 0;
+}
+
+.confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.9rem;
+}
+
+.confirm-actions .button {
+  margin-top: 0;
+}
+
+/* Ritual de resultados: paso colapsable (details/summary). El summary es un
+   control interactivo: alto mínimo 44 px (Regla de los 44). El encabezado
+   real (h3, Title) vive DENTRO del summary: mismo nivel que los pasos 1 y 3
+   y presente en la navegación por encabezados. */
+.ritual-step > summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.ritual-step > summary > h3 {
+  margin: 0;
+  display: inline;
+}
+
+.ritual-step[open] > summary {
+  margin-bottom: 0.5rem;
+}
+
+/* Altas y configuración: los formularios de creación van colapsados (el
+   panel prioriza la lectura sobre el CRUD). Mismo control de 44 px que el
+   ritual. */
+.form-collapse {
+  margin-top: 0.9rem;
+}
+
+.form-collapse > summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.form-collapse[open] > summary {
+  margin-bottom: 0.5rem;
+}
+
+/* Etiqueta de fase en la navegación ancla (no es un enlace). */
+.anchor-nav .anchor-phase {
+  display: flex;
+  align-items: center;
+  padding: 0.45rem 0;
+  font-size: 0.85rem;
+  color: var(--muted);
 }
 
 /* Dentro de un formulario el botón va más pegado (el flex ya da gap). */
@@ -364,32 +545,46 @@ a {
   color: var(--bad);
 }
 
-/* Mercado (US-14): botón plano de acción de fila (ver detalle / cerrar). */
+/* Mercado (US-14): botón plano de acción de fila (ver detalle / cerrar).
+   Texto y borde en --accent-text: es texto pequeño y debe cumplir AA.
+   Área de toque ≥ 44 px (Regla de los 44): son acciones de riesgo
+   («Desvincular», «Eliminar», «Cancelar evento»…) y no pueden ser las más
+   pequeñas de la superficie. */
 .row-action {
-  padding: 0.15rem 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0.35rem 0.75rem;
   font-size: 0.85rem;
-  color: var(--accent);
+  color: var(--accent-text);
   background: none;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--accent-text);
   border-radius: 5px;
   cursor: pointer;
 }
 
-.row-action:hover {
+.row-action:hover:not(:disabled):not([aria-disabled="true"]) {
   background: rgba(225, 6, 0, 0.12);
 }
 
-/* Tabla de importación de resultados (panel admin, US-16).
-   En móvil la tabla es más ancha que el viewport (8 columnas): se hace
-   DESLIZABLE DENTRO de su contenedor en vez de ensanchar la página. Sin
-   esto el documento mide ~830 px de ancho y en emulación móvil Chromium
-   (y en un teléfono real) la página se desborda en horizontal y el punto
-   de clic se resuelve en coordenadas distintas a las del layout. */
-.results-table {
-  display: block;
+.row-action:disabled,
+.row-action[aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Tablas anchas: scroll DENTRO del contenedor (Regla del Scroll Contenido),
+   nunca la página. El wrapper (y no la propia tabla) es quien desborda, para
+   preservar la semántica de <table> en lectores de pantalla. Antes esto se
+   hacía con `display: block` sobre <table>, que la destruía. */
+.table-scroll {
   width: 100%;
   max-width: 100%;
   overflow-x: auto;
+}
+
+.results-table {
+  width: 100%;
   border-collapse: collapse;
   font-size: 0.9rem;
 }
@@ -413,19 +608,36 @@ a {
   width: 5rem;
   padding: 0.3rem 0.4rem;
   font-size: 0.9rem;
+  min-height: 44px;
 }
 
 .results-table input[type="checkbox"] {
-  width: 1rem;
-  height: 1rem;
+  width: 1.25rem;
+  height: 1.25rem;
   accent-color: var(--accent);
 }
 
+/* Área de toque (Regla de los 44): el checkbox por sí solo no llega, así que
+   el label envolvente crece hasta 44 px y es entero clicable. */
+.results-table .check-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  cursor: pointer;
+}
+
 .results-table .codes label {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 44px;
+  padding: 0 0.3rem;
   font-size: 0.85rem;
   color: var(--fg);
   white-space: nowrap;
+  cursor: pointer;
 }
 
 /* Touch targets (T-16, CA de testing.md §3): todos los controles interactivos
@@ -452,4 +664,10 @@ a {
 
 .tab {
   min-height: 44px;
+}
+
+/* La navegación ancla es sticky (top 0): los destinos necesitan holgura
+   para no quedar ocultos bajo la barra al saltar. */
+section[id] {
+  scroll-margin-top: 5rem;
 }

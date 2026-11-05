@@ -536,6 +536,48 @@ describe("US-18 · Definitivo + primer recálculo (PostgreSQL real)", () => {
     });
   });
 
+  it("neutralizeEvent sobre un evento cancelado: rechazo (estado terminal)", async () => {
+    const { results } = await callerFor(ADMIN_IP, adminToken);
+    // Mundo propio (GP + evento ajenos al mundo compartido): cancelar/
+    // neutralizar aquí no debe alterar la puntuación ya verificada del mundo.
+    const gpTerminal = await prisma.gp.create({
+      data: {
+        seasonId: world.season.id,
+        round: 11,
+        name: `GP ${suffix} terminal`,
+        circuitId: world.gp.circuitId,
+        date: new Date("2099-07-02T12:00:00Z"),
+      },
+    });
+    const evento = await prisma.weekendEvent.create({
+      data: { gpId: gpTerminal.id, type: "race", orderNum: 1 },
+    });
+
+    // 1) Cancelar: válido.
+    await expect(
+      results.cancelEvent({ gpId: gpTerminal.id, eventId: evento.id }),
+    ).resolves.toEqual({ cancelled: true, neutralized: false, noop: false });
+
+    // 2) Neutralizar sobre cancelado: se rechaza. El evento queda excluido
+    // del recálculo (ADR-0020: cancelado es irreversible y terminal), así
+    // que la neutralización no tendría efecto — el servidor no la ejecuta.
+    await expect(
+      results.neutralizeEvent({ gpId: gpTerminal.id, eventId: evento.id }),
+    ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+
+    // Flags intactos y sin auditoría de neutralización (rechazo, no no-op).
+    const resultsEvent = await prisma.resultsEvent.findUniqueOrThrow({
+      where: { gpId_eventId: { gpId: gpTerminal.id, eventId: evento.id } },
+    });
+    expect(resultsEvent.cancelled).toBe(true);
+    expect(resultsEvent.neutralized).toBe(false);
+    expect(
+      await prisma.auditLog.count({
+        where: { action: "results.event_neutralized", entityId: evento.id },
+      }),
+    ).toBe(0);
+  });
+
   // ── Marcar definitivo (primer recálculo rv-1) ─────────────────────────────
 
   it("markDefinitive: voltea filas, rv-1, Score del lineup y auditoría", async () => {

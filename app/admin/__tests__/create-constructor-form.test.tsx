@@ -62,7 +62,9 @@ describe("CreateConstructorForm", () => {
 
   it("muestra el error de validación Zod por campo", () => {
     const error = clientError("Invalid input", {
-      zod: { issues: [{ path: ["name"], message: "El nombre del constructor es obligatorio" }] },
+      zod: {
+        issues: [{ path: ["name"], message: "El nombre del constructor es obligatorio" }],
+      },
       code: "BAD_REQUEST",
       message: "Invalid input",
     });
@@ -73,7 +75,9 @@ describe("CreateConstructorForm", () => {
       error,
     });
     render(<CreateConstructorForm onCreated={vi.fn()} />);
-    expect(screen.getByText("El nombre del constructor es obligatorio")).toBeInTheDocument();
+    expect(
+      screen.getByText("El nombre del constructor es obligatorio"),
+    ).toBeInTheDocument();
   });
 
   it("muestra el error general cuando no hay issues de campo", () => {

@@ -218,14 +218,16 @@ describe("US-16 · Importación manual de resultados (PostgreSQL real)", () => {
 
   // ── Vistas de solo lectura (antes de importar) ────────────────────────────
 
-  it("gpEvents lista solo q2/sprint/race (sin Q1) y resultsStatus null antes de importar", async () => {
+  it("gpEvents lista solo q2/sprint/race (sin Q1) con flags falsos y 0 filas antes de importar", async () => {
     const { results } = await callerFor(ADMIN_IP, adminToken);
+    // Los flags `cancelled`/`neutralized` de `results_events` son la fuente
+    // de verdad (ADR-0020 addendum); el enum de estado nunca los refleja.
     const events = await results.gpEvents({ gpId: world.gp.id });
     expect(events).toEqual([
-      { id: raceId(), type: "race", orderNum: 1, status: "scheduled", resultsStatus: null },
-      { id: q2, type: "q2", orderNum: 3, status: "scheduled", resultsStatus: null },
-      { id: sprint, type: "sprint", orderNum: 4, status: "scheduled", resultsStatus: null },
-      { id: cancelledSprint, type: "sprint", orderNum: 5, status: "cancelled", resultsStatus: null },
+      { id: raceId(), type: "race", orderNum: 1, status: "scheduled", cancelled: false, neutralized: false, resultCount: 0 },
+      { id: q2, type: "q2", orderNum: 3, status: "scheduled", cancelled: false, neutralized: false, resultCount: 0 },
+      { id: sprint, type: "sprint", orderNum: 4, status: "scheduled", cancelled: false, neutralized: false, resultCount: 0 },
+      { id: cancelledSprint, type: "sprint", orderNum: 5, status: "cancelled", cancelled: false, neutralized: false, resultCount: 0 },
     ]);
   });
 
@@ -321,11 +323,13 @@ describe("US-16 · Importación manual de resultados (PostgreSQL real)", () => {
     expect(resultsEvent.status).toBe("finished");
     const race = await prisma.weekendEvent.findUniqueOrThrow({ where: { id: raceId() } });
     expect(race.status).toBe("finished");
-    // La vista gpEvents refleja el estado.
+    // La vista gpEvents refleja el estado y las filas del evento.
     const events = await results.gpEvents({ gpId: world.gp.id });
     expect(events.find((e) => e.id === raceId())).toMatchObject({
       status: "finished",
-      resultsStatus: "finished",
+      cancelled: false,
+      neutralized: false,
+      resultCount: 2,
     });
 
     // Sin histórico todavía (acotado al mundo de este test: la BD es

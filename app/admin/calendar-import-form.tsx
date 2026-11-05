@@ -67,7 +67,7 @@ export default function CalendarImportForm({
   return (
     <div className="form">
       <p className="muted">
-        Importa el calendario de una temporada desde PulseLive (ADR-0012). El paso 1 solo
+        Importa el calendario de una temporada desde PulseLive. El paso 1 solo
         lee (preview); el paso 2 crea los GPs y salta las rondas ya existentes.
       </p>
 
@@ -109,9 +109,9 @@ export default function CalendarImportForm({
 
       {preview && (
         <div className="field">
-          <label htmlFor="importSeasonId">Importar en la temporada</label>
+          <label htmlFor="calendarImportSeasonId">Importar en la temporada</label>
           <select
-            id="importSeasonId"
+            id="calendarImportSeasonId"
             value={seasonId}
             onChange={(event) => setSeasonId(event.target.value)}
           >
@@ -137,9 +137,8 @@ export default function CalendarImportForm({
       {generalError && <Alert variant="error">{generalError}</Alert>}
       {importCalendar.isSuccess && (
         <Alert variant="success">
-          Importados {importCalendar.data.created} GPs;{" "}
-          {importCalendar.data.updated} horas actualizadas;{" "}
-          {importCalendar.data.skipped.length} saltados
+          Importados {importCalendar.data.created} GPs; {importCalendar.data.updated}{" "}
+          horas actualizadas; {importCalendar.data.skipped.length} saltados
           {importCalendar.data.skipped.length > 0
             ? ` (${importCalendar.data.skipped
                 .map((item) => `R${item.round}`)

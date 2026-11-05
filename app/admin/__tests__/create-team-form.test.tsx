@@ -103,7 +103,10 @@ describe("CreateTeamForm", () => {
       zod: {
         issues: [
           { path: ["name"], message: "El nombre del equipo es obligatorio" },
-          { path: ["constructorId"], message: "El identificador de constructor no es válido" },
+          {
+            path: ["constructorId"],
+            message: "El identificador de constructor no es válido",
+          },
         ],
       },
       code: "BAD_REQUEST",

@@ -111,15 +111,25 @@ describe("AffiliationsPanel", () => {
 
     expect(screen.getByLabelText("GP")).toBeDisabled();
     expect(screen.getByText("Elige primero una temporada")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Asignar desde este GP" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Asignar para este GP" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Asignar desde este GP" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Asignar para este GP" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
     expect(screen.queryByText("Afiliaciones actuales")).not.toBeInTheDocument();
   });
 
   it("consulta los GPs de la temporada elegida y resetea el GP al cambiar de temporada", async () => {
     mockGps();
     render(
-      <AffiliationsPanel riders={[rider]} teams={[team]} seasons={[season, secondSeason]} />,
+      <AffiliationsPanel
+        riders={[rider]}
+        teams={[team]}
+        seasons={[season, secondSeason]}
+      />,
     );
 
     const user = userEvent.setup();
@@ -148,6 +158,18 @@ describe("AffiliationsPanel", () => {
     await selectGp(user);
     await user.click(screen.getByRole("button", { name: "Asignar desde este GP" }));
 
+    // Escritura masiva (este GP + los siguientes): la confirmación nombra
+    // piloto, equipo, GP y alcance (rondas siguientes).
+    expect(
+      screen.getByRole("heading", {
+        name: "Asignar «Ducati Lenovo Team» a «Francesco Bagnaia» desde «R1 · GP de España»",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/todas las rondas siguientes de la temporada/),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Sí, asignar desde este GP" }));
     expect(mutate).toHaveBeenCalledWith({ riderId: "r1", teamId: "t1", fromGpId: "g1" });
   });
 
@@ -165,6 +187,17 @@ describe("AffiliationsPanel", () => {
     await selectGp(user);
     await user.click(screen.getByRole("button", { name: "Asignar para este GP" }));
 
+    // Ajuste fino de un GP: la confirmación nombra el objeto y el reemplazo.
+    expect(
+      screen.getByRole("heading", {
+        name: "Asignar «Ducati Lenovo Team» a «Francesco Bagnaia» para «R1 · GP de España»",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/sustituyendo cualquier afiliación previa de ese GP/),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Sí, asignar para este GP" }));
     expect(mutate).toHaveBeenCalledWith({ riderId: "r1", teamId: "t1", gpId: "g1" });
   });
 
@@ -193,7 +226,9 @@ describe("AffiliationsPanel", () => {
     render(<AffiliationsPanel riders={[rider]} teams={[team]} seasons={[season]} />);
 
     expect(
-      screen.getByText("Aplicado desde el GP elegido: 2 afiliaciones creadas, 2 saltadas."),
+      screen.getByText(
+        "Aplicado desde el GP elegido: 2 afiliaciones creadas, 2 saltadas.",
+      ),
     ).toBeInTheDocument();
     expect(
       screen.getByText("La ronda 2 ya tiene afiliación (Ducati Lenovo Team)"),
@@ -257,7 +292,13 @@ describe("AffiliationsPanel", () => {
       isError: false,
       isSuccess: true,
       data: {
-        affiliation: { id: "a1", riderId: "r1", teamId: "t1", constructorId: "c1", gpId: "g1" },
+        affiliation: {
+          id: "a1",
+          riderId: "r1",
+          teamId: "t1",
+          constructorId: "c1",
+          gpId: "g1",
+        },
         changed: true,
       },
     });
@@ -273,7 +314,13 @@ describe("AffiliationsPanel", () => {
       isError: false,
       isSuccess: true,
       data: {
-        affiliation: { id: "a1", riderId: "r1", teamId: "t1", constructorId: "c1", gpId: "g1" },
+        affiliation: {
+          id: "a1",
+          riderId: "r1",
+          teamId: "t1",
+          constructorId: "c1",
+          gpId: "g1",
+        },
         changed: false,
       },
     });
@@ -353,7 +400,11 @@ describe("AffiliationsPanel", () => {
       refetch: vi.fn(),
     });
     render(
-      <AffiliationsPanel riders={[rider]} teams={[team]} seasons={[season, secondSeason]} />,
+      <AffiliationsPanel
+        riders={[rider]}
+        teams={[team]}
+        seasons={[season, secondSeason]}
+      />,
     );
 
     const user = userEvent.setup();

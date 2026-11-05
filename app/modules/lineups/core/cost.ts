@@ -22,18 +22,14 @@ export function lineupCost(
   for (const p of prices) byKey.set(`${p.assetType}:${p.assetId}`, p.price);
 
   const assets: { assetType: AssetKind; assetId: string }[] = [
-    ...slots.gold.map(
-      (id): { assetType: AssetKind; assetId: string } => ({
-        assetType: "rider",
-        assetId: id,
-      }),
-    ),
-    ...slots.silver.map(
-      (id): { assetType: AssetKind; assetId: string } => ({
-        assetType: "rider",
-        assetId: id,
-      }),
-    ),
+    ...slots.gold.map((id): { assetType: AssetKind; assetId: string } => ({
+      assetType: "rider",
+      assetId: id,
+    })),
+    ...slots.silver.map((id): { assetType: AssetKind; assetId: string } => ({
+      assetType: "rider",
+      assetId: id,
+    })),
   ];
   if (slots.constructorId) {
     assets.push({ assetType: "constructor", assetId: slots.constructorId });

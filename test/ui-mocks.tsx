@@ -21,7 +21,29 @@
  * probar rutas con query string (p. ej. `/reestablecer-contrasena?token=…`).
  */
 import type { ReactNode } from "react";
+import { useSyncExternalStore } from "react";
 import { vi } from "vitest";
+
+/**
+ * Store reactivo del query string: imita la reactividad de
+ * `useSearchParams` del router real — una «navegación» (p. ej. el click en
+ * un `Link` de la consola del fin de semana) repinta el componente en vez
+ * de exigir un render nuevo.
+ */
+let searchParamsValue = new URLSearchParams();
+const searchParamsListeners = new Set<() => void>();
+
+function subscribeToSearchParams(listener: () => void): () => void {
+  searchParamsListeners.add(listener);
+  return () => {
+    searchParamsListeners.delete(listener);
+  };
+}
+
+function publishSearchParams(params: URLSearchParams): void {
+  searchParamsValue = params;
+  searchParamsListeners.forEach((listener) => listener());
+}
 
 /** Estado de navegación controlable (router + query string + params). */
 export const navigation = {
@@ -29,7 +51,12 @@ export const navigation = {
   replace: vi.fn(),
   refresh: vi.fn(),
   back: vi.fn(),
-  searchParams: new URLSearchParams(),
+  get searchParams() {
+    return searchParamsValue;
+  },
+  set searchParams(value: URLSearchParams) {
+    publishSearchParams(value);
+  },
   /** Params de ruta (US-24: `/ligas/[id]`); se fija por test. */
   params: {} as Record<string, string>,
 };
@@ -47,7 +74,8 @@ export function resetNavigationMocks(): void {
 /** Mock de `next/navigation`: `useRouter`/`useSearchParams`/`useParams` con estado controlable. */
 export const navigationMock = {
   useRouter: () => navigation,
-  useSearchParams: () => navigation.searchParams,
+  useSearchParams: () =>
+    useSyncExternalStore(subscribeToSearchParams, () => searchParamsValue),
   usePathname: () => "/",
   useParams: () => navigation.params,
 };

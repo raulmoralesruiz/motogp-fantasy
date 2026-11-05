@@ -34,10 +34,7 @@ export function balanceFromMovements(movements: readonly BudgetMovement[]): numb
  * save: el presupuesto mostrado (US-10) coincide con el validado.
  * Anti-ratchet: no depende del valor de mercado de los activos (invariante 8).
  */
-export function firstSaveBudget(
-  params: BudgetParams,
-  prevBalance: number,
-): number {
+export function firstSaveBudget(params: BudgetParams, prevBalance: number): number {
   return round2(
     presupuestoE(params, {
       sinUsarPrevio: Math.max(0, prevBalance),
@@ -69,18 +66,16 @@ export function firstSaveMovements(
  * Desglose del presupuesto del GP a partir de los movimientos (US-10):
  * `base` + `carry` (total = B + carry, ADR-0017).
  */
-export function budgetBreakdown(
-  movements: readonly BudgetMovement[],
-): { base: number; carry: number; total: number } {
+export function budgetBreakdown(movements: readonly BudgetMovement[]): {
+  base: number;
+  carry: number;
+  total: number;
+} {
   const base = round2(
-    movements
-      .filter((m) => m.type === "base")
-      .reduce((acc, m) => acc + m.amount, 0),
+    movements.filter((m) => m.type === "base").reduce((acc, m) => acc + m.amount, 0),
   );
   const carry = round2(
-    movements
-      .filter((m) => m.type === "carry")
-      .reduce((acc, m) => acc + m.amount, 0),
+    movements.filter((m) => m.type === "carry").reduce((acc, m) => acc + m.amount, 0),
   );
   return { base, carry, total: round2(base + carry) };
 }

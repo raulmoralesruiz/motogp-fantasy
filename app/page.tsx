@@ -280,7 +280,7 @@ export default function HomePage() {
       {health.isPending ? (
         <p className="muted">Consultando…</p>
       ) : health.isError ? (
-        <p className="bad">No se pudo consultar el estado: {health.error.message}</p>
+        <Alert variant="error">No se pudo consultar el estado: {health.error.message}</Alert>
       ) : (
         <ul className="status">
           <li>

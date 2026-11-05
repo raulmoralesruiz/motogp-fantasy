@@ -21,3 +21,10 @@ export function deriveStatus(
   }
   return values.started ? "DNF" : "ABSENT";
 }
+
+/** Etiquetas en español del estado derivado (glosario único de la UI). */
+export const RESULT_STATUS_LABELS: Record<GpStatus, string> = {
+  FINISHED: "Terminado",
+  DNF: "No terminó (DNF)",
+  ABSENT: "Ausente",
+};

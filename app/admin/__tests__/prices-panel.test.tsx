@@ -77,8 +77,14 @@ function mockGps(data: unknown) {
 /** Selecciona la temporada y el GP de los dos selectores. */
 async function pickSeasonAndGps(user: ReturnType<typeof userEvent.setup>) {
   await user.selectOptions(screen.getByLabelText("Temporada"), "s1");
-  await user.selectOptions(screen.getByLabelText("GP (objetivo del precio manual)"), "gp2");
-  await user.selectOptions(screen.getByLabelText("GP definitivo (fuente de la fórmula)"), "gp1");
+  await user.selectOptions(
+    screen.getByLabelText("GP (objetivo del precio manual)"),
+    "gp2",
+  );
+  await user.selectOptions(
+    screen.getByLabelText("GP definitivo (fuente de la fórmula)"),
+    "gp1",
+  );
 }
 
 function mockHistory(data: unknown, refetch: ReturnType<typeof vi.fn> = vi.fn()) {
@@ -100,7 +106,10 @@ describe("PricesPanel", () => {
     expect(screen.getByLabelText("Tipo de activo")).toHaveValue("rider");
     // Lista de activos pendiente por defecto.
     expect(screen.getByText("Consultando…")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Fijar P0" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Fijar P0" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
     expect(screen.queryByText("Historial de precios")).not.toBeInTheDocument();
   });
 
@@ -171,6 +180,14 @@ describe("PricesPanel", () => {
     await user.type(screen.getByLabelText("Precio de apertura (P0)"), "25");
     await user.click(screen.getByRole("button", { name: "Fijar P0" }));
 
+    // El P0 es la base de la serie de precios: la confirmación nombra el
+    // activo, el precio y el reemplazo del P0 anterior.
+    expect(
+      screen.getByRole("heading", { name: "Fijar el P0 de «Francesco Bagnaia»" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Se fijará el precio de apertura.*en 25/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Sí, fijar el P0" }));
     expect(mutate).toHaveBeenCalledWith({
       assetType: "rider",
       assetId: "r1",
@@ -183,11 +200,17 @@ describe("PricesPanel", () => {
     render(<PricesPanel />);
 
     const user = userEvent.setup();
-    expect(screen.getByRole("button", { name: "Fijar P0" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Fijar P0" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
 
     // Precio sin activo: sigue desactivado.
     await user.type(screen.getByLabelText("Precio de apertura (P0)"), "25");
-    expect(screen.getByRole("button", { name: "Fijar P0" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Fijar P0" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
 
     // Con activo y precio: habilitado.
     await user.selectOptions(screen.getByLabelText("Activo"), "r1");
@@ -244,9 +267,7 @@ describe("PricesPanel", () => {
     });
     render(<PricesPanel />);
 
-    expect(
-      screen.getByText("El P0 ya era ese valor (sin cambios)."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("El P0 ya era ese valor (sin cambios).")).toBeInTheDocument();
   });
 
   it("muestra el histórico del activo elegido (P0 → ronda)", async () => {
@@ -349,11 +370,13 @@ describe("PricesPanel · P0 automático (heurística, ADR-0014)", () => {
     mockSeasons([season]);
     render(<PricesPanel />);
 
-    expect(screen.getByText("P0 automático (heurística de siembra)")).toBeInTheDocument();
-    expect(screen.getByLabelText("Temporada (clasificación)")).toHaveValue("");
+    expect(
+      screen.getByText("1. P0 automático (heurística de siembra)"),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Temporada")).toHaveValue("");
     expect(
       screen.getByRole("button", { name: "Calcular P0 automático" }),
-    ).toBeDisabled();
+    ).toHaveAttribute("aria-disabled", "true");
   });
 
   it("calcula el P0 automático al elegir temporada y pulsar el botón", async () => {
@@ -367,9 +390,10 @@ describe("PricesPanel · P0 automático (heurística, ADR-0014)", () => {
     render(<PricesPanel />);
 
     const user = userEvent.setup();
-    await user.selectOptions(screen.getByLabelText("Temporada (clasificación)"), "s1");
+    await user.selectOptions(screen.getByLabelText("Temporada"), "s1");
     expect(screen.getByRole("button", { name: "Calcular P0 automático" })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: "Calcular P0 automático" }));
+    await user.click(screen.getByRole("button", { name: "Sí, calcular los P0" }));
 
     expect(mutate).toHaveBeenCalledWith({ seasonId: "s1" });
   });
@@ -391,7 +415,9 @@ describe("PricesPanel · P0 automático (heurística, ADR-0014)", () => {
     render(<PricesPanel />);
 
     expect(
-      screen.getByText(/P0 calculado: 32 pilotos, 12 equipos, 5 constructores \(rango 10–30\)/),
+      screen.getByText(
+        /P0 calculado: 32 pilotos, 12 equipos, 5 constructores \(rango 10–30\)/,
+      ),
     ).toBeInTheDocument();
   });
 
@@ -423,13 +449,14 @@ describe("PricesPanel · P0 automático (heurística, ADR-0014)", () => {
     render(<PricesPanel />);
 
     const user = userEvent.setup();
-    await user.selectOptions(screen.getByLabelText("Temporada (clasificación)"), "s1");
+    await user.selectOptions(screen.getByLabelText("Temporada"), "s1");
     await user.click(screen.getByRole("button", { name: "Calcular P0 automático" }));
+    await user.click(screen.getByRole("button", { name: "Sí, calcular los P0" }));
 
-    const options =
-      asMockFn(trpc.market.market.p0Heuristic.useMutation).mock.calls[0]?.[0] as {
-        onSuccess?: () => void;
-      };
+    const options = asMockFn(trpc.market.market.p0Heuristic.useMutation).mock
+      .calls[0]?.[0] as {
+      onSuccess?: () => void;
+    };
     options.onSuccess?.();
 
     expect(assetsRefetch).toHaveBeenCalledTimes(1);
@@ -444,7 +471,7 @@ describe("PricesPanel · Precios por GP (US-08)", () => {
     render(<PricesPanel />);
 
     expect(
-      screen.getByText("Precios por GP (fórmula v1 y ajuste manual)"),
+      screen.getByText("3. Precios por GP (fórmula v1 y ajuste manual)"),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Temporada")).toHaveValue("");
     // Sin temporada: los selectores de GP solo tienen la opción vacía.
@@ -452,9 +479,9 @@ describe("PricesPanel · Precios por GP (US-08)", () => {
     expect(manualGp).toHaveValue("");
     expect(within(manualGp).queryAllByRole("option")).toHaveLength(1);
     expect(
-      within(screen.getByLabelText("GP definitivo (fuente de la fórmula)")).queryAllByRole(
-        "option",
-      ),
+      within(
+        screen.getByLabelText("GP definitivo (fuente de la fórmula)"),
+      ).queryAllByRole("option"),
     ).toHaveLength(1);
   });
 
@@ -489,13 +516,14 @@ describe("PricesPanel · Precios por GP (US-08)", () => {
 
     const user = userEvent.setup();
     await user.selectOptions(screen.getByLabelText("Temporada"), "s1");
-    await user.selectOptions(screen.getByLabelText("GP (objetivo del precio manual)"), "gp2");
+    await user.selectOptions(
+      screen.getByLabelText("GP (objetivo del precio manual)"),
+      "gp2",
+    );
     await user.selectOptions(screen.getByLabelText("Temporada"), "");
 
     expect(screen.getByLabelText("GP (objetivo del precio manual)")).toHaveValue("");
-    expect(
-      screen.getByLabelText("GP definitivo (fuente de la fórmula)"),
-    ).toHaveValue("");
+    expect(screen.getByLabelText("GP definitivo (fuente de la fórmula)")).toHaveValue("");
   });
 
   it("muestra el estado vacío y el error de la lista de GPs", async () => {
@@ -558,6 +586,7 @@ describe("PricesPanel · Precios por GP (US-08)", () => {
     await pickSeasonAndGps(user);
     await user.type(screen.getByLabelText("Precio manual"), "5");
     await user.click(screen.getByRole("button", { name: "Fijar precio manual" }));
+    await user.click(screen.getByRole("button", { name: "Sí, fijar el precio manual" }));
 
     expect(mutate).toHaveBeenCalledWith({
       assetType: "rider",
@@ -575,13 +604,16 @@ describe("PricesPanel · Precios por GP (US-08)", () => {
 
     const user = userEvent.setup();
     const button = screen.getByRole("button", { name: "Fijar precio manual" });
-    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("aria-disabled", "true");
 
     // Activo + GP, pero sin precio: sigue desactivado.
     await user.selectOptions(screen.getByLabelText("Activo"), "r1");
     await user.selectOptions(screen.getByLabelText("Temporada"), "s1");
-    await user.selectOptions(screen.getByLabelText("GP (objetivo del precio manual)"), "gp2");
-    expect(button).toBeDisabled();
+    await user.selectOptions(
+      screen.getByLabelText("GP (objetivo del precio manual)"),
+      "gp2",
+    );
+    expect(button).toHaveAttribute("aria-disabled", "true");
 
     // Con precio: habilitado.
     await user.type(screen.getByLabelText("Precio manual"), "5");
@@ -639,14 +671,51 @@ describe("PricesPanel · Precios por GP (US-08)", () => {
     const button = screen.getByRole("button", {
       name: "Aplicar fórmula al siguiente GP",
     });
-    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("aria-disabled", "true");
 
     await user.selectOptions(screen.getByLabelText("Temporada"), "s1");
-    await user.selectOptions(screen.getByLabelText("GP definitivo (fuente de la fórmula)"), "gp1");
+    await user.selectOptions(
+      screen.getByLabelText("GP definitivo (fuente de la fórmula)"),
+      "gp1",
+    );
     expect(button).toBeEnabled();
     await user.click(button);
+    await user.click(screen.getByRole("button", { name: "Sí, aplicar la fórmula" }));
 
     expect(mutate).toHaveBeenCalledWith({ gpId: "gp1" });
+  });
+
+  it("confirma sin GP objetivo cuando la fórmula parte del último GP", async () => {
+    mockSeasons([season]);
+    mockGps(gps);
+    const mutate = vi.fn();
+    mockResult(trpc.market.prices.applyFormula.useMutation, {
+      mutate,
+      isPending: false,
+      isError: false,
+    });
+    render(<PricesPanel />);
+
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText("Temporada"), "s1");
+    await user.selectOptions(
+      screen.getByLabelText("GP definitivo (fuente de la fórmula)"),
+      "gp2",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Aplicar fórmula al siguiente GP" }),
+    );
+
+    // Último GP de la temporada: no hay objetivo; el impacto no nombra ronda.
+    const dialog = screen.getByRole("dialog", {
+      name: "Aplicar la fórmula de precios",
+    });
+    expect(dialog).toHaveTextContent(
+      "según el GP elegido (motivo «fórmula», con histórico y auditado).",
+    );
+    await user.click(screen.getByRole("button", { name: "Sí, aplicar la fórmula" }));
+
+    expect(mutate).toHaveBeenCalledWith({ gpId: "gp2" });
   });
 
   it("muestra el resumen de la fórmula aplicada", () => {
@@ -718,9 +787,7 @@ describe("PricesPanel · Precios por GP (US-08)", () => {
     render(<PricesPanel />);
 
     expect(
-      screen.getByText(
-        "El GP objetivo (ronda 2) está en lockout: precios sin cambios.",
-      ),
+      screen.getByText("El GP objetivo (ronda 2) está en lockout: precios sin cambios."),
     ).toBeInTheDocument();
   });
 
@@ -765,9 +832,11 @@ describe("PricesPanel · Precios por GP (US-08)", () => {
     await pickSeasonAndGps(user);
     await user.type(screen.getByLabelText("Precio manual"), "5");
     await user.click(screen.getByRole("button", { name: "Fijar precio manual" }));
+    await user.click(screen.getByRole("button", { name: "Sí, fijar el precio manual" }));
     await user.click(
       screen.getByRole("button", { name: "Aplicar fórmula al siguiente GP" }),
     );
+    await user.click(screen.getByRole("button", { name: "Sí, aplicar la fórmula" }));
 
     // `onSuccess` se captura de cada `useMutation` y se invoca manualmente.
     const manualOptions = asMockFn(trpc.market.prices.setManual.useMutation).mock
@@ -795,7 +864,7 @@ describe("PricesPanel · Recalcular temporada (calibración P0, ADR-0032)", () =
 
     expect(
       screen.getByRole("button", { name: "Recalcular precios de la temporada" }),
-    ).toBeDisabled();
+    ).toHaveAttribute("aria-disabled", "true");
   });
 
   it("muestra el estado pendiente mientras recalcula", async () => {
@@ -827,13 +896,37 @@ describe("PricesPanel · Recalcular temporada (calibración P0, ADR-0032)", () =
     const button = screen.getByRole("button", {
       name: "Recalcular precios de la temporada",
     });
-    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("aria-disabled", "true");
 
     await user.selectOptions(screen.getByLabelText("Temporada"), "s1");
     expect(button).toBeEnabled();
     await user.click(button);
+    await user.click(screen.getByRole("button", { name: "Sí, recalcular la temporada" }));
 
     expect(mutate).toHaveBeenCalledWith({ seasonId: "s1" });
+  });
+
+  it("pide confirmación con impacto antes de recalcular y no muta al volver", async () => {
+    mockSeasons([season]);
+    const mutate = vi.fn();
+    mockResult(trpc.market.prices.recalculateSeason.useMutation, {
+      mutate,
+      isPending: false,
+      isError: false,
+    });
+    render(<PricesPanel />);
+
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText("Temporada"), "s1");
+    await user.click(
+      screen.getByRole("button", { name: "Recalcular precios de la temporada" }),
+    );
+
+    expect(
+      screen.getByRole("dialog", { name: "Recalcular precios de «MotoGP 2099»" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "No, volver" }));
+    expect(mutate).not.toHaveBeenCalled();
   });
 
   it("muestra el resumen de la temporada recalculada", () => {
@@ -890,11 +983,11 @@ describe("PricesPanel · Recalcular temporada (calibración P0, ADR-0032)", () =
     await user.click(
       screen.getByRole("button", { name: "Recalcular precios de la temporada" }),
     );
+    await user.click(screen.getByRole("button", { name: "Sí, recalcular la temporada" }));
 
     // `onSuccess` se captura de `useMutation` y se invoca manualmente.
-    const options = asMockFn(
-      trpc.market.prices.recalculateSeason.useMutation,
-    ).mock.calls[0]?.[0] as { onSuccess?: () => void };
+    const options = asMockFn(trpc.market.prices.recalculateSeason.useMutation).mock
+      .calls[0]?.[0] as { onSuccess?: () => void };
     options.onSuccess?.();
 
     expect(assetsRefetch).toHaveBeenCalledTimes(1);

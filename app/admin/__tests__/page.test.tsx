@@ -6,15 +6,22 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { CircuitView, SeasonWithRules } from "../../modules/seasons";
+import type {
+  CircuitView,
+  GpView,
+  SeasonWithRules,
+} from "../../modules/seasons";
 import { PROVISIONAL_SEASON_RULES } from "../../shared/config/season-rules";
 import { mockResult, resetTrpcMocks, trpc } from "../../../test/trpc-mock";
-import { render, screen, userEvent } from "../../../test/rtl";
+import { render, screen, userEvent, within } from "../../../test/rtl";
 
 import AdminPage from "../page";
 
 vi.mock("@/trpc/client", () => import("../../../test/trpc-mock"));
 vi.mock("next/link", () => import("../../../test/ui-mocks").then((m) => m.linkMock));
+vi.mock("next/navigation", () =>
+  import("../../../test/ui-mocks").then((m) => m.navigationMock),
+);
 // El import de calendario (2 pasos, ADR-0012) se cubre en su propio test
 // file (`calendar-import-form.test.tsx`): aquí solo interesa el callback
 // `onImported` (refrescar temporadas + circuitos).
@@ -299,5 +306,277 @@ describe("AdminPage", () => {
     await user.click(screen.getByRole("button", { name: "importar mercado" }));
 
     expect(seasonsRefetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Consola del fin de semana de carrera (sección `#fin-de-semana` del panel):
+ * el último GP disputado de la temporada más reciente y el siguiente paso
+ * del ritual de resultados, con sus estados de carga, de error y por
+ * resultado (cerrado / sin resultados / provisionales).
+ */
+describe("Consola del fin de semana de carrera", () => {
+  beforeEach(() => resetTrpcMocks());
+
+  const season: SeasonWithRules = {
+    id: "s2026",
+    name: "Temporada 2026",
+    year: 2026,
+    startDate: null,
+    endDate: null,
+    status: "active",
+    rules: [],
+  };
+
+  const circuit: CircuitView = {
+    id: "c1",
+    name: "Circuito de Le Mans",
+    country: "Francia",
+    location: null,
+  };
+
+  /** GP ya disputado (fecha pasada) — el candidato del fin de semana. */
+  const pastGp: GpView = {
+    id: "gp-francia",
+    seasonId: season.id,
+    round: 3,
+    name: "GP de Francia",
+    circuit,
+    date: new Date("2026-05-02T14:00:00Z"),
+    status: "finished",
+    lockoutAt: null,
+    sourceRef: null,
+    events: [],
+  };
+
+  function baseMocks() {
+    mockMe(admin);
+    mockList(trpc.seasons.list.useQuery, [season]);
+    mockList(trpc.seasons.circuits.list.useQuery, []);
+    mockList(trpc.market.riders.list.useQuery, []);
+    mockList(trpc.market.constructors.list.useQuery, []);
+    mockList(trpc.market.teams.list.useQuery, []);
+    mockList(trpc.market.prices.list.useQuery, []);
+    mockJobsStatus();
+  }
+
+  function mockGps(data: GpView[], extra: Record<string, unknown> = {}) {
+    mockResult(trpc.seasons.gps.list.useQuery, {
+      data,
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      refetch: vi.fn(),
+      ...extra,
+    });
+  }
+
+  function mockGpState(
+    overrides: Record<string, unknown> & { data?: Record<string, unknown> } =
+      {},
+  ) {
+    mockResult(trpc.results.gpState.useQuery, {
+      data: {
+        gpId: pastGp.id,
+        gpName: pastGp.name,
+        round: pastGp.round,
+        seasonName: season.name,
+        definitive: false,
+        resultsVersion: null,
+        counts: { provisional: 0, definitive: 0, corrected: 0 },
+        totalResults: 0,
+        lineups: 0,
+        ...overrides.data,
+      },
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      refetch: vi.fn(),
+      ...overrides,
+    });
+  }
+
+  function consoleScope() {
+    return within(document.getElementById("fin-de-semana") as HTMLElement);
+  }
+
+  it("muestra 'Consultando…' mientras carga la lista de GPs", () => {
+    baseMocks();
+    // `seasons.gps.list` se deja pendiente (default del mock).
+    mockGps([], { isPending: true, isSuccess: false, isError: false });
+    render(<AdminPage />);
+
+    expect(consoleScope().getByText("Consultando…")).toBeInTheDocument();
+  });
+
+  it("muestra el error si la lista de GPs falla", () => {
+    baseMocks();
+    mockGps(
+      [],
+      {
+        isPending: false,
+        isError: true,
+        isSuccess: false,
+        data: undefined,
+        error: new Error("sin conexión"),
+      },
+    );
+    render(<AdminPage />);
+
+    expect(
+      consoleScope().getByText("No se pudieron cargar los GPs: sin conexión"),
+    ).toBeInTheDocument();
+  });
+
+  it("avisa que aún no hay GPs disputados cuando la lista está vacía", () => {
+    baseMocks();
+    mockGps([]);
+    render(<AdminPage />);
+
+    expect(
+      consoleScope().getByText(/Temporada 2026 aún no tiene GPs disputados/),
+    ).toBeInTheDocument();
+  });
+
+  it("ignora GPs cancelados y GPs con fecha futura", () => {
+    baseMocks();
+    mockGps([
+      { ...pastGp, status: "cancelled" },
+      { ...pastGp, id: "gp-futuro", date: new Date("2027-05-02T14:00:00Z") },
+    ]);
+    render(<AdminPage />);
+
+    expect(
+      consoleScope().getByText(/Temporada 2026 aún no tiene GPs disputados/),
+    ).toBeInTheDocument();
+  });
+
+  it("muestra 'Consultando…' mientras carga el estado del GP", () => {
+    baseMocks();
+    mockGps([pastGp]);
+    // `results.gpState` se deja pendiente (default del mock).
+    render(<AdminPage />);
+
+    expect(consoleScope().getByText("Consultando…")).toBeInTheDocument();
+  });
+
+  it("muestra el error si el estado del GP falla", () => {
+    baseMocks();
+    mockGps([pastGp]);
+    mockGpState({
+      data: undefined,
+      isPending: false,
+      isError: true,
+      isSuccess: false,
+      error: new Error("sin conexión"),
+    });
+    render(<AdminPage />);
+
+    expect(
+      consoleScope().getByText("No se pudo cargar el estado del GP: sin conexión"),
+    ).toBeInTheDocument();
+  });
+
+  it("muestra un GP cerrado con su versión de resultados y el paso siguiente", () => {
+    baseMocks();
+    mockGps([pastGp]);
+    mockGpState({
+      data: {
+        definitive: true,
+        resultsVersion: "rv-2026-05-02",
+        counts: { provisional: 0, definitive: 12, corrected: 0 },
+        totalResults: 12,
+        lineups: 3,
+      },
+    });
+    render(<AdminPage />);
+
+    const scope = consoleScope();
+    expect(scope.getByText("R3 · GP de Francia")).toBeInTheDocument();
+    expect(
+      scope.getByText(/cerrado \(rv-2026-05-02\), los lineups ya puntúan/),
+    ).toBeInTheDocument();
+    expect(
+      scope.getByText(/revisa los precios del próximo GP en el paso 3 del panel de Precios\./),
+    ).toBeInTheDocument();
+    // Con el GP cerrado la CTA apunta al panel de Precios (paso 3).
+    expect(scope.getByRole("link", { name: "Ir a Precios" })).toHaveAttribute(
+      "href",
+      "#precios",
+    );
+  });
+
+  it("muestra un GP cerrado sin versión de resultados", () => {
+    baseMocks();
+    mockGps([pastGp]);
+    mockGpState({
+      data: {
+        definitive: true,
+        resultsVersion: null,
+        counts: { provisional: 0, definitive: 12, corrected: 0 },
+        totalResults: 12,
+        lineups: 3,
+      },
+    });
+    render(<AdminPage />);
+
+    const scope = consoleScope();
+    expect(
+      scope.getByText(/cerrado, los lineups ya puntúa/),
+    ).toBeInTheDocument();
+  });
+
+  it("muestra un GP sin resultados importados y su paso siguiente", () => {
+    baseMocks();
+    mockGps([pastGp]);
+    mockGpState({
+      data: {
+        definitive: false,
+        resultsVersion: null,
+        counts: { provisional: 0, definitive: 0, corrected: 0 },
+        totalResults: 0,
+        lineups: 3,
+      },
+    });
+    render(<AdminPage />);
+
+    const scope = consoleScope();
+    expect(scope.getByText(/sin resultados importados/)).toBeInTheDocument();
+    expect(
+      scope.getByText(/importa los resultados en el paso 1 del ritual de Resultados\./),
+    ).toBeInTheDocument();
+    // La CTA lleva el contexto del ritual (?season=&gp=) para que al
+    // navegar la cascada esté prellenada (adapt).
+    expect(scope.getByRole("link", { name: "Ir a Resultados" })).toHaveAttribute(
+      "href",
+      `/admin?season=${season.id}&gp=${pastGp.id}#resultados`,
+    );
+  });
+
+  it("muestra resultados provisionales y pide marcarlos definitivos", () => {
+    baseMocks();
+    mockGps([pastGp]);
+    mockGpState({
+      data: {
+        definitive: false,
+        resultsVersion: "rv-2026-05-01",
+        counts: { provisional: 11, definitive: 0, corrected: 1 },
+        totalResults: 12,
+        lineups: 3,
+      },
+    });
+    render(<AdminPage />);
+
+    const scope = consoleScope();
+    expect(
+      scope.getByText(/resultados provisionales \(11 provisional\(es\), 1 corregida\(s\)\)/),
+    ).toBeInTheDocument();
+    expect(
+      scope.getByText(/revísalos y márcalos definitivos en el paso 3 del ritual de Resultados\./),
+    ).toBeInTheDocument();
+    expect(scope.getByRole("link", { name: "Ir a Resultados" })).toHaveAttribute(
+      "href",
+      `/admin?season=${season.id}&gp=${pastGp.id}#resultados`,
+    );
   });
 });

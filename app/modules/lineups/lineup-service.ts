@@ -30,10 +30,7 @@ import type { GpStatus, Prisma, PrismaClient } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 
 import { appendAudit } from "@/modules/admin/audit";
-import {
-  seasonRulesSchema,
-  type SeasonRules,
-} from "@/shared/validation/season-rules";
+import { seasonRulesSchema, type SeasonRules } from "@/shared/validation/season-rules";
 
 import {
   balanceFromMovements,
@@ -168,8 +165,7 @@ function slotsFromRows(
   return {
     gold: rows.filter((r) => r.slotType === "gold").map((r) => r.assetId),
     silver: rows.filter((r) => r.slotType === "silver").map((r) => r.assetId),
-    constructorId:
-      rows.find((r) => r.slotType === "constructor")?.assetId ?? null,
+    constructorId: rows.find((r) => r.slotType === "constructor")?.assetId ?? null,
     teamId: rows.find((r) => r.slotType === "team")?.assetId ?? null,
   };
 }
@@ -223,10 +219,7 @@ export class LineupService {
    * consume cambios; los posteriores consumen la diferencia mínima
    * (`diffSlots`) y pueden consumir exenciones al agotar los cambios del GP.
    */
-  async save(
-    input: SaveLineupInput,
-    meta: UserMeta,
-  ): Promise<SaveLineupResult> {
+  async save(input: SaveLineupInput, meta: UserMeta): Promise<SaveLineupResult> {
     return this.prisma.$transaction(async (tx) => {
       // 1. Bloqueo de la fila del GP: serializa los saves y evalúa el gate
       //    de lockout de forma atómica (ADR-0017 §5).
@@ -243,14 +236,10 @@ export class LineupService {
 
       // 2. Gate de lockout (dentro de la transacción).
       const now = new Date();
-      if (
-        gp.status === "locked" ||
-        (gp.lockout_at !== null && now >= gp.lockout_at)
-      ) {
+      if (gp.status === "locked" || (gp.lockout_at !== null && now >= gp.lockout_at)) {
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
-          message:
-            "El GP está cerrado (lockout): no se pueden guardar lineups.",
+          message: "El GP está bloqueado (lockout): no se pueden guardar lineups.",
         });
       }
 
@@ -307,11 +296,7 @@ export class LineupService {
         }),
       ]);
       const perGp = rules.transfers.perGp;
-      const capacity = remainingChanges(
-        usedChanges,
-        exemptions.length,
-        perGp,
-      );
+      const capacity = remainingChanges(usedChanges, exemptions.length, perGp);
 
       // 8. Primer save: presupuesto = B + carry (desde el saldo del GP
       //    anterior); movimientos base + carry + spend(−coste); no consume
@@ -376,10 +361,7 @@ export class LineupService {
       // 10. Diferencia mínima: cambios consumidos por este save. Las
       //     reasignaciones oro↔plata (`gold_silver`) se registran en el
       //     historial pero NO consumen cambio (US-11: gratis).
-      const changes: SlotChange[] = diffSlots(
-        slotsFromRows(lineup.slots),
-        input.slots,
-      );
+      const changes: SlotChange[] = diffSlots(slotsFromRows(lineup.slots), input.slots);
       const counted = changes.filter((c) => c.type !== "gold_silver");
       if (counted.length > capacity) {
         throw new TRPCError({
@@ -391,18 +373,12 @@ export class LineupService {
       // (ADR-0017): las entradas que exceden perGp llevan
       // `reason = "exencion:<id>"`.
       const perGpLeft = Math.max(0, perGp - usedChanges);
-      const consumed = exemptions.slice(
-        0,
-        Math.max(0, counted.length - perGpLeft),
-      );
+      const consumed = exemptions.slice(0, Math.max(0, counted.length - perGpLeft));
 
       if (changes.length > 0) {
         // Coste antes del cambio: recalculado en el servidor (precios
         // congelados).
-        const costBeforeResult = lineupCost(
-          slotsFromRows(lineup.slots),
-          gpPrices,
-        );
+        const costBeforeResult = lineupCost(slotsFromRows(lineup.slots), gpPrices);
         if (!costBeforeResult.ok) {
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
@@ -546,22 +522,21 @@ export class LineupService {
     if (!gp) {
       throw new TRPCError({ code: "NOT_FOUND", message: "El GP no existe." });
     }
-    const [affiliations, gpPrices, constructors, teams, budget] =
-      await Promise.all([
-        this.prisma.riderAffiliation.findMany({
-          where: { gpId },
-          include: { rider: true, team: true, constructor: true },
-        }),
-        // Precios del GP con fallback al P0 (ADR-0015 addendum): el GP 1 no
-        // tiene precio propio y debe usar el P0, igual que el mercado.
-        this.resolveGpPrices(this.prisma, gpId),
-        this.prisma.constructor.findMany({ orderBy: { name: "asc" } }),
-        this.prisma.team.findMany({
-          orderBy: { name: "asc" },
-          include: { constructor: true },
-        }),
-        this.budgetForGp(gp, userId),
-      ]);
+    const [affiliations, gpPrices, constructors, teams, budget] = await Promise.all([
+      this.prisma.riderAffiliation.findMany({
+        where: { gpId },
+        include: { rider: true, team: true, constructor: true },
+      }),
+      // Precios del GP con fallback al P0 (ADR-0015 addendum): el GP 1 no
+      // tiene precio propio y debe usar el P0, igual que el mercado.
+      this.resolveGpPrices(this.prisma, gpId),
+      this.prisma.constructor.findMany({ orderBy: { name: "asc" } }),
+      this.prisma.team.findMany({
+        orderBy: { name: "asc" },
+        include: { constructor: true },
+      }),
+      this.budgetForGp(gp, userId),
+    ]);
     const priceOf = (assetType: string, assetId: string): number | null => {
       const price = gpPrices.find(
         (p) => p.assetType === assetType && p.assetId === assetId,
@@ -700,7 +675,15 @@ export class LineupService {
   ): Promise<{ cost: number; budget: number; balance: number; wildcardUsed: boolean }> {
     return this.prisma.$transaction(async (tx) => {
       // 1. Bloqueo del GP + gate de lockout (mismo que `save`).
-      const rows = await tx.$queryRaw<Array<{ id: string; season_id: string; round: number; status: GpStatus; lockout_at: Date | null }>>`
+      const rows = await tx.$queryRaw<
+        Array<{
+          id: string;
+          season_id: string;
+          round: number;
+          status: GpStatus;
+          lockout_at: Date | null;
+        }>
+      >`
         SELECT id, season_id, round, status, lockout_at
         FROM gps
         WHERE id = ${input.gpId}::uuid
@@ -714,7 +697,7 @@ export class LineupService {
       if (gp.status === "locked" || (gp.lockout_at !== null && now >= gp.lockout_at)) {
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
-          message: "El GP está cerrado (lockout): no se pueden guardar lineups.",
+          message: "El GP está bloqueado (lockout): no se pueden guardar lineups.",
         });
       }
 
@@ -774,7 +757,12 @@ export class LineupService {
 
       if (lineup === null) {
         // Primer save: presupuesto = B + carry.
-        const prevBalance = await this.prevGpBalance(tx, gp.season_id, gp.round, meta.userId);
+        const prevBalance = await this.prevGpBalance(
+          tx,
+          gp.season_id,
+          gp.round,
+          meta.userId,
+        );
         const movements = firstSaveMovements(rules.economy, prevBalance, cost);
         budget = totalBudget(movements);
         if (cost > budget) {

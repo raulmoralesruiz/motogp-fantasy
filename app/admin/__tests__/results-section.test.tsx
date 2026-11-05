@@ -23,12 +23,29 @@ import type { RiderView } from "../../modules/market";
 import type { CircuitView, GpView, SeasonWithRules } from "../../modules/seasons";
 import { PROVISIONAL_SEASON_RULES } from "../../shared/config/season-rules";
 import { act, fireEvent, render, screen, userEvent } from "../../../test/rtl";
-import { asMockFn, mockResult, resetTrpcMocks, trpc, type MockFn } from "../../../test/trpc-mock";
+import {
+  asMockFn,
+  mockResult,
+  resetTrpcMocks,
+  trpc,
+  type MockFn,
+} from "../../../test/trpc-mock";
 import { clientError } from "../../../test/errors";
+import { navigation, resetNavigationMocks } from "../../../test/ui-mocks";
 
 import ResultsSection from "../results-section";
 
 vi.mock("@/trpc/client", () => import("../../../test/trpc-mock"));
+vi.mock("next/navigation", () =>
+  import("../../../test/ui-mocks").then((m) => m.navigationMock),
+);
+
+// La selección se persiste en la URL (harden): cada test arranca sin params
+// para no heredar el contexto del anterior.
+beforeEach(() => {
+  window.history.replaceState(null, "", "/");
+  resetNavigationMocks();
+});
 
 const seasonId = "s1";
 const gpId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -71,7 +88,9 @@ const gp: GpView = {
   status: "scheduled",
   lockoutAt: null,
   sourceRef: null,
-  events: [{ id: eventId, type: "race", orderNum: 2, startTime: null, status: "scheduled" }],
+  events: [
+    { id: eventId, type: "race", orderNum: 2, startTime: null, status: "scheduled" },
+  ],
 };
 
 /** GP vinculado a la fuente (US-17, ADR-0019). */
@@ -83,7 +102,9 @@ const event: GpEventView = {
   type: "race",
   orderNum: 2,
   status: "scheduled",
-  resultsStatus: null,
+  cancelled: false,
+  neutralized: false,
+  resultCount: 0,
 };
 
 const riders: RiderView[] = [
@@ -258,11 +279,17 @@ function mockSourceMutations() {
     error: undefined,
     data: undefined,
   };
-  mockResult(trpc.results.importFromSource.useMutation, { mutate: importFromSource, ...idle });
+  mockResult(trpc.results.importFromSource.useMutation, {
+    mutate: importFromSource,
+    ...idle,
+  });
   mockResult(trpc.results.linkSource.useMutation, { mutate: link, ...idle });
   mockResult(trpc.results.unlinkSource.useMutation, { mutate: unlink, ...idle });
   mockResult(trpc.results.setRiderMapping.useMutation, { mutate: setMapping, ...idle });
-  mockResult(trpc.results.deleteRiderMapping.useMutation, { mutate: deleteMapping, ...idle });
+  mockResult(trpc.results.deleteRiderMapping.useMutation, {
+    mutate: deleteMapping,
+    ...idle,
+  });
   return { importFromSource, link, unlink, setMapping, deleteMapping };
 }
 
@@ -285,7 +312,12 @@ function mockLoaded(eventResultsData: EventResultView[] = []): MockFn {
   mockGps({ isPending: false, isError: false, isSuccess: true, data: [gp] });
   mockGpEvents({ isPending: false, isError: false, isSuccess: true, data: [event] });
   mockRiders({ isPending: false, isError: false, isSuccess: true, data: riders });
-  mockEventResults({ isPending: false, isError: false, isSuccess: true, data: eventResultsData });
+  mockEventResults({
+    isPending: false,
+    isError: false,
+    isSuccess: true,
+    data: eventResultsData,
+  });
   mockGpState();
   mockDefinitiveMutations();
   mockSourceState();
@@ -305,7 +337,11 @@ async function selectEvent() {
 }
 
 /** Marca una fila nueva terminada con la posición indicada. */
-async function markFinished(user: ReturnType<typeof userEvent.setup>, name: string, position: string) {
+async function markFinished(
+  user: ReturnType<typeof userEvent.setup>,
+  name: string,
+  position: string,
+) {
   await user.click(screen.getByLabelText(`Salió: ${name}`));
   await user.click(screen.getByLabelText(`Terminó: ${name}`));
   await user.type(screen.getByLabelText(`Posición: ${name}`), position);
@@ -332,17 +368,17 @@ describe("ResultsSection", () => {
     expect(screen.getByLabelText("Terminó: Piloto Uno")).toBeChecked();
     // jest-dom convierte el valor de inputs number a número (compareAsSet estricto).
     expect(screen.getByLabelText("Posición: Piloto Uno")).toHaveValue(2);
-    expect(screen.getByLabelText("Bono fastest-lap: Piloto Uno")).toBeChecked();
-    expect(screen.getByText("FINISHED")).toBeInTheDocument();
+    expect(screen.getByLabelText("Vuelta rápida: Piloto Uno")).toBeChecked();
+    expect(screen.getByText("Terminado")).toBeInTheDocument();
     // Las filas vacías sin pre-carga derivan ABSENT.
-    expect(screen.getAllByText("ABSENT")).toHaveLength(2);
+    expect(screen.getAllByText("Ausente")).toHaveLength(2);
   });
 
   it("etiqueta los eventos por tipo y estado de resultados (y marca los cancelados)", async () => {
     const finishedEvent: GpEventView = {
       ...event,
       id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-      resultsStatus: "finished",
+      resultCount: 3,
     };
     const cancelledEvent: GpEventView = {
       ...event,
@@ -415,7 +451,9 @@ describe("ResultsSection", () => {
 
     await markFinished(user, "Piloto Dos", "1");
     await user.type(
-      screen.getByLabelText("Motivo (obligatorio si la importación corrige resultados existentes)"),
+      screen.getByLabelText(
+        "Motivo (obligatorio si la importación corrige resultados existentes)",
+      ),
       "corrección de parrilla",
     );
 
@@ -432,7 +470,7 @@ describe("ResultsSection", () => {
     const user = await selectEvent();
 
     // La auto-limpieza no toca bonos/penalizaciones: el admin los desmarca a mano.
-    await user.click(screen.getByLabelText("Bono fastest-lap: Piloto Uno"));
+    await user.click(screen.getByLabelText("Vuelta rápida: Piloto Uno"));
     await user.click(screen.getByLabelText("Salió: Piloto Uno"));
     expect(screen.getByLabelText("Terminó: Piloto Uno")).toBeDisabled();
 
@@ -461,7 +499,7 @@ describe("ResultsSection", () => {
     render(<ResultsSection seasons={[season]} />);
     const user = await selectEvent();
 
-    const dq = screen.getByLabelText("Penalización dq: Piloto Dos");
+    const dq = screen.getByLabelText("Descalificado: Piloto Dos");
     await user.click(dq);
     expect(dq).toBeChecked();
     await user.click(dq);
@@ -473,8 +511,8 @@ describe("ResultsSection", () => {
     render(<ResultsSection seasons={[season]} />);
     const user = await selectEvent();
 
-    await user.click(screen.getByLabelText("Bono fastest-lap: Piloto Dos"));
-    expect(screen.getByLabelText("Bono fastest-lap: Piloto Dos")).toBeChecked();
+    await user.click(screen.getByLabelText("Vuelta rápida: Piloto Dos"));
+    expect(screen.getByLabelText("Vuelta rápida: Piloto Dos")).toBeChecked();
 
     await user.click(screen.getByRole("button", { name: "Importar resultados" }));
 
@@ -575,7 +613,10 @@ describe("ResultsSection", () => {
     const serverError = new Error("bad request");
     (serverError as { data?: unknown }).data = {
       zod: [
-        { path: ["entries", 0, "riderId"], message: "El identificador de piloto no es válido" },
+        {
+          path: ["entries", 0, "riderId"],
+          message: "El identificador de piloto no es válido",
+        },
       ],
     };
     mockImport({ isError: true, isPending: false, error: serverError });
@@ -614,7 +655,7 @@ describe("ResultsSection", () => {
     });
 
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Importación completada: 2 creados, 1 corregidos, 3 sin cambios y 5 conservados.",
+      "Importación completada (carrera principal): 2 creados, 1 corregidos, 3 sin cambios y 5 conservados.",
     );
   });
 
@@ -638,19 +679,27 @@ describe("ResultsSection", () => {
     render(<ResultsSection seasons={[season]} />);
     await selectEvent();
 
-    expect(screen.getByText("No se pudieron cargar los resultados: sin conexión")).toBeInTheDocument();
+    expect(
+      screen.getByText("No se pudieron cargar los resultados: sin conexión"),
+    ).toBeInTheDocument();
   });
 
   it("muestra el error al cargar los resultados previos", async () => {
     mockGps({ isPending: false, isError: false, isSuccess: true, data: [gp] });
     mockGpEvents({ isPending: false, isError: false, isSuccess: true, data: [event] });
     mockRiders({ isPending: false, isError: false, isSuccess: true, data: riders });
-    mockEventResults({ isPending: false, isError: true, error: new Error("fallo de BD") });
+    mockEventResults({
+      isPending: false,
+      isError: true,
+      error: new Error("fallo de BD"),
+    });
     mockGpState();
     render(<ResultsSection seasons={[season]} />);
     await selectEvent();
 
-    expect(screen.getByText("No se pudieron cargar los resultados: fallo de BD")).toBeInTheDocument();
+    expect(
+      screen.getByText("No se pudieron cargar los resultados: fallo de BD"),
+    ).toBeInTheDocument();
   });
 
   it("muestra el estado vacío cuando no hay pilotos en el mercado", async () => {
@@ -680,7 +729,9 @@ describe("ResultsSection", () => {
     const user = userEvent.setup();
     await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
 
-    expect(screen.getByText("No se pudieron cargar los GPs: fallo de BD")).toBeInTheDocument();
+    expect(
+      screen.getByText("No se pudieron cargar los GPs: fallo de BD"),
+    ).toBeInTheDocument();
   });
 
   it("muestra el estado vacío cuando la temporada no tiene GPs", async () => {
@@ -709,14 +760,20 @@ describe("ResultsSection", () => {
 
   it("muestra el error al cargar los eventos del GP", async () => {
     mockGps({ isPending: false, isError: false, isSuccess: true, data: [gp] });
-    mockGpEvents({ isPending: false, isError: true, error: new Error("fallo de eventos") });
+    mockGpEvents({
+      isPending: false,
+      isError: true,
+      error: new Error("fallo de eventos"),
+    });
     mockGpState();
     render(<ResultsSection seasons={[season]} />);
     const user = userEvent.setup();
     await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
     await user.selectOptions(screen.getByLabelText("GP"), gpId);
 
-    expect(screen.getByText("No se pudieron cargar los eventos: fallo de eventos")).toBeInTheDocument();
+    expect(
+      screen.getByText("No se pudieron cargar los eventos: fallo de eventos"),
+    ).toBeInTheDocument();
   });
 
   it("muestra el estado vacío cuando el GP no tiene eventos", async () => {
@@ -755,10 +812,17 @@ describe("ResultsSection", () => {
       type: "sprint",
       orderNum: 1,
       status: "scheduled",
-      resultsStatus: null,
+      cancelled: false,
+      neutralized: false,
+      resultCount: 0,
     };
     mockGps({ isPending: false, isError: false, isSuccess: true, data: [gp] });
-    mockGpEvents({ isPending: false, isError: false, isSuccess: true, data: [sprintEvent] });
+    mockGpEvents({
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      data: [sprintEvent],
+    });
     mockRiders({ isPending: false, isError: false, isSuccess: true, data: riders });
     mockEventResults({ isPending: false, isError: false, isSuccess: true, data: [] });
     mockGpState();
@@ -782,7 +846,7 @@ describe("ResultsSection", () => {
       await user.selectOptions(screen.getByLabelText("GP"), gpId);
 
       expect(
-        screen.getByRole("heading", { name: "Importación automática (PulseLive)" }),
+        screen.getByRole("heading", { name: "1. Importación automática (PulseLive)" }),
       ).toBeInTheDocument();
       expect(screen.getByLabelText("Evento de la fuente")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Vincular GP" })).toBeInTheDocument();
@@ -840,34 +904,46 @@ describe("ResultsSection", () => {
 
       expect(screen.getByText(sourceRef)).toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: "Desvincular" }));
+      await user.click(screen.getByRole("button", { name: "Sí, desvincular la fuente" }));
 
       expect(unlink).toHaveBeenCalledWith({ gpId });
     });
 
-    it("muestra un botón de importación por evento importable (sin los cancelados)", async () => {
+    it("importa desde la fuente el evento elegido y explica los no importables", async () => {
       const q2: GpEventView = {
         id: "qqqqqqqq-qqqq-4qqq-8qqq-qqqqqqqqqqqq",
         type: "q2",
         orderNum: 1,
         status: "scheduled",
-        resultsStatus: null,
+        cancelled: false,
+        neutralized: false,
+        resultCount: 0,
       };
       const sprint: GpEventView = {
         id: "ssssssss-ssss-4sss-8sss-ssssssssssss",
         type: "sprint",
         orderNum: 2,
         status: "cancelled",
-        resultsStatus: null,
+        cancelled: false,
+        neutralized: false,
+        resultCount: 0,
       };
       const race: GpEventView = {
         id: eventId,
         type: "race",
         orderNum: 3,
         status: "scheduled",
-        resultsStatus: null,
+        cancelled: false,
+        neutralized: false,
+        resultCount: 0,
       };
       mockGps({ isPending: false, isError: false, isSuccess: true, data: [gpLinked] });
-      mockGpEvents({ isPending: false, isError: false, isSuccess: true, data: [q2, sprint, race] });
+      mockGpEvents({
+        isPending: false,
+        isError: false,
+        isSuccess: true,
+        data: [q2, sprint, race],
+      });
       mockRiders({ isPending: false, isError: false, isSuccess: true, data: riders });
       mockEventResults({ isPending: false, isError: false, isSuccess: true, data: [] });
       mockGpState();
@@ -879,11 +955,27 @@ describe("ResultsSection", () => {
       await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
       await user.selectOptions(screen.getByLabelText("GP"), gpId);
 
-      expect(screen.getByRole("button", { name: "Importar Q2" })).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Importar sprint" })).not.toBeInTheDocument();
-      await user.click(screen.getByRole("button", { name: "Importar carrera principal" }));
+      // Un solo mecanismo de selección de evento: sin evento elegido se pide.
+      expect(screen.getByText("elige un evento para importarlo.")).toBeInTheDocument();
 
+      await user.selectOptions(screen.getByLabelText("Evento"), eventId);
+      await user.click(
+        screen.getByRole("button", { name: "Importar carrera principal" }),
+      );
       expect(importFromSource).toHaveBeenCalledWith({ gpId, event: "race" });
+
+      // Un evento cancelado no es importable: se explica, sin botón muerto.
+      await user.selectOptions(screen.getByLabelText("Evento"), sprint.id);
+      expect(
+        screen.queryByRole("button", { name: "Importar sprint" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByText("este evento no es importable desde la fuente."),
+      ).toBeInTheDocument();
+
+      // Los importables siguen disponibles al volver a elegirlos.
+      await user.selectOptions(screen.getByLabelText("Evento"), q2.id);
+      expect(screen.getByRole("button", { name: "Importar Q2" })).toBeInTheDocument();
     });
 
     it("muestra el resumen de la importación automática con los pilotos sin mapear", async () => {
@@ -899,8 +991,11 @@ describe("ResultsSection", () => {
       const user = userEvent.setup();
       await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
       await user.selectOptions(screen.getByLabelText("GP"), gpId);
+      await user.selectOptions(screen.getByLabelText("Evento"), eventId);
 
-      await user.click(screen.getByRole("button", { name: "Importar carrera principal" }));
+      await user.click(
+        screen.getByRole("button", { name: "Importar carrera principal" }),
+      );
 
       const options = asMockFn(trpc.results.importFromSource.useMutation).mock
         .calls[0]?.[0] as {
@@ -920,8 +1015,12 @@ describe("ResultsSection", () => {
       });
 
       expect(screen.getByRole("status")).toHaveTextContent(
-        "Importación automática: 1 creados, 0 corregidos, 2 sin cambios y 0 conservados. Sin mapear: rider-9.",
+        "Importación automática (carrera principal): 1 creados, 0 corregidos, 2 sin cambios y 0 conservados.",
       );
+      // Los sin mapear se listan aparte con un atajo que precarga el formulario.
+      expect(screen.getByText(/rider-9/)).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Mapear" }));
+      expect(screen.getByLabelText("Referencia en la fuente")).toHaveValue("rider-9");
     });
 
     it("resalta en la tabla del estado los eventos con fallos por encima del umbral", async () => {
@@ -979,6 +1078,7 @@ describe("ResultsSection", () => {
 
       expect(screen.getByText("rider-1")).toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: "Eliminar" }));
+      await user.click(screen.getByRole("button", { name: "Sí, eliminar el mapeo" }));
 
       expect(deleteMapping).toHaveBeenCalledWith({ riderRef: "rider-1" });
     });
@@ -1035,7 +1135,13 @@ describe("ResultsSection", () => {
     it("al vincular con éxito: refetch de GPs y el selector de evento vuelve a vacío", async () => {
       const gpsRefetch = vi.fn();
       mockLoaded();
-      mockGps({ isPending: false, isError: false, isSuccess: true, data: [gp], refetch: gpsRefetch });
+      mockGps({
+        isPending: false,
+        isError: false,
+        isSuccess: true,
+        data: [gp],
+        refetch: gpsRefetch,
+      });
       mockSourceEvents({ data: [{ eventRef: "ev-1", name: "MotoGP — Indonesia" }] });
       render(<ResultsSection seasons={[season]} />);
       const user = userEvent.setup();
@@ -1070,6 +1176,7 @@ describe("ResultsSection", () => {
       await user.selectOptions(screen.getByLabelText("GP"), gpId);
 
       await user.click(screen.getByRole("button", { name: "Desvincular" }));
+      await user.click(screen.getByRole("button", { name: "Sí, desvincular la fuente" }));
 
       const options = asMockFn(trpc.results.unlinkSource.useMutation).mock
         .calls[0]?.[0] as { onSuccess: () => void };
@@ -1108,7 +1215,12 @@ describe("ResultsSection", () => {
       mockLoaded();
       mockRiderMappings({
         data: [
-          { source: "pulselive:v1", riderRef: "rider-1", riderId: r1, riderName: "Piloto Uno" },
+          {
+            source: "pulselive:v1",
+            riderRef: "rider-1",
+            riderId: r1,
+            riderName: "Piloto Uno",
+          },
         ],
         refetch: mappingsRefetch,
       });
@@ -1118,6 +1230,7 @@ describe("ResultsSection", () => {
       await user.selectOptions(screen.getByLabelText("GP"), gpId);
 
       await user.click(screen.getByRole("button", { name: "Eliminar" }));
+      await user.click(screen.getByRole("button", { name: "Sí, eliminar el mapeo" }));
 
       const options = asMockFn(trpc.results.deleteRiderMapping.useMutation).mock
         .calls[0]?.[0] as { onSuccess: () => void };
@@ -1143,7 +1256,9 @@ describe("ResultsSection", () => {
       await user.selectOptions(screen.getByLabelText("GP"), gpId);
 
       expect(
-        screen.getByText("No se pudieron cargar los eventos de la fuente: fallo del catálogo"),
+        screen.getByText(
+          "No se pudieron cargar los eventos de la fuente: fallo del catálogo",
+        ),
       ).toBeInTheDocument();
     });
 
@@ -1161,7 +1276,9 @@ describe("ResultsSection", () => {
       await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
       await user.selectOptions(screen.getByLabelText("GP"), gpId);
 
-      expect(screen.getByText("No se pudo cargar el estado: fallo de estado")).toBeInTheDocument();
+      expect(
+        screen.getByText("No se pudo cargar el estado: fallo de estado"),
+      ).toBeInTheDocument();
     });
 
     it("muestra el error al cargar los mapeos de pilotos", async () => {
@@ -1178,7 +1295,9 @@ describe("ResultsSection", () => {
       await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
       await user.selectOptions(screen.getByLabelText("GP"), gpId);
 
-      expect(screen.getByText("No se pudieron cargar los mapeos: fallo de mapeos")).toBeInTheDocument();
+      expect(
+        screen.getByText("No se pudieron cargar los mapeos: fallo de mapeos"),
+      ).toBeInTheDocument();
     });
 
     it("muestra el resumen de la importación automática sin pilotos sin mapear", async () => {
@@ -1194,8 +1313,11 @@ describe("ResultsSection", () => {
       const user = userEvent.setup();
       await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
       await user.selectOptions(screen.getByLabelText("GP"), gpId);
+      await user.selectOptions(screen.getByLabelText("Evento"), eventId);
 
-      await user.click(screen.getByRole("button", { name: "Importar carrera principal" }));
+      await user.click(
+        screen.getByRole("button", { name: "Importar carrera principal" }),
+      );
 
       const options = asMockFn(trpc.results.importFromSource.useMutation).mock
         .calls[0]?.[0] as {
@@ -1216,7 +1338,7 @@ describe("ResultsSection", () => {
 
       const status = screen.getByRole("status");
       expect(status).toHaveTextContent(
-        "Importación automática: 2 creados, 1 corregidos, 0 sin cambios y 1 conservados.",
+        "Importación automática (carrera principal): 2 creados, 1 corregidos, 0 sin cambios y 1 conservados.",
       );
       expect(status).not.toHaveTextContent("Sin mapear");
     });
@@ -1231,7 +1353,10 @@ describe("ResultsSection", () => {
         error: clientError("Invalid input", {
           zod: {
             issues: [
-              { path: ["eventRef"], message: "El evento de la fuente no existe en el catálogo" },
+              {
+                path: ["eventRef"],
+                message: "El evento de la fuente no existe en el catálogo",
+              },
             ],
           },
           code: "BAD_REQUEST",
@@ -1276,12 +1401,16 @@ describe("ResultsSection", () => {
       await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
       await user.selectOptions(screen.getByLabelText("GP"), gpId);
 
-      expect(screen.getByRole("heading", { name: "Definitivo" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: /3\. Definitivo y estados de evento/ }),
+      ).toBeInTheDocument();
       expect(screen.getByText("provisional")).toBeInTheDocument();
       expect(
         screen.getByText(/12 provisional\(es\), 0 definitivo\(s\), 0 corregido\(s\)/),
       ).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Marcar definitivo" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Marcar definitivo" }),
+      ).toBeInTheDocument();
     });
 
     it("oculta el botón y avisa cuando el GP no tiene resultados", async () => {
@@ -1325,6 +1454,32 @@ describe("ResultsSection", () => {
       ).not.toBeInTheDocument();
     });
 
+    it("muestra el estado definitivo sin versión cuando no hay", async () => {
+      mockLoaded();
+      mockGpState({
+        data: {
+          gpId,
+          gpName: "GP de España",
+          round: 1,
+          seasonName: "Temporada 2026",
+          definitive: true,
+          resultsVersion: null,
+          counts: { provisional: 0, definitive: 12, corrected: 0 },
+          totalResults: 12,
+          lineups: 1,
+        },
+      });
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      expect(screen.getByText("definitivo")).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Marcar definitivo" }),
+      ).not.toBeInTheDocument();
+    });
+
     it("muestra el error si no se pudo cargar el estado", async () => {
       mockLoaded();
       mockGpState({
@@ -1339,14 +1494,15 @@ describe("ResultsSection", () => {
       await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
       await user.selectOptions(screen.getByLabelText("GP"), gpId);
 
-      expect(screen.getByText("No se pudo cargar el estado: fallo de BD")).toBeInTheDocument();
+      expect(
+        screen.getByText("No se pudo cargar el estado: fallo de BD"),
+      ).toBeInTheDocument();
     });
 
     it("pide confirmación y muta con el gpId al marcar definitivo", async () => {
       mockLoaded();
       withResults();
       const { markDefinitive } = mockDefinitiveMutations();
-      vi.spyOn(window, "confirm").mockReturnValue(true);
       render(<ResultsSection seasons={[season]} />);
       const user = userEvent.setup();
       await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
@@ -1354,7 +1510,47 @@ describe("ResultsSection", () => {
 
       await user.click(screen.getByRole("button", { name: "Marcar definitivo" }));
 
-      expect(window.confirm).toHaveBeenCalled();
+      // Confirmación con impacto (patrón del sistema) antes de mutar.
+      expect(
+        screen.getByRole("dialog", { name: "Marcar R1 · GP de España como definitivo" }),
+      ).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Sí, marcar definitivo" }));
+      expect(markDefinitive).toHaveBeenCalledWith({ gpId });
+    });
+
+    it("confirma el recálculo tras una versión previa (reconfirmación, US-19)", async () => {
+      mockLoaded();
+      // GP ya recalculado (rv-1) con filas corregidas: la confirmación
+      // apunta a un recálculo posterior, no al primer (rv-1).
+      mockGpState({
+        data: {
+          gpId,
+          gpName: "GP de España",
+          round: 1,
+          seasonName: "Temporada 2026",
+          definitive: false,
+          resultsVersion: "rv-1",
+          counts: { provisional: 2, definitive: 0, corrected: 2 },
+          totalResults: 4,
+          lineups: 1,
+        },
+      });
+      const { markDefinitive } = mockDefinitiveMutations();
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      await user.click(screen.getByRole("button", { name: "Marcar definitivo" }));
+
+      const dialog = screen.getByRole("dialog", {
+        name: "Marcar R1 · GP de España como definitivo",
+      });
+      expect(dialog).toHaveTextContent(/recálculo tras rv-1/);
+      expect(dialog).toHaveTextContent(
+        "Afecta a 2 fila(s) provisional(es) y 2 corregida(s).",
+      );
+      await user.click(screen.getByRole("button", { name: "Sí, marcar definitivo" }));
       expect(markDefinitive).toHaveBeenCalledWith({ gpId });
     });
 
@@ -1362,13 +1558,13 @@ describe("ResultsSection", () => {
       mockLoaded();
       withResults();
       const { markDefinitive } = mockDefinitiveMutations();
-      vi.spyOn(window, "confirm").mockReturnValue(false);
       render(<ResultsSection seasons={[season]} />);
       const user = userEvent.setup();
       await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
       await user.selectOptions(screen.getByLabelText("GP"), gpId);
 
       await user.click(screen.getByRole("button", { name: "Marcar definitivo" }));
+      await user.click(screen.getByRole("button", { name: "No, volver" }));
 
       expect(markDefinitive).not.toHaveBeenCalled();
     });
@@ -1377,13 +1573,13 @@ describe("ResultsSection", () => {
       mockLoaded();
       withResults();
       mockDefinitiveMutations();
-      vi.spyOn(window, "confirm").mockReturnValue(true);
       render(<ResultsSection seasons={[season]} />);
       const user = userEvent.setup();
       await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
       await user.selectOptions(screen.getByLabelText("GP"), gpId);
 
       await user.click(screen.getByRole("button", { name: "Marcar definitivo" }));
+      await user.click(screen.getByRole("button", { name: "Sí, marcar definitivo" }));
 
       const options = asMockFn(trpc.results.markDefinitive.useMutation).mock
         .calls[0]?.[0] as { onSuccess: (data: MarkDefinitiveResult) => void };
@@ -1407,13 +1603,13 @@ describe("ResultsSection", () => {
       mockLoaded();
       withResults();
       mockDefinitiveMutations();
-      vi.spyOn(window, "confirm").mockReturnValue(true);
       render(<ResultsSection seasons={[season]} />);
       const user = userEvent.setup();
       await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
       await user.selectOptions(screen.getByLabelText("GP"), gpId);
 
       await user.click(screen.getByRole("button", { name: "Marcar definitivo" }));
+      await user.click(screen.getByRole("button", { name: "Sí, marcar definitivo" }));
 
       const options = asMockFn(trpc.results.markDefinitive.useMutation).mock
         .calls[0]?.[0] as { onSuccess: (data: MarkDefinitiveResult) => void };
@@ -1459,28 +1655,72 @@ describe("ResultsSection", () => {
     it("cancela un evento con confirmación y muta", async () => {
       mockLoaded();
       const { cancelEvent } = mockDefinitiveMutations();
-      vi.spyOn(window, "confirm").mockReturnValue(true);
       render(<ResultsSection seasons={[season]} />);
       const user = userEvent.setup();
       await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
       await user.selectOptions(screen.getByLabelText("GP"), gpId);
+      await user.selectOptions(screen.getByLabelText("Evento"), eventId);
 
-      await user.click(screen.getByRole("button", { name: "Cancelar" }));
+      await user.click(screen.getByRole("button", { name: "Cancelar evento" }));
 
-      expect(window.confirm).toHaveBeenCalled();
+      // El impacto irreversible se muestra como aviso dentro del diálogo
+      // (sin resultados importados: se dice expresamente).
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "El evento no puntuará (0 para todos) y el recálculo lo saltará.",
+      );
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "El evento aún no tiene resultados importados.",
+      );
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Acción irreversible: no se puede des-cancelar ni neutralizar después.",
+      );
+      await user.click(screen.getByRole("button", { name: "Sí, cancelar el evento" }));
       expect(cancelEvent).toHaveBeenCalledWith({ gpId, eventId });
+    });
+
+    it("cuantifica el impacto del diálogo según las filas del evento", async () => {
+      const withRows: GpEventView = { ...event, resultCount: 7 };
+      mockLoaded();
+      mockGpEvents({
+        isPending: false,
+        isError: false,
+        isSuccess: true,
+        data: [withRows],
+      });
+      mockDefinitiveMutations();
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+      await user.selectOptions(screen.getByLabelText("Evento"), eventId);
+
+      await user.click(screen.getByRole("button", { name: "Cancelar evento" }));
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Afecta a las 7 fila(s) de resultado de este evento.",
+      );
+      await user.click(screen.getByRole("button", { name: "No, volver" }));
+
+      // Neutralizar no es irreversible: el impacto se muestra sin aviso.
+      await user.click(screen.getByRole("button", { name: "Neutralizar evento" }));
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "resultado oficial neutralizado",
+      );
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "Afecta a las 7 fila(s) de resultado de este evento.",
+      );
     });
 
     it("no muta si se cancela la confirmación de cancelar un evento", async () => {
       mockLoaded();
       const { cancelEvent } = mockDefinitiveMutations();
-      vi.spyOn(window, "confirm").mockReturnValue(false);
       render(<ResultsSection seasons={[season]} />);
       const user = userEvent.setup();
       await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
       await user.selectOptions(screen.getByLabelText("GP"), gpId);
+      await user.selectOptions(screen.getByLabelText("Evento"), eventId);
 
-      await user.click(screen.getByRole("button", { name: "Cancelar" }));
+      await user.click(screen.getByRole("button", { name: "Cancelar evento" }));
+      await user.click(screen.getByRole("button", { name: "No, volver" }));
 
       expect(cancelEvent).not.toHaveBeenCalled();
     });
@@ -1488,13 +1728,14 @@ describe("ResultsSection", () => {
     it("muestra el éxito al cancelar un evento", async () => {
       mockLoaded();
       mockDefinitiveMutations();
-      vi.spyOn(window, "confirm").mockReturnValue(true);
       render(<ResultsSection seasons={[season]} />);
       const user = userEvent.setup();
       await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
       await user.selectOptions(screen.getByLabelText("GP"), gpId);
+      await user.selectOptions(screen.getByLabelText("Evento"), eventId);
 
-      await user.click(screen.getByRole("button", { name: "Cancelar" }));
+      await user.click(screen.getByRole("button", { name: "Cancelar evento" }));
+      await user.click(screen.getByRole("button", { name: "Sí, cancelar el evento" }));
 
       const options = asMockFn(trpc.results.cancelEvent.useMutation).mock
         .calls[0]?.[0] as { onSuccess: (data: EventFlagResult) => void };
@@ -1510,13 +1751,14 @@ describe("ResultsSection", () => {
     it("muestra el no-op si el evento ya estaba cancelado", async () => {
       mockLoaded();
       mockDefinitiveMutations();
-      vi.spyOn(window, "confirm").mockReturnValue(true);
       render(<ResultsSection seasons={[season]} />);
       const user = userEvent.setup();
       await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
       await user.selectOptions(screen.getByLabelText("GP"), gpId);
+      await user.selectOptions(screen.getByLabelText("Evento"), eventId);
 
-      await user.click(screen.getByRole("button", { name: "Cancelar" }));
+      await user.click(screen.getByRole("button", { name: "Cancelar evento" }));
+      await user.click(screen.getByRole("button", { name: "Sí, cancelar el evento" }));
 
       const options = asMockFn(trpc.results.cancelEvent.useMutation).mock
         .calls[0]?.[0] as { onSuccess: (data: EventFlagResult) => void };
@@ -1532,28 +1774,28 @@ describe("ResultsSection", () => {
     it("neutraliza un evento con confirmación y muta", async () => {
       mockLoaded();
       const { neutralizeEvent } = mockDefinitiveMutations();
-      vi.spyOn(window, "confirm").mockReturnValue(true);
       render(<ResultsSection seasons={[season]} />);
       const user = userEvent.setup();
       await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
       await user.selectOptions(screen.getByLabelText("GP"), gpId);
+      await user.selectOptions(screen.getByLabelText("Evento"), eventId);
 
-      await user.click(screen.getByRole("button", { name: "Neutralizar" }));
-
-      expect(window.confirm).toHaveBeenCalled();
+      await user.click(screen.getByRole("button", { name: "Neutralizar evento" }));
+      await user.click(screen.getByRole("button", { name: "Sí, neutralizar el evento" }));
       expect(neutralizeEvent).toHaveBeenCalledWith({ gpId, eventId });
     });
 
     it("muestra el éxito al neutralizar un evento", async () => {
       mockLoaded();
       mockDefinitiveMutations();
-      vi.spyOn(window, "confirm").mockReturnValue(true);
       render(<ResultsSection seasons={[season]} />);
       const user = userEvent.setup();
       await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
       await user.selectOptions(screen.getByLabelText("GP"), gpId);
+      await user.selectOptions(screen.getByLabelText("Evento"), eventId);
 
-      await user.click(screen.getByRole("button", { name: "Neutralizar" }));
+      await user.click(screen.getByRole("button", { name: "Neutralizar evento" }));
+      await user.click(screen.getByRole("button", { name: "Sí, neutralizar el evento" }));
 
       const options = asMockFn(trpc.results.neutralizeEvent.useMutation).mock
         .calls[0]?.[0] as { onSuccess: (data: EventFlagResult) => void };
@@ -1569,13 +1811,14 @@ describe("ResultsSection", () => {
     it("muestra el no-op si el evento ya estaba neutralizado", async () => {
       mockLoaded();
       mockDefinitiveMutations();
-      vi.spyOn(window, "confirm").mockReturnValue(true);
       render(<ResultsSection seasons={[season]} />);
       const user = userEvent.setup();
       await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
       await user.selectOptions(screen.getByLabelText("GP"), gpId);
+      await user.selectOptions(screen.getByLabelText("Evento"), eventId);
 
-      await user.click(screen.getByRole("button", { name: "Neutralizar" }));
+      await user.click(screen.getByRole("button", { name: "Neutralizar evento" }));
+      await user.click(screen.getByRole("button", { name: "Sí, neutralizar el evento" }));
 
       const options = asMockFn(trpc.results.neutralizeEvent.useMutation).mock
         .calls[0]?.[0] as { onSuccess: (data: EventFlagResult) => void };
@@ -1603,7 +1846,9 @@ describe("ResultsSection", () => {
       await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
       await user.selectOptions(screen.getByLabelText("GP"), gpId);
 
-      expect(screen.getByRole("alert")).toHaveTextContent("El evento no existe en este GP.");
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "El evento no existe en este GP.",
+      );
     });
 
     it("muestra 'Consultando…' mientras carga el estado del GP", async () => {
@@ -1629,18 +1874,25 @@ describe("ResultsSection", () => {
     it("rechaza localmente marcar definitivo con un gpId inválido", async () => {
       const badGpId = "gp-invalido";
       mockLoaded();
-      mockGps({ isPending: false, isError: false, isSuccess: true, data: [{ ...gp, id: badGpId }] });
+      mockGps({
+        isPending: false,
+        isError: false,
+        isSuccess: true,
+        data: [{ ...gp, id: badGpId }],
+      });
       withResults();
       const { markDefinitive } = mockDefinitiveMutations();
-      vi.spyOn(window, "confirm").mockReturnValue(true);
       render(<ResultsSection seasons={[season]} />);
       const user = userEvent.setup();
       await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
       await user.selectOptions(screen.getByLabelText("GP"), badGpId);
 
       await user.click(screen.getByRole("button", { name: "Marcar definitivo" }));
+      await user.click(screen.getByRole("button", { name: "Sí, marcar definitivo" }));
 
-      expect(screen.getByRole("alert")).toHaveTextContent("El identificador de GP no es válido");
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "El identificador de GP no es válido",
+      );
       expect(markDefinitive).not.toHaveBeenCalled();
     });
 
@@ -1654,18 +1906,169 @@ describe("ResultsSection", () => {
         data: [{ ...event, id: badEventId }],
       });
       const { cancelEvent } = mockDefinitiveMutations();
-      vi.spyOn(window, "confirm").mockReturnValue(true);
       render(<ResultsSection seasons={[season]} />);
       const user = userEvent.setup();
       await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
       await user.selectOptions(screen.getByLabelText("GP"), gpId);
+      await user.selectOptions(screen.getByLabelText("Evento"), badEventId);
 
-      await user.click(screen.getByRole("button", { name: "Cancelar" }));
+      await user.click(screen.getByRole("button", { name: "Cancelar evento" }));
+      await user.click(screen.getByRole("button", { name: "Sí, cancelar el evento" }));
 
       expect(screen.getByRole("alert")).toHaveTextContent(
         "El identificador de evento no es válido",
       );
       expect(cancelEvent).not.toHaveBeenCalled();
+    });
+
+    it("solo ofrece transiciones que el servidor ejecutará (flags reales, ADR-0020)", async () => {
+      const cancelled: GpEventView = {
+        id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        type: "sprint",
+        orderNum: 1,
+        status: "scheduled",
+        cancelled: true,
+        neutralized: false,
+        resultCount: 3,
+      };
+      const neutralized: GpEventView = {
+        id: eventId,
+        type: "race",
+        orderNum: 2,
+        status: "scheduled",
+        cancelled: false,
+        neutralized: true,
+        resultCount: 5,
+      };
+      mockLoaded();
+      mockGpEvents({
+        isPending: false,
+        isError: false,
+        isSuccess: true,
+        data: [cancelled, neutralized],
+      });
+      mockDefinitiveMutations();
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+
+      // Los flags reales (fuente de verdad) son visibles; sin evento
+      // elegido no hay acciones.
+      expect(screen.getAllByText(/— cancelado \(no puntúa\)/).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/— neutralizado/).length).toBeGreaterThan(0);
+      expect(
+        screen.queryByRole("button", { name: "Cancelar evento" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Neutralizar evento" }),
+      ).not.toBeInTheDocument();
+
+      // Evento neutralizado: no se re-ofrece neutralizar (idempotente; el
+      // servidor respondería noop); solo se ofrece cancelar.
+      await user.selectOptions(screen.getByLabelText("Evento"), eventId);
+      expect(screen.getAllByRole("button", { name: "Cancelar evento" })).toHaveLength(1);
+      expect(
+        screen.queryByRole("button", { name: "Neutralizar evento" }),
+      ).not.toBeInTheDocument();
+
+      // Evento cancelado: estado terminal — ninguna transición se ofrece.
+      // Neutralizar después de cancelar sería un no-op (el evento queda
+      // excluido del recálculo; cancelar es irreversible).
+      await user.selectOptions(screen.getByLabelText("Evento"), cancelled.id);
+      expect(screen.getAllByText("sin transiciones")).toHaveLength(1);
+      expect(
+        screen.queryByRole("button", { name: "Cancelar evento" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Neutralizar evento" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("colapsa el paso manual con fuente vinculada y lo reabre con el summary", async () => {
+      mockGps({ isPending: false, isError: false, isSuccess: true, data: [gpLinked] });
+      mockGpEvents({ isPending: false, isError: false, isSuccess: true, data: [event] });
+      mockRiders({ isPending: false, isError: false, isSuccess: true, data: riders });
+      mockEventResults({ isPending: false, isError: false, isSuccess: true, data: [] });
+      mockGpState();
+      mockSourceState();
+      mockSourceEvents();
+      mockRiderMappings();
+      mockSourceMutations();
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+      await user.selectOptions(screen.getByLabelText("Evento"), eventId);
+
+      const summary = screen.getByText("2. Importación manual — carrera principal");
+      const details = summary.closest("details")!;
+      expect(details).not.toHaveAttribute("open");
+
+      await user.click(summary);
+      expect(details).toHaveAttribute("open");
+    });
+
+    it("protege los cambios sin importar al cambiar de contexto", async () => {
+      const otherEvent: GpEventView = {
+        ...event,
+        id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        type: "sprint",
+      };
+      mockLoaded();
+      mockGpEvents({
+        isPending: false,
+        isError: false,
+        isSuccess: true,
+        data: [event, otherEvent],
+      });
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+      await user.selectOptions(screen.getByLabelText("Evento"), eventId);
+
+      // Editar la tabla deja el formulario «con cambios sin importar».
+      await user.click(screen.getByLabelText(`Salió: ${riders[0]?.name}`));
+
+      // El paso 2 narra el diff: filas importadas y correcciones pendientes.
+      expect(screen.getByText(/1 modificada\(s\) sin importar/)).toBeInTheDocument();
+
+      await user.selectOptions(screen.getByLabelText("Evento"), otherEvent.id);
+
+      // El cambio no se aplica sin confirmar el descarte.
+      expect(
+        screen.getByRole("dialog", { name: "Tienes resultados sin importar" }),
+      ).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "No, volver" }));
+      expect(screen.getByLabelText("Evento")).toHaveValue(eventId);
+
+      await user.selectOptions(screen.getByLabelText("Evento"), otherEvent.id);
+      await user.click(screen.getByRole("button", { name: "Sí, descartar los cambios" }));
+      expect(screen.getByLabelText("Evento")).toHaveValue(otherEvent.id);
+    });
+
+    it("persiste la selección en la URL y la restaura al recargar", async () => {
+      mockLoaded();
+      const { unmount } = render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+      await user.selectOptions(screen.getByLabelText("Evento"), eventId);
+
+      const params = new URLSearchParams(window.location.search);
+      expect(params.get("season")).toBe(seasonId);
+      expect(params.get("gp")).toBe(gpId);
+      expect(params.get("event")).toBe(eventId);
+
+      // Un render nuevo (equivalente a F5): el router entrega el query
+      // string y el ritual lo recupera de la URL.
+      navigation.searchParams = new URLSearchParams(window.location.search);
+      unmount();
+      render(<ResultsSection seasons={[season]} />);
+      expect(screen.getByLabelText("Temporada")).toHaveValue(seasonId);
+      expect(screen.getByLabelText("GP")).toHaveValue(gpId);
+      expect(screen.getByLabelText("Evento")).toHaveValue(eventId);
     });
 
     it("muestra los issues Zod del error de marcar definitivo", async () => {
@@ -1704,7 +2107,9 @@ describe("ResultsSection", () => {
         isSuccess: false,
         error: clientError("Invalid input", {
           zod: {
-            issues: [{ path: ["eventId"], message: "El identificador de evento no es válido" }],
+            issues: [
+              { path: ["eventId"], message: "El identificador de evento no es válido" },
+            ],
           },
           code: "BAD_REQUEST",
           message: "Invalid input",
@@ -1719,6 +2124,171 @@ describe("ResultsSection", () => {
       const alert = screen.getByRole("alert");
       expect(alert).toHaveTextContent("El identificador de evento no es válido");
       expect(alert).not.toHaveTextContent("Invalid input");
+    });
+  });
+
+  describe("Handoff consola → ritual (adapt: ?season=&gp=)", () => {
+    const otherGpId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const otherEventId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const otherGp: GpView = {
+      ...gp,
+      id: otherGpId,
+      round: 2,
+      name: "GP de Italia",
+      date: new Date("2026-04-26T14:00:00Z"),
+      events: [
+        {
+          id: otherEventId,
+          type: "race",
+          orderNum: 2,
+          startTime: null,
+          status: "scheduled",
+        },
+      ],
+    };
+
+    it("prellena la cascada al montar con ?season=&gp=", () => {
+      navigation.searchParams = new URLSearchParams({
+        season: seasonId,
+        gp: gpId,
+      });
+      mockLoaded();
+      render(<ResultsSection seasons={[season]} />);
+
+      expect(screen.getByLabelText("Temporada")).toHaveValue(seasonId);
+      expect(screen.getByLabelText("GP")).toHaveValue(gpId);
+      expect(screen.getByLabelText("Evento")).toHaveValue("");
+    });
+
+    it("prellena la cascada completa al montar con ?season=&gp=&event=", () => {
+      navigation.searchParams = new URLSearchParams({
+        season: seasonId,
+        gp: gpId,
+        event: eventId,
+      });
+      mockLoaded();
+      render(<ResultsSection seasons={[season]} />);
+
+      expect(screen.getByLabelText("Temporada")).toHaveValue(seasonId);
+      expect(screen.getByLabelText("GP")).toHaveValue(gpId);
+      expect(screen.getByLabelText("Evento")).toHaveValue(eventId);
+    });
+
+    it("aplica un cambio de contexto del router (click en la CTA de la consola)", async () => {
+      mockLoaded();
+      mockGps({
+        isPending: false,
+        isError: false,
+        isSuccess: true,
+        data: [gp, otherGp],
+      });
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+      await user.selectOptions(screen.getByLabelText("Evento"), eventId);
+
+      // La consola «Fin de semana» navega a ?season=&gp=<otro GP>: el
+      // router repinta con los nuevos params y el ritual los aplica,
+      // vaciando el evento (semántica de la cascada).
+      act(() => {
+        navigation.searchParams = new URLSearchParams({
+          season: seasonId,
+          gp: otherGpId,
+        });
+      });
+
+      expect(screen.getByLabelText("GP")).toHaveValue(otherGpId);
+      expect(screen.getByLabelText("Evento")).toHaveValue("");
+    });
+
+    it("protege el trabajo pendiente ante un cambio de URL y permite reintentar tras cancelar", async () => {
+      mockLoaded();
+      mockGps({
+        isPending: false,
+        isError: false,
+        isSuccess: true,
+        data: [gp, otherGp],
+      });
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      await user.selectOptions(screen.getByLabelText("Temporada"), seasonId);
+      await user.selectOptions(screen.getByLabelText("GP"), gpId);
+      await user.selectOptions(screen.getByLabelText("Evento"), eventId);
+
+      // Cambios sin importar en la tabla.
+      await user.click(screen.getByLabelText(`Salió: ${riders[0]?.name}`));
+      expect(screen.getByText(/1 modificada\(s\) sin importar/)).toBeInTheDocument();
+
+      // La CTA de la consola navega a otro GP: se pide descartar el trabajo.
+      act(() => {
+        navigation.searchParams = new URLSearchParams({
+          season: seasonId,
+          gp: otherGpId,
+        });
+      });
+      expect(
+        screen.getByRole("dialog", { name: "Tienes resultados sin importar" }),
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText("GP")).toHaveValue(gpId);
+      expect(screen.getByLabelText("Evento")).toHaveValue(eventId);
+
+      // Cancelar conserva el trabajo y revierte la URL al contexto de la
+      // cascada (la fuente de verdad): un re-click en la CTA re-abre la
+      // confirmación en vez de ser un no-op del router.
+      await user.click(screen.getByRole("button", { name: "No, volver" }));
+      const params = new URLSearchParams(window.location.search);
+      expect(params.get("season")).toBe(seasonId);
+      expect(params.get("gp")).toBe(gpId);
+      expect(params.get("event")).toBe(eventId);
+
+      act(() => {
+        navigation.searchParams = new URLSearchParams({
+          season: seasonId,
+          gp: otherGpId,
+        });
+      });
+      expect(
+        screen.getByRole("dialog", { name: "Tienes resultados sin importar" }),
+      ).toBeInTheDocument();
+
+      // Confirmar descarta el trabajo y aplica el contexto de la consola.
+      await user.click(
+        screen.getByRole("button", { name: "Sí, descartar los cambios" }),
+      );
+      expect(screen.getByLabelText("GP")).toHaveValue(otherGpId);
+      expect(screen.getByLabelText("Evento")).toHaveValue("");
+    });
+
+    it("no pide descartar si el contexto de la URL es el de la cascada actual", async () => {
+      navigation.searchParams = new URLSearchParams({
+        season: seasonId,
+        gp: gpId,
+        event: eventId,
+      });
+      mockLoaded();
+      render(<ResultsSection seasons={[season]} />);
+      const user = userEvent.setup();
+      expect(screen.getByLabelText("GP")).toHaveValue(gpId);
+      expect(screen.getByLabelText("Evento")).toHaveValue(eventId);
+
+      // Cambios sin importar en la tabla.
+      await user.click(screen.getByLabelText(`Salió: ${riders[0]?.name}`));
+
+      // Re-navegar al mismo contexto (re-click en la CTA) no debe abrir la
+      // confirmación de descarte: la cascada ya está en ese contexto.
+      act(() => {
+        navigation.searchParams = new URLSearchParams({
+          season: seasonId,
+          gp: gpId,
+          event: eventId,
+        });
+      });
+      expect(
+        screen.queryByRole("dialog", { name: "Tienes resultados sin importar" }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByLabelText("GP")).toHaveValue(gpId);
+      expect(screen.getByLabelText("Evento")).toHaveValue(eventId);
     });
   });
 });

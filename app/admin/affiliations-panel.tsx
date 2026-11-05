@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import type { RiderView, TeamView } from "@/modules/market";
 import type { SeasonWithRules } from "@/modules/seasons";
-import { Button } from "@/shared/components";
+import { Alert, Button, ConfirmDialog, type ConfirmRequest } from "@/shared/components";
 import { trpc } from "@/trpc/client";
 
 interface AffiliationsPanelProps {
@@ -32,13 +32,22 @@ export default function AffiliationsPanel({
   const [riderId, setRiderId] = useState("");
   const [teamId, setTeamId] = useState("");
   const [gpId, setGpId] = useState("");
+  // Confirmación con impacto (patrón del sistema): ambas asignaciones
+  // reescriben afiliaciones con efecto en la puntuación de GPs.
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
 
-  const gps = trpc.seasons.gps.list.useQuery({ seasonId }, {
-    enabled: seasonId !== "",
-  });
-  const riderDetail = trpc.market.riders.get.useQuery({ riderId }, {
-    enabled: riderId !== "",
-  });
+  const gps = trpc.seasons.gps.list.useQuery(
+    { seasonId },
+    {
+      enabled: seasonId !== "",
+    },
+  );
+  const riderDetail = trpc.market.riders.get.useQuery(
+    { riderId },
+    {
+      enabled: riderId !== "",
+    },
+  );
 
   const setFrom = trpc.market.affiliations.setFrom.useMutation({
     onSuccess: () => void riderDetail.refetch(),
@@ -49,6 +58,17 @@ export default function AffiliationsPanel({
 
   const busy = setFrom.isPending || set.isPending;
   const canAssign = riderId !== "" && teamId !== "" && gpId !== "";
+
+  // Etiquetas para nombrar el objeto de cada confirmación (la confirmación
+  // debe identificar siempre qué piloto, equipo y GP se tocan).
+  const selectedRider = riders.find((rider) => rider.id === riderId);
+  const selectedTeam = teams.find((team) => team.id === teamId);
+  const selectedGp = gps.data?.find((gp) => gp.id === gpId);
+  const riderLabel = selectedRider ? `«${selectedRider.name}»` : "el piloto elegido";
+  const teamLabel = selectedTeam ? `«${selectedTeam.name}»` : "el equipo elegido";
+  const gpLabel = selectedGp
+    ? `«R${selectedGp.round} · ${selectedGp.name}»`
+    : "el GP elegido";
 
   // Las afiliaciones se muestran en el contexto de la temporada seleccionada
   // (los pilotos son globales y acumulan afiliaciones por temporada; sin el
@@ -68,10 +88,9 @@ export default function AffiliationsPanel({
     <section>
       <h3>Afiliaciones por GP</h3>
       <p className="muted">
-        «Asignar desde este GP» rellena ese GP y los siguientes de la
-        temporada sin afiliación (los existentes se saltan; los anteriores
-        nunca se tocan). «Asignar para este GP» ajusta un GP concreto
-        (reemplaza la afiliación existente).
+        «Asignar desde este GP» rellena ese GP y los siguientes de la temporada sin
+        afiliación (los existentes se saltan; los anteriores nunca se tocan). «Asignar
+        para este GP» ajusta un GP concreto (reemplaza la afiliación existente).
       </p>
 
       <div className="field">
@@ -131,9 +150,7 @@ export default function AffiliationsPanel({
           disabled={seasonId === ""}
         >
           <option value="">
-            {seasonId === ""
-              ? "Elige primero una temporada"
-              : "— Elige un GP —"}
+            {seasonId === "" ? "Elige primero una temporada" : "— Elige un GP —"}
           </option>
           {gps.data?.map((gp) => (
             <option key={gp.id} value={gp.id}>
@@ -147,28 +164,58 @@ export default function AffiliationsPanel({
         <Button
           type="button"
           disabled={!canAssign || busy}
-          onClick={() => setFrom.mutate({ riderId, teamId, fromGpId: gpId })}
+          disabledReason={
+            !canAssign
+              ? "Elige piloto, equipo y GP para asignar la afiliación."
+              : undefined
+          }
+          onClick={() =>
+            setConfirmRequest({
+              title: `Asignar ${teamLabel} a ${riderLabel} desde ${gpLabel}`,
+              impact:
+                `${riderLabel} llevará ${teamLabel} en ${gpLabel} y en todas las ` +
+                "rondas siguientes de la temporada que aún no tengan afiliación (las " +
+                "existentes se saltan y se reportan). Afecta a las puntuaciones de esos GPs.",
+              confirmLabel: "Sí, asignar desde este GP",
+              onConfirm: () => setFrom.mutate({ riderId, teamId, fromGpId: gpId }),
+            })
+          }
         >
           {setFrom.isPending ? "Asignando…" : "Asignar desde este GP"}
         </Button>{" "}
         <Button
           type="button"
+          variant="secondary"
           disabled={!canAssign || busy}
-          onClick={() => set.mutate({ riderId, teamId, gpId })}
+          disabledReason={
+            !canAssign
+              ? "Elige piloto, equipo y GP para asignar la afiliación."
+              : undefined
+          }
+          onClick={() =>
+            setConfirmRequest({
+              title: `Asignar ${teamLabel} a ${riderLabel} para ${gpLabel}`,
+              impact:
+                `${riderLabel} llevará ${teamLabel} en ${gpLabel}, sustituyendo ` +
+                "cualquier afiliación previa de ese GP. Afecta a la puntuación de ese GP.",
+              confirmLabel: "Sí, asignar para este GP",
+              onConfirm: () => set.mutate({ riderId, teamId, gpId }),
+            })
+          }
         >
           {set.isPending ? "Asignando…" : "Asignar para este GP"}
         </Button>
       </div>
 
       {setFrom.isError && (
-        <p className="bad">No se pudo asignar: {setFrom.error.message}</p>
+        <Alert variant="error">No se pudo asignar: {setFrom.error.message}</Alert>
       )}
       {set.isError && (
-        <p className="bad">No se pudo asignar: {set.error.message}</p>
+        <Alert variant="error">No se pudo asignar: {set.error.message}</Alert>
       )}
       {setFrom.isSuccess && (
         <>
-          <p className="ok">
+          <Alert variant="success">
             Aplicado desde el GP elegido: {setFrom.data.created}{" "}
             {setFrom.data.created === 1 ? "afiliación creada" : "afiliaciones creadas"}
             {setFrom.data.skipped.length > 0
@@ -177,7 +224,7 @@ export default function AffiliationsPanel({
                 }`
               : ""}
             .
-          </p>
+          </Alert>
           {setFrom.data.skipped.length > 0 && (
             <ul className="status">
               {setFrom.data.skipped.map((item) => (
@@ -188,11 +235,11 @@ export default function AffiliationsPanel({
         </>
       )}
       {set.isSuccess && (
-        <p className="ok">
+        <Alert variant="success">
           {set.data.changed
             ? "Afiliación asignada para el GP."
             : "El piloto ya tenía esa afiliación para el GP (sin cambios)."}
-        </p>
+        </Alert>
       )}
 
       {riderId !== "" && (
@@ -201,9 +248,9 @@ export default function AffiliationsPanel({
           {riderDetail.isPending ? (
             <p className="muted">Consultando…</p>
           ) : riderDetail.isError ? (
-            <p className="bad">
+            <Alert variant="error">
               No se pudieron cargar las afiliaciones: {riderDetail.error.message}
-            </p>
+            </Alert>
           ) : seasonId === "" ? (
             <p className="muted">
               Elige una temporada para ver las afiliaciones del piloto.
@@ -225,6 +272,17 @@ export default function AffiliationsPanel({
           )}
         </>
       )}
+      {confirmRequest ? (
+        <ConfirmDialog
+          {...confirmRequest}
+          onClose={() => setConfirmRequest(null)}
+          onConfirm={() => {
+            const run = confirmRequest.onConfirm;
+            setConfirmRequest(null);
+            run();
+          }}
+        />
+      ) : null}
     </section>
   );
 }

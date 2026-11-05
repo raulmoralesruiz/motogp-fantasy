@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+
+import { useSearchParams } from "next/navigation";
 
 import {
   BONUS_CODES_BY_EVENT,
   PENALTY_CODES_BY_EVENT,
+  RESULT_CODE_LABELS,
+  RESULT_STATUS_LABELS,
   deriveStatus,
   resultEventLabel,
 } from "@/modules/results/core";
@@ -16,7 +20,14 @@ import type {
   MarkDefinitiveResult,
 } from "@/modules/results";
 import type { SeasonWithRules } from "@/modules/seasons";
-import { Alert, Button, Field } from "@/shared/components";
+import {
+  Alert,
+  Button,
+  ConfirmDialog,
+  Field,
+  RowAction,
+  type ConfirmRequest,
+} from "@/shared/components";
 import { PROVISIONAL_RESULTS_POLL } from "@/shared/config";
 import type { ResultBonusCode, ResultPenaltyCode } from "@/shared/types";
 import {
@@ -54,23 +65,24 @@ function emptyRow(): RiderRow {
   };
 }
 
-const RESULTS_EVENT_STATUS_LABELS: Record<string, string> = {
-  scheduled: "pendientes",
-  finished: "con resultados",
-  neutralized: "neutralizado",
-  cancelled: "cancelado",
-};
-
-/** Etiqueta de la opción de evento (tipo + estado de resultados). */
+/**
+ * Etiqueta de la opción de evento (tipo + estado real): los flags
+ * `cancelled`/`neutralized` de `results_events` son la fuente de verdad
+ * (ADR-0020); el enum de estado de `results_events` nunca refleja esos
+ * valores, así que la UI los ignora.
+ */
 function eventOptionLabel(event: GpEventView): string {
-  if (event.status === "cancelled") {
-    return `${resultEventLabel(event.type)} — evento cancelado`;
+  const base = resultEventLabel(event.type);
+  if (event.cancelled) {
+    return `${base} — cancelado (no puntúa)`;
   }
-  const results =
-    event.resultsStatus === null
-      ? "sin resultados"
-      : (RESULTS_EVENT_STATUS_LABELS[event.resultsStatus] ?? event.resultsStatus);
-  return `${resultEventLabel(event.type)} — ${results}`;
+  if (event.neutralized) {
+    return `${base} — neutralizado`;
+  }
+  if (event.status === "cancelled") {
+    return `${base} — evento cancelado`;
+  }
+  return `${base} — ${event.resultCount > 0 ? "con resultados" : "sin resultados"}`;
 }
 
 /** Fecha y hora para la UI de admin (es-ES). */
@@ -108,9 +120,8 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
   const [localError, setLocalError] = useState<string | null>(null);
   const [lastImport, setLastImport] = useState<ImportEventResult | null>(null);
   // US-17 (ADR-0019): estado del bloque de la fuente.
-  const [lastSourceImport, setLastSourceImport] = useState<ImportEventFromSourceResult | null>(
-    null,
-  );
+  const [lastSourceImport, setLastSourceImport] =
+    useState<ImportEventFromSourceResult | null>(null);
   const [sourceLocalError, setSourceLocalError] = useState<string | null>(null);
   const [linkEventRef, setLinkEventRef] = useState("");
   const [mappingRiderRef, setMappingRiderRef] = useState("");
@@ -120,10 +131,33 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
   const [definitiveLocalError, setDefinitiveLocalError] = useState<string | null>(null);
   const [eventFlagMessage, setEventFlagMessage] = useState<string | null>(null);
   const [eventLocalError, setEventLocalError] = useState<string | null>(null);
+  // Confirmación con impacto (patrón del sistema) para las acciones que
+  // puntuarán lineups o cambiarán el estado de un evento.
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
+  // Paso 2 (importación manual): abierto por defecto; se colapsa cuando el GP
+  // ya está vinculado a la fuente (el auto-import es entonces la vía habitual).
+  const [manualOpen, setManualOpen] = useState(true);
+  // Protección de trabajo (harden): hay cambios sin importar en la tabla y el
+  // cambio de contexto (temporada/GP/evento) pendiente de confirmar.
+  const [dirty, setDirty] = useState(false);
+  const [pendingChange, setPendingChange] = useState<ConfirmRequest | null>(null);
+  // Si el cambio pendiente vino de la URL (consola «Fin de semana», enlace
+  // compartido), al cancelar la confirmación se revierte la URL al contexto
+  // de la cascada: si no, el operador queda con URL y cascada desincronizadas
+  // y el re-click en la CTA no haría nada (el router no «navega» a la misma
+  // URL). Los cambios manuales (selectores) nunca tocan la URL: no revierten.
+  const pendingFromUrl = useRef(false);
+  // Revisión/diff del paso 2: la copia de las filas tal como llegaron (BD /
+  // auto-import) para marcar qué ha corregido el operador antes de importar.
+  const [baseline, setBaseline] = useState<Record<string, RiderRow>>({});
 
   const gps = trpc.seasons.gps.list.useQuery({ seasonId }, { enabled: seasonId !== "" });
   const selectedGp = gps.data?.find((gp) => gp.id === gpId) ?? null;
   const sourceLinked = selectedGp?.sourceRef ?? null;
+  /** Etiqueta del GP para títulos e impactos de confirmación. */
+  const gpLabel = selectedGp
+    ? `R${selectedGp.round} · ${selectedGp.name}`
+    : "el GP elegido";
   const gpEvents = trpc.results.gpEvents.useQuery({ gpId }, { enabled: gpId !== "" });
   const hasEvent = gpId !== "" && eventId !== "";
   // US-17: los pilotos también los necesita el mapeo de pilotos (por GP,
@@ -135,7 +169,10 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
   );
   // US-17 (ADR-0019): estado del auto-import, catálogo de eventos de la
   // fuente (solo con sentido sin vínculo) y mapeos de pilotos.
-  const sourceState = trpc.results.sourceState.useQuery({ gpId }, { enabled: gpId !== "" });
+  const sourceState = trpc.results.sourceState.useQuery(
+    { gpId },
+    { enabled: gpId !== "" },
+  );
   const sourceEvents = trpc.results.sourceEvents.useQuery(
     { gpId },
     { enabled: gpId !== "" && sourceLinked === null },
@@ -250,8 +287,10 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
         : emptyRow();
     }
     setRows(next);
+    setBaseline(next);
     setReason("");
     setLocalError(null);
+    setDirty(false);
   }, [hasEvent, eventResults.data, riders.data]);
 
   // Los mensajes transitorios se reinician al cambiar de evento.
@@ -277,6 +316,25 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
     setEventLocalError(null);
   }, [gpId]);
 
+  // Al vincular/desvincular la fuente se ajusta el paso manual: colapsado con
+  // fuente (vía habitual = auto-import), abierto sin ella. El toggle manual
+  // del operador no se toca salvo que el vínculo cambie.
+  useEffect(() => {
+    setManualOpen(sourceLinked === null);
+  }, [sourceLinked]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (seasonId) params.set("season", seasonId);
+    else params.delete("season");
+    if (gpId) params.set("gp", gpId);
+    else params.delete("gp");
+    if (eventId) params.set("event", eventId);
+    else params.delete("event");
+    const query = params.toString();
+    window.history.replaceState(null, "", query ? `?${query}` : window.location.pathname);
+  }, [seasonId, gpId, eventId]);
+
   const selectedEvent = gpEvents.data?.find((e) => e.id === eventId) ?? null;
   const penaltyCodes = selectedEvent ? PENALTY_CODES_BY_EVENT[selectedEvent.type] : [];
   const bonusCodes = selectedEvent ? BONUS_CODES_BY_EVENT[selectedEvent.type] : [];
@@ -288,7 +346,73 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
         event.status !== "cancelled",
     ) ?? [];
 
+  const searchParams = useSearchParams();
+  // El query string del router que se aplicó por última vez a la cascada:
+  // distingue «el contexto llegó por URL» (consola «Fin de semana», enlace
+  // compartido, F5) de «el operador movió los selectores» (que no se
+  // sobreescribe nunca).
+  const lastSyncedSearch = useRef("");
+
+  // La selección vive también en la URL: F5 o un enlace compartido recuperan
+  // el contexto del ritual en lugar de vaciar la cascada (harden). La
+  // consola «Fin de semana» del panel navega a la misma ruta con
+  // ?season=&gp= (adapt): cuando el query string del router cambia de
+  // verdad, se aplica el contexto con la semántica de la cascada (un GP
+  // nuevo vacía el evento) — y con la misma protección de trabajo que un
+  // cambio manual si hay cambios sin importar (harden).
+  useEffect(() => {
+    const search = searchParams.toString();
+    if (search === lastSyncedSearch.current) return;
+    lastSyncedSearch.current = search;
+
+    const season = searchParams.get("season");
+    const gp = searchParams.get("gp");
+    const event = searchParams.get("event");
+    if (season === null && gp === null && event === null) return;
+    // Solo actúa si algún nivel de la cascada cambia de verdad (si no, un
+    // click en la consola con la cascada ya en ese contexto no pediría
+    // descartar el trabajo pendiente).
+    const seasonChanges = season !== null && season !== seasonId;
+    const gpChanges = gp !== null && gp !== gpId;
+    const eventChanges =
+      gp !== null ? (event ?? "") !== eventId : event !== null && event !== eventId;
+    if (!seasonChanges && !gpChanges && !eventChanges) return;
+
+    const apply = () => {
+      if (season !== null && season !== seasonId) {
+        // Cambiar temporada resetea la cascada (misma semántica que el
+        // selector); un GP/evento presentes en la URL reanclan la cascada.
+        setSeasonId(season);
+        setGpId(gp ?? "");
+        setEventId(gp !== null ? (event ?? "") : "");
+      } else if (gp !== null) {
+        setGpId(gp);
+        setEventId(event ?? "");
+      } else if (event !== null) {
+        setEventId(event);
+      }
+      setDirty(false);
+    };
+    if (dirty) {
+      pendingFromUrl.current = true;
+      setPendingChange({
+        title: "Tienes resultados sin importar",
+        impact:
+          `Se perderán los cambios de la tabla${
+            selectedEvent ? ` de ${resultEventLabel(selectedEvent.type)}` : ""
+          } que no hayas importado. ` +
+          "Si quieres conservarlos, cancela y pulsa «Importar resultados».",
+        irreversible: true,
+        confirmLabel: "Sí, descartar los cambios",
+        onConfirm: apply,
+      });
+      return;
+    }
+    apply();
+  }, [searchParams, seasonId, gpId, eventId, dirty, selectedEvent]);
+
   function setRow(riderId: string, patch: Partial<RiderRow>) {
+    setDirty(true);
     setRows((prev) => {
       const row = prev[riderId];
       if (!row) return prev;
@@ -298,6 +422,7 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
 
   /** Desmarcar «Salió» limpia «Terminó» y la posición (ABSENT). */
   function toggleStarted(riderId: string, started: boolean) {
+    setDirty(true);
     setRows((prev) => {
       const row = prev[riderId];
       if (!row) return prev;
@@ -315,6 +440,7 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
 
   /** Desmarcar «Terminó» limpia la posición (DNF). */
   function toggleFinished(riderId: string, finished: boolean) {
+    setDirty(true);
     setRows((prev) => {
       const row = prev[riderId];
       if (!row) return prev;
@@ -326,6 +452,7 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
   }
 
   function togglePenalty(riderId: string, code: ResultPenaltyCode) {
+    setDirty(true);
     setRows((prev) => {
       const row = prev[riderId];
       if (!row) return prev;
@@ -337,6 +464,7 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
   }
 
   function toggleBonus(riderId: string, code: ResultBonusCode) {
+    setDirty(true);
     setRows((prev) => {
       const row = prev[riderId];
       if (!row) return prev;
@@ -440,45 +568,76 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
   }
 
   /**
-   * Marcar el GP como definitivo (US-18, ADR-0020): confirmación con las
-   * filas afectadas; el servidor voltea las filas y ejecuta el primer
+   * Marcar el GP como definitivo (US-18, ADR-0020): confirmación con impacto
+   * (las filas afectadas); el servidor voltea las filas y ejecuta el primer
    * recálculo (rv-1) en la misma transacción.
    */
   function onMarkDefinitive() {
     const state = gpState.data;
     if (!gpId || !state) return;
-    const ok = window.confirm(
-      `¿Marcar el GP como definitivo?\n` +
-        `Se puntuarán los lineups (primer recálculo ${state.resultsVersion ?? "rv-1"}).` +
-        `\nAfecta a ${state.counts.provisional} fila(s) provisional(es) y ` +
+    setConfirmRequest({
+      title: `Marcar ${gpLabel} como definitivo`,
+      impact:
+        `Se puntuarán los lineups de ${gpLabel} (${
+          state.resultsVersion
+            ? `recálculo tras ${state.resultsVersion}`
+            : "primer recálculo, rv-1"
+        }). ` +
+        `Afecta a ${state.counts.provisional} fila(s) provisional(es) y ` +
         `${state.counts.corrected} corregida(s).`,
-    );
-    if (!ok) return;
-    const parsed = markDefinitiveInputSchema.safeParse({ gpId });
-    if (!parsed.success) {
-      setDefinitiveLocalError(parsed.error.issues.map((issue) => issue.message).join(" "));
-      return;
-    }
-    setDefinitiveLocalError(null);
-    markDefinitiveMutation.mutate(parsed.data);
+      confirmLabel: "Sí, marcar definitivo",
+      onConfirm: () => {
+        const parsed = markDefinitiveInputSchema.safeParse({ gpId });
+        if (!parsed.success) {
+          setDefinitiveLocalError(
+            parsed.error.issues.map((issue) => issue.message).join(" "),
+          );
+          return;
+        }
+        setDefinitiveLocalError(null);
+        markDefinitiveMutation.mutate(parsed.data);
+      },
+    });
   }
 
   /**
-   * Estado de evento (US-18, ADR-0020): cancelar (no puntúa) o neutralizar
-   * (se puntúa con el resultado oficial), con confirmación.
+   * Estado de evento (US-18, ADR-0020): cancelar (no puntúa; irreversible)
+   * o neutralizar (metadatos: se puntúa con el resultado oficial), con
+   * confirmación cuantificada con las filas afectadas del evento.
    */
   function onEventFlag(event: GpEventView, action: "cancel" | "neutralize") {
     if (!gpId) return;
     const label = resultEventLabel(event.type);
-    const ok =
+    const filas =
+      event.resultCount > 0
+        ? ` Afecta a las ${event.resultCount} fila(s) de resultado de este evento.`
+        : " El evento aún no tiene resultados importados.";
+    setConfirmRequest(
       action === "cancel"
-        ? window.confirm(
-            `¿Cancelar ${label}? El evento no puntuará (0 para todos). Acción irreversible.`,
-          )
-        : window.confirm(
-            `¿Neutralizar ${label}? Se puntuará con el resultado oficial declarado.`,
-          );
-    if (!ok) return;
+        ? {
+            title: `Cancelar ${label}`,
+            impact:
+              `El evento no puntuará (0 para todos) y el recálculo lo saltará.` +
+              filas +
+              ` Acción irreversible: no se puede des-cancelar ni neutralizar después.`,
+            irreversible: true,
+            confirmLabel: "Sí, cancelar el evento",
+            onConfirm: () => applyEventFlag(event, "cancel"),
+          }
+        : {
+            title: `Neutralizar ${label}`,
+            impact:
+              `Se registra que ${label} se disputó con resultado oficial neutralizado ` +
+              `(se puntuará con el resultado oficial declarado; el flag no altera los puntos).` +
+              filas,
+            confirmLabel: "Sí, neutralizar el evento",
+            onConfirm: () => applyEventFlag(event, "neutralize"),
+          },
+    );
+  }
+
+  /** Ejecuta el cambio de estado de evento una vez confirmado. */
+  function applyEventFlag(event: GpEventView, action: "cancel" | "neutralize") {
     const parsed = eventFlagInputSchema.safeParse({ gpId, eventId: event.id });
     if (!parsed.success) {
       setEventLocalError(parsed.error.issues.map((issue) => issue.message).join(" "));
@@ -502,6 +661,55 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
     }
     setSourceLocalError(null);
     setMappingMutation.mutate(parsed.data);
+  }
+
+  /**
+   * Precarga el formulario de mapeo con una referencia sin mapear (US-17):
+   * el operador no tiene que teclear a mano el ID que la fuente ya lista.
+   */
+  function prefillMapping(riderRef: string) {
+    setMappingRiderRef(riderRef);
+    document.getElementById("mappingRiderRef")?.focus();
+  }
+
+  type ContextChange = { kind: "season" | "gp" | "event"; value: string };
+
+  /**
+   * Cambio de contexto (temporada/GP/evento) con protección de trabajo: si
+   * hay cambios sin importar en la tabla, se confirma el descarte antes de
+   * perderlos (harden).
+   */
+  function applyContextChange(change: ContextChange) {
+    pendingFromUrl.current = false;
+    if (dirty) {
+      setPendingChange({
+        title: "Tienes resultados sin importar",
+        impact:
+          `Se perderán los cambios de la tabla${
+            selectedEvent ? ` de ${resultEventLabel(selectedEvent.type)}` : ""
+          } que no hayas importado. ` +
+          "Si quieres conservarlos, cancela y pulsa «Importar resultados».",
+        irreversible: true,
+        confirmLabel: "Sí, descartar los cambios",
+        onConfirm: () => commitContextChange(change),
+      });
+      return;
+    }
+    commitContextChange(change);
+  }
+
+  function commitContextChange(change: ContextChange) {
+    if (change.kind === "season") {
+      setSeasonId(change.value);
+      setGpId("");
+      setEventId("");
+    } else if (change.kind === "gp") {
+      setGpId(change.value);
+      setEventId("");
+    } else {
+      setEventId(change.value);
+    }
+    setDirty(false);
   }
 
   const loadError = eventResults.isError
@@ -556,6 +764,19 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
         : eventFlagErrorMutation.error.message;
   }
   const entries = hasEvent ? buildEntries() : [];
+  // Regla de la Señal: el primario de la tarjeta es el siguiente paso del
+  // ritual — «Marcar definitivo» cuando el evento ya tiene resultados;
+  // «Importar resultados» mientras se capturan o corrigen.
+  const closePrimary = gpState.data
+    ? gpState.data.totalResults > 0 && !gpState.data.definitive
+    : false;
+  // Revisión/diff del paso 2: qué ha corregido el operador sobre las filas
+  // importadas (baseline) antes de pulsar «Importar resultados».
+  const modifiedRiders = new Set(
+    Object.keys(rows).filter(
+      (riderId) => JSON.stringify(rows[riderId]) !== JSON.stringify(baseline[riderId]),
+    ),
+  );
 
   return (
     <section>
@@ -564,11 +785,9 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
         <select
           id="resultsSeasonId"
           value={seasonId}
-          onChange={(event) => {
-            setSeasonId(event.target.value);
-            setGpId("");
-            setEventId("");
-          }}
+          onChange={(event) =>
+            applyContextChange({ kind: "season", value: event.target.value })
+          }
         >
           <option value="">— Elige una temporada —</option>
           {seasons.map((season) => (
@@ -586,7 +805,9 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
           {gps.isPending ? (
             <p className="muted">Consultando…</p>
           ) : gps.isError ? (
-            <p className="bad">No se pudieron cargar los GPs: {gps.error.message}</p>
+            <Alert variant="error">
+              No se pudieron cargar los GPs: {gps.error.message}
+            </Alert>
           ) : gps.data.length === 0 ? (
             <p className="muted">Esta temporada aún no tiene GPs.</p>
           ) : (
@@ -595,10 +816,9 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
               <select
                 id="resultsGpId"
                 value={gpId}
-                onChange={(event) => {
-                  setGpId(event.target.value);
-                  setEventId("");
-                }}
+                onChange={(event) =>
+                  applyContextChange({ kind: "gp", value: event.target.value })
+                }
               >
                 <option value="">— Elige un GP —</option>
                 {gps.data.map((gp) => (
@@ -614,15 +834,533 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
 
       {gpId !== "" && (
         <>
+          {/* Elección de evento: el flujo crítico empieza aquí
+              (elegir evento → tabla de importación manual). */}
+          {gpEvents.isPending ? (
+            <p className="muted">Consultando…</p>
+          ) : gpEvents.isError ? (
+            <Alert variant="error">
+              No se pudieron cargar los eventos: {gpEvents.error.message}
+            </Alert>
+          ) : gpEvents.data.length === 0 ? (
+            <p className="muted">Este GP aún no tiene eventos.</p>
+          ) : (
+            <div className="field">
+              <label htmlFor="resultsEventId">Evento</label>
+              <select
+                id="resultsEventId"
+                value={eventId}
+                onChange={(event) =>
+                  applyContextChange({ kind: "event", value: event.target.value })
+                }
+              >
+                <option value="">— Elige un evento —</option>
+                {gpEvents.data.map((event) => (
+                  <option key={event.id} value={event.id}>
+                    {eventOptionLabel(event)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </>
+      )}
+
+      {gpId !== "" && (
+        <>
+          {/* US-17 (ADR-0019): importación automática desde la fuente. */}
+          <div>
+            <h3>1. Importación automática (PulseLive)</h3>
+
+            {sourceLocalError ? <Alert variant="error">{sourceLocalError}</Alert> : null}
+            {sourceError ? <Alert variant="error">{sourceError}</Alert> : null}
+
+            {sourceLinked ? (
+              <p>
+                Vinculado a la fuente: <code>{sourceLinked}</code>{" "}
+                <RowAction
+                  onClick={() =>
+                    setConfirmRequest({
+                      title: `Desvincular la fuente de ${gpLabel}`,
+                      impact:
+                        `El auto-import dejará de actualizar ${gpLabel} y tendrás que ` +
+                        "volver a vincularlo. Los resultados ya importados no se tocan.",
+                      confirmLabel: "Sí, desvincular la fuente",
+                      onConfirm: () => unlinkMutation.mutate({ gpId }),
+                    })
+                  }
+                  disabled={unlinkMutation.isPending}
+                >
+                  Desvincular
+                </RowAction>
+              </p>
+            ) : (
+              <form className="form" onSubmit={onLink} noValidate>
+                {sourceEvents.isPending ? (
+                  <p className="muted">Consultando el catálogo de la fuente…</p>
+                ) : sourceEvents.isError ? (
+                  <Alert variant="error">
+                    No se pudieron cargar los eventos de la fuente:{" "}
+                    {sourceEvents.error.message}
+                  </Alert>
+                ) : (
+                  <>
+                    <div className="field">
+                      <label htmlFor="resultsSourceEventRef">Evento de la fuente</label>
+                      <select
+                        id="resultsSourceEventRef"
+                        value={linkEventRef}
+                        onChange={(event) => setLinkEventRef(event.target.value)}
+                      >
+                        <option value="">— Elige un evento de la fuente —</option>
+                        {sourceEvents.data.map((sourceEvent) => (
+                          <option key={sourceEvent.eventRef} value={sourceEvent.eventRef}>
+                            {sourceEvent.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <Button
+                      type="submit"
+                      variant="secondary"
+                      disabled={linkMutation.isPending}
+                    >
+                      Vincular GP
+                    </Button>
+                  </>
+                )}
+              </form>
+            )}
+
+            {sourceLinked && (
+              <p>
+                <span className="muted">Importar desde la fuente: </span>
+                {selectedEvent === null ? (
+                  <span className="muted">elige un evento para importarlo.</span>
+                ) : importableEvents.some(
+                    (candidate) => candidate.id === selectedEvent.id,
+                  ) ? (
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      importFromSourceMutation.mutate({ gpId, event: selectedEvent.type })
+                    }
+                    disabled={importFromSourceMutation.isPending}
+                  >
+                    Importar {resultEventLabel(selectedEvent.type)}
+                  </Button>
+                ) : (
+                  <span className="muted">
+                    este evento no es importable desde la fuente.
+                  </span>
+                )}
+              </p>
+            )}
+
+            {lastSourceImport ? (
+              <Alert variant="success">
+                Importación automática (
+                {selectedEvent ? resultEventLabel(selectedEvent.type) : "evento"}):{" "}
+                {lastSourceImport.created} creados, {lastSourceImport.corrected}{" "}
+                corregidos, {lastSourceImport.unchanged} sin cambios y{" "}
+                {lastSourceImport.kept} conservados.
+              </Alert>
+            ) : null}
+            {lastSourceImport && lastSourceImport.unmapped.length > 0 && (
+              <p>
+                <span className="muted">Sin mapear: </span>
+                {lastSourceImport.unmapped.map((unmapped) => (
+                  <span key={unmapped.riderRef}>
+                    {unmapped.name ?? unmapped.riderRef}{" "}
+                    <RowAction onClick={() => prefillMapping(unmapped.riderRef)}>
+                      Mapear
+                    </RowAction>{" "}
+                  </span>
+                ))}
+              </p>
+            )}
+
+            <h4>Estado del auto-import</h4>
+            {sourceState.isPending ? (
+              <p className="muted">Consultando…</p>
+            ) : sourceState.isError ? (
+              <Alert variant="error">
+                No se pudo cargar el estado: {sourceState.error.message}
+              </Alert>
+            ) : sourceState.data.length === 0 ? (
+              <p className="muted">Aún no hay intentos registrados.</p>
+            ) : (
+              <div className="table-scroll">
+                <table className="results-table">
+                  <thead>
+                    <tr>
+                      <th>Evento</th>
+                      <th>Fallos seguidos</th>
+                      <th>Último error</th>
+                      <th>Último intento</th>
+                      <th>Último éxito</th>
+                      <th>Sin mapear</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sourceState.data.map((state) => {
+                      const overThreshold =
+                        state.consecutiveFailures >=
+                        PROVISIONAL_RESULTS_POLL.failureAlertThreshold;
+                      return (
+                        <tr
+                          key={state.event}
+                          className={overThreshold ? "bad" : undefined}
+                        >
+                          <td>{resultEventLabel(state.event)}</td>
+                          <td>
+                            {state.consecutiveFailures}
+                            {overThreshold ? (
+                              <span className="bad"> — ▲ umbral de fallos</span>
+                            ) : null}
+                          </td>
+                          <td>{state.lastError ?? "—"}</td>
+                          <td>
+                            {state.lastAttemptAt
+                              ? formatDateTime(state.lastAttemptAt)
+                              : "—"}
+                          </td>
+                          <td>
+                            {state.lastSuccessAt
+                              ? formatDateTime(state.lastSuccessAt)
+                              : "—"}
+                          </td>
+                          <td>
+                            {state.lastUnmapped && state.lastUnmapped.length > 0
+                              ? state.lastUnmapped.map((unmapped) => (
+                                  <span key={unmapped.riderRef}>
+                                    {unmapped.name ?? unmapped.riderRef}{" "}
+                                    <RowAction
+                                      onClick={() => prefillMapping(unmapped.riderRef)}
+                                    >
+                                      Mapear
+                                    </RowAction>{" "}
+                                  </span>
+                                ))
+                              : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <h4>Mapeo de pilotos</h4>
+            {riderMappings.isPending ? (
+              <p className="muted">Consultando…</p>
+            ) : riderMappings.isError ? (
+              <Alert variant="error">
+                No se pudieron cargar los mapeos: {riderMappings.error.message}
+              </Alert>
+            ) : (
+              <>
+                {riderMappings.data.length === 0 ? (
+                  <p className="muted">Aún no hay mapeos de pilotos.</p>
+                ) : (
+                  <div className="table-scroll">
+                    <table className="results-table">
+                      <thead>
+                        <tr>
+                          <th>Referencia en la fuente</th>
+                          <th>Piloto del mercado</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {riderMappings.data.map((mapping) => (
+                          <tr key={mapping.riderRef}>
+                            <td>{mapping.riderRef}</td>
+                            <td>{mapping.riderName}</td>
+                            <td>
+                              <RowAction
+                                onClick={() =>
+                                  setConfirmRequest({
+                                    title: `Eliminar el mapeo de ${mapping.riderName}`,
+                                    impact:
+                                      "El piloto dejará de resolverse automáticamente " +
+                                      "con este mapeo en las próximas importaciones.",
+                                    irreversible: true,
+                                    confirmLabel: "Sí, eliminar el mapeo",
+                                    onConfirm: () =>
+                                      deleteMappingMutation.mutate({
+                                        riderRef: mapping.riderRef,
+                                      }),
+                                  })
+                                }
+                                disabled={deleteMappingMutation.isPending}
+                              >
+                                Eliminar
+                              </RowAction>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <form className="form" onSubmit={onAddMapping} noValidate>
+                  <Field
+                    label="Referencia en la fuente"
+                    name="mappingRiderRef"
+                    id="mappingRiderRef"
+                    value={mappingRiderRef}
+                    onChange={(event) => setMappingRiderRef(event.target.value)}
+                    placeholder="ID del piloto en la fuente"
+                  />
+                  <div className="field">
+                    <label htmlFor="resultsMappingRiderId">Piloto del mercado</label>
+                    <select
+                      id="resultsMappingRiderId"
+                      value={mappingRiderId}
+                      onChange={(event) => setMappingRiderId(event.target.value)}
+                    >
+                      <option value="">— Elige un piloto —</option>
+                      {(riders.data ?? []).map((rider) => (
+                        <option key={rider.id} value={rider.id}>
+                          {rider.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <Button
+                    type="submit"
+                    variant="secondary"
+                    disabled={setMappingMutation.isPending || riders.isPending}
+                    disabledReason={
+                      riders.isPending
+                        ? "Cargando la lista de pilotos del mercado…"
+                        : undefined
+                    }
+                  >
+                    Añadir mapeo
+                  </Button>
+                </form>
+              </>
+            )}
+          </div>
+        </>
+      )}
+
+      <details
+        className="ritual-step"
+        open={manualOpen}
+        onToggle={(event) => setManualOpen(event.currentTarget.open)}
+      >
+        <summary>
+          <h3>
+            2. Importación manual —{" "}
+            {selectedEvent ? resultEventLabel(selectedEvent.type) : "elige un evento"}
+          </h3>
+        </summary>
+        {!hasEvent && (
+          <p className="muted">Elige un evento para revisar sus resultados.</p>
+        )}
+        {hasEvent && eventResults.data ? (
+          <p className="muted">
+            {eventResults.data.length > 0
+              ? `${eventResults.data.length} filas importadas. Revisa lo que trajo la fuente y corrige lo que haga falta.`
+              : "Aún no hay resultados importados para este evento: captúralos en la tabla o impórtalos desde el paso 1."}
+            {modifiedRiders.size > 0
+              ? ` ${modifiedRiders.size} modificada(s) sin importar.`
+              : ""}
+          </p>
+        ) : null}
+        {hasEvent && (
+          <>
+            {riders.isPending || eventResults.isPending ? (
+              <p className="muted">Consultando…</p>
+            ) : riders.isError || eventResults.isError ? (
+              <Alert variant="error">No se pudieron cargar los resultados: {loadError}</Alert>
+            ) : riders.data.length === 0 ? (
+              <p className="muted">Aún no hay pilotos en el mercado.</p>
+            ) : (
+              <form className="form" onSubmit={onSubmit} noValidate>
+                <div className="table-scroll">
+                  <table className="results-table">
+                    <thead>
+                      <tr>
+                        <th>Piloto</th>
+                        <th>Salió</th>
+                        <th>Terminó</th>
+                        <th>Posición</th>
+                        <th>Penalizaciones</th>
+                        <th>Bonos</th>
+                        <th>Puntos crudos</th>
+                        <th>Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {riders.data.map((rider) => {
+                        const row = rows[rider.id] ?? emptyRow();
+                        return (
+                          <tr key={rider.id}>
+                            <td>
+                              <strong>{rider.name}</strong>
+                            </td>
+                            <td>
+                              <label className="check-cell">
+                                <input
+                                  type="checkbox"
+                                  aria-label={`Salió: ${rider.name}`}
+                                  checked={row.started}
+                                  onChange={(event) =>
+                                    toggleStarted(rider.id, event.target.checked)
+                                  }
+                                />
+                              </label>
+                            </td>
+                            <td>
+                              <label className="check-cell">
+                                <input
+                                  type="checkbox"
+                                  aria-label={`Terminó: ${rider.name}`}
+                                  disabled={!row.started}
+                                  checked={row.finished}
+                                  onChange={(event) =>
+                                    toggleFinished(rider.id, event.target.checked)
+                                  }
+                                />
+                              </label>
+                            </td>
+                            <td>
+                              <input
+                                type="number"
+                                min={1}
+                                aria-label={`Posición: ${rider.name}`}
+                                disabled={!row.finished}
+                                value={row.position}
+                                onChange={(event) =>
+                                  setRow(rider.id, { position: event.target.value })
+                                }
+                              />
+                            </td>
+                            <td className="codes">
+                              {penaltyCodes.map((code) => (
+                                <label key={code}>
+                                  <input
+                                    type="checkbox"
+                                    aria-label={`${RESULT_CODE_LABELS[code]}: ${rider.name}`}
+                                    checked={row.penalties.includes(code)}
+                                    onChange={() => togglePenalty(rider.id, code)}
+                                  />{" "}
+                                  {RESULT_CODE_LABELS[code]}
+                                </label>
+                              ))}
+                            </td>
+                            <td className="codes">
+                              {bonusCodes.length === 0 ? (
+                                <span className="muted">—</span>
+                              ) : (
+                                bonusCodes.map((code) => (
+                                  <label key={code}>
+                                    <input
+                                      type="checkbox"
+                                      aria-label={`${RESULT_CODE_LABELS[code]}: ${rider.name}`}
+                                      checked={row.bonuses.includes(code)}
+                                      onChange={() => toggleBonus(rider.id, code)}
+                                    />{" "}
+                                    {RESULT_CODE_LABELS[code]}
+                                  </label>
+                                ))
+                              )}
+                            </td>
+                            <td>
+                              <input
+                                type="number"
+                                min={0}
+                                step="0.01"
+                                aria-label={`Puntos crudos: ${rider.name}`}
+                                value={row.rawPoints}
+                                onChange={(event) =>
+                                  setRow(rider.id, { rawPoints: event.target.value })
+                                }
+                              />
+                            </td>
+                            <td>
+                              <span className="muted">
+                                {
+                                  RESULT_STATUS_LABELS[
+                                    deriveStatus({
+                                      started: row.started,
+                                      finished: row.finished,
+                                    })
+                                  ]
+                                }
+                                {modifiedRiders.has(rider.id) ? " · modificada" : ""}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <Field
+                  label="Motivo (obligatorio si la importación corrige resultados existentes)"
+                  name="reason"
+                  value={reason}
+                  onChange={(event) => {
+                    setReason(event.target.value);
+                    setDirty(true);
+                  }}
+                  placeholder="p. ej. corrección de la parrilla oficial"
+                />
+
+                {localError ? <Alert variant="error">{localError}</Alert> : null}
+                {serverError ? <Alert variant="error">{serverError}</Alert> : null}
+                {lastImport ? (
+                  <Alert variant="success">
+                    Importación completada (
+                    {selectedEvent ? resultEventLabel(selectedEvent.type) : "evento"}):{" "}
+                    {lastImport.created} creados, {lastImport.corrected} corregidos,{" "}
+                    {lastImport.unchanged} sin cambios y {lastImport.kept} conservados.
+                  </Alert>
+                ) : null}
+
+                <Button
+                  type="submit"
+                  variant={closePrimary ? "secondary" : "primary"}
+                  disabled={importMutation.isPending || entries.length === 0}
+                  disabledReason={
+                    entries.length === 0
+                      ? "Rellena al menos una fila de la tabla: sin datos no hay nada que importar."
+                      : undefined
+                  }
+                >
+                  {importMutation.isPending ? "Importando…" : "Importar resultados"}
+                </Button>
+              </form>
+            )}
+          </>
+        )}
+      </details>
+
+      {gpId !== "" && (
+        <>
           {/* US-18 (ADR-0020): definitivo + estados de evento. */}
           <div>
-            <h3>Definitivo</h3>
+            <h3>
+              3. Definitivo y estados de evento —{" "}
+              {selectedEvent ? resultEventLabel(selectedEvent.type) : "elige un evento"}
+            </h3>
 
-            {definitiveLocalError ? <Alert variant="error">{definitiveLocalError}</Alert> : null}
+            {definitiveLocalError ? (
+              <Alert variant="error">{definitiveLocalError}</Alert>
+            ) : null}
             {definitiveError ? <Alert variant="error">{definitiveError}</Alert> : null}
             {eventLocalError ? <Alert variant="error">{eventLocalError}</Alert> : null}
             {eventServerError ? <Alert variant="error">{eventServerError}</Alert> : null}
-            {eventFlagMessage ? <Alert variant="success">{eventFlagMessage}</Alert> : null}
+            {eventFlagMessage ? (
+              <Alert variant="success">{eventFlagMessage}</Alert>
+            ) : null}
             {lastDefinitive ? (
               <Alert variant="success">
                 {lastDefinitive.noop
@@ -636,7 +1374,9 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
             {gpState.isPending ? (
               <p className="muted">Consultando…</p>
             ) : gpState.isError ? (
-              <p className="bad">No se pudo cargar el estado: {gpState.error.message}</p>
+              <Alert variant="error">
+                No se pudo cargar el estado: {gpState.error.message}
+              </Alert>
             ) : (
               <>
                 <p>
@@ -644,7 +1384,9 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
                   <strong>
                     {gpState.data.definitive
                       ? `definitivo${
-                          gpState.data.resultsVersion ? ` (${gpState.data.resultsVersion})` : ""
+                          gpState.data.resultsVersion
+                            ? ` (${gpState.data.resultsVersion})`
+                            : ""
                         }`
                       : "provisional"}
                   </strong>{" "}
@@ -667,402 +1409,105 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
                 ) : null}
 
                 {gpEvents.data && gpEvents.data.length > 0 && (
-                    <p>
-                      <span className="muted">Estados de evento: </span>
-                      {gpEvents.data.map((event) => (
-                          <span key={event.id}>
-                            {resultEventLabel(event.type)}:{" "}
-                            <Button
+                  <p>
+                    <span className="muted">Estados de evento: </span>
+                    {gpEvents.data.map((event) => {
+                      if (event.id !== eventId) {
+                        // Los demás eventos solo muestran su estado: las
+                        // acciones viven en el evento elegido (un solo
+                        // mecanismo de selección alimenta todo el ritual).
+                        return <span key={event.id}>{eventOptionLabel(event)} </span>;
+                      }
+                      // Solo se ofrece lo que el servidor ejecutará
+                      // (ADR-0020): cancelar es irreversible (después no hay
+                      // transición) y neutralizar es idempotente (repetir =
+                      // no-op). Nunca se ofrece neutralizar sobre cancelado:
+                      // el cancelado excluye el evento del recálculo, así que
+                      // la neutralización posterior no tendría efecto.
+                      const canCancel = !event.cancelled;
+                      const canNeutralize = !event.cancelled && !event.neutralized;
+                      return (
+                        <span key={event.id}>
+                          {eventOptionLabel(event)}:{" "}
+                          {canCancel ? (
+                            <RowAction
                               onClick={() => onEventFlag(event, "cancel")}
                               disabled={
                                 cancelEventMutation.isPending ||
                                 neutralizeEventMutation.isPending
                               }
                             >
-                              Cancelar
-                            </Button>{" "}
-                            <Button
+                              Cancelar evento
+                            </RowAction>
+                          ) : null}{" "}
+                          {canNeutralize ? (
+                            <RowAction
                               onClick={() => onEventFlag(event, "neutralize")}
                               disabled={
                                 cancelEventMutation.isPending ||
                                 neutralizeEventMutation.isPending
                               }
                             >
-                              Neutralizar
-                            </Button>{" "}
-                          </span>
-                        ))}
-                    </p>
-                  )}
-              </>
-            )}
-          </div>
-
-          {/* US-17 (ADR-0019): importación automática desde la fuente. */}
-          <div>
-            <h3>Importación automática (PulseLive)</h3>
-
-            {sourceLocalError ? <Alert variant="error">{sourceLocalError}</Alert> : null}
-            {sourceError ? <Alert variant="error">{sourceError}</Alert> : null}
-
-            {sourceLinked ? (
-              <p>
-                Vinculado a la fuente: <code>{sourceLinked}</code>{" "}
-                <Button
-                  onClick={() => unlinkMutation.mutate({ gpId })}
-                  disabled={unlinkMutation.isPending}
-                >
-                  Desvincular
-                </Button>
-              </p>
-            ) : (
-              <form className="form" onSubmit={onLink} noValidate>
-                {sourceEvents.isPending ? (
-                  <p className="muted">Consultando el catálogo de la fuente…</p>
-                ) : sourceEvents.isError ? (
-                  <p className="bad">
-                    No se pudieron cargar los eventos de la fuente: {sourceEvents.error.message}
+                              Neutralizar evento
+                            </RowAction>
+                          ) : null}{" "}
+                          {!canCancel && !canNeutralize ? (
+                            <span className="muted">sin transiciones</span>
+                          ) : null}
+                        </span>
+                      );
+                    })}
                   </p>
-                ) : (
-                  <>
-                    <div className="field">
-                      <label htmlFor="resultsSourceEventRef">Evento de la fuente</label>
-                      <select
-                        id="resultsSourceEventRef"
-                        value={linkEventRef}
-                        onChange={(event) => setLinkEventRef(event.target.value)}
-                      >
-                        <option value="">— Elige un evento de la fuente —</option>
-                        {sourceEvents.data.map((sourceEvent) => (
-                          <option key={sourceEvent.eventRef} value={sourceEvent.eventRef}>
-                            {sourceEvent.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <Button type="submit" disabled={linkMutation.isPending}>
-                      Vincular GP
-                    </Button>
-                  </>
                 )}
-              </form>
-            )}
-
-            {sourceLinked && importableEvents.length > 0 && (
-              <p>
-                <span className="muted">Importar desde la fuente: </span>
-                {importableEvents.map((event) => (
-                  <Button
-                    key={event.id}
-                    onClick={() => importFromSourceMutation.mutate({ gpId, event: event.type })}
-                    disabled={importFromSourceMutation.isPending}
-                  >
-                    Importar {resultEventLabel(event.type)}
-                  </Button>
-                ))}
-              </p>
-            )}
-
-            {lastSourceImport ? (
-              <Alert variant="success">
-                Importación automática: {lastSourceImport.created} creados,{" "}
-                {lastSourceImport.corrected} corregidos, {lastSourceImport.unchanged} sin
-                cambios y {lastSourceImport.kept} conservados.
-                {lastSourceImport.unmapped.length > 0
-                  ? ` Sin mapear: ${lastSourceImport.unmapped
-                      .map((unmapped) => unmapped.name ?? unmapped.riderRef)
-                      .join(", ")}.`
-                  : ""}
-              </Alert>
-            ) : null}
-
-            <h4>Estado del auto-import</h4>
-            {sourceState.isPending ? (
-              <p className="muted">Consultando…</p>
-            ) : sourceState.isError ? (
-              <p className="bad">No se pudo cargar el estado: {sourceState.error.message}</p>
-            ) : sourceState.data.length === 0 ? (
-              <p className="muted">Aún no hay intentos registrados.</p>
-            ) : (
-              <table className="results-table">
-                <thead>
-                  <tr>
-                    <th>Evento</th>
-                    <th>Fallos seguidos</th>
-                    <th>Último error</th>
-                    <th>Último intento</th>
-                    <th>Último éxito</th>
-                    <th>Sin mapear</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sourceState.data.map((state) => (
-                    <tr
-                      key={state.event}
-                      className={
-                        state.consecutiveFailures >= PROVISIONAL_RESULTS_POLL.failureAlertThreshold
-                          ? "bad"
-                          : undefined
-                      }
-                    >
-                      <td>{resultEventLabel(state.event)}</td>
-                      <td>{state.consecutiveFailures}</td>
-                      <td>{state.lastError ?? "—"}</td>
-                      <td>{state.lastAttemptAt ? formatDateTime(state.lastAttemptAt) : "—"}</td>
-                      <td>{state.lastSuccessAt ? formatDateTime(state.lastSuccessAt) : "—"}</td>
-                      <td>
-                        {state.lastUnmapped && state.lastUnmapped.length > 0
-                          ? state.lastUnmapped
-                              .map((unmapped) => unmapped.name ?? unmapped.riderRef)
-                              .join(", ")
-                          : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-
-            <h4>Mapeo de pilotos</h4>
-            {riderMappings.isPending ? (
-              <p className="muted">Consultando…</p>
-            ) : riderMappings.isError ? (
-              <p className="bad">No se pudieron cargar los mapeos: {riderMappings.error.message}</p>
-            ) : (
-              <>
-                {riderMappings.data.length === 0 ? (
-                  <p className="muted">Aún no hay mapeos de pilotos.</p>
-                ) : (
-                  <table className="results-table">
-                    <thead>
-                      <tr>
-                        <th>Referencia en la fuente</th>
-                        <th>Piloto del mercado</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {riderMappings.data.map((mapping) => (
-                        <tr key={mapping.riderRef}>
-                          <td>{mapping.riderRef}</td>
-                          <td>{mapping.riderName}</td>
-                          <td>
-                            <Button
-                              onClick={() =>
-                                deleteMappingMutation.mutate({ riderRef: mapping.riderRef })
-                              }
-                              disabled={deleteMappingMutation.isPending}
-                            >
-                              Eliminar
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-                <form className="form" onSubmit={onAddMapping} noValidate>
-                  <Field
-                    label="Referencia en la fuente"
-                    name="mappingRiderRef"
-                    value={mappingRiderRef}
-                    onChange={(event) => setMappingRiderRef(event.target.value)}
-                    placeholder="ID del piloto en la fuente"
-                  />
-                  <div className="field">
-                    <label htmlFor="resultsMappingRiderId">Piloto del mercado</label>
-                    <select
-                      id="resultsMappingRiderId"
-                      value={mappingRiderId}
-                      onChange={(event) => setMappingRiderId(event.target.value)}
-                    >
-                      <option value="">— Elige un piloto —</option>
-                      {(riders.data ?? []).map((rider) => (
-                        <option key={rider.id} value={rider.id}>
-                          {rider.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <Button
-                    type="submit"
-                    disabled={setMappingMutation.isPending || riders.isPending}
-                  >
-                    Añadir mapeo
-                  </Button>
-                </form>
               </>
             )}
           </div>
-
-          {gpEvents.isPending ? (
-            <p className="muted">Consultando…</p>
-          ) : gpEvents.isError ? (
-            <p className="bad">
-              No se pudieron cargar los eventos: {gpEvents.error.message}
-            </p>
-          ) : gpEvents.data.length === 0 ? (
-            <p className="muted">Este GP aún no tiene eventos.</p>
-          ) : (
-            <div className="field">
-              <label htmlFor="resultsEventId">Evento</label>
-              <select
-                id="resultsEventId"
-                value={eventId}
-                onChange={(event) => setEventId(event.target.value)}
-              >
-                <option value="">— Elige un evento —</option>
-                {gpEvents.data.map((event) => (
-                  <option key={event.id} value={event.id}>
-                    {eventOptionLabel(event)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
         </>
       )}
 
-      {hasEvent && (
-        <>
-          {riders.isPending || eventResults.isPending ? (
-            <p className="muted">Consultando…</p>
-          ) : riders.isError || eventResults.isError ? (
-            <p className="bad">No se pudieron cargar los resultados: {loadError}</p>
-          ) : riders.data.length === 0 ? (
-            <p className="muted">Aún no hay pilotos en el mercado.</p>
-          ) : (
-            <form className="form" onSubmit={onSubmit} noValidate>
-              <table className="results-table">
-                <thead>
-                  <tr>
-                    <th>Piloto</th>
-                    <th>Salió</th>
-                    <th>Terminó</th>
-                    <th>Posición</th>
-                    <th>Penalizaciones</th>
-                    <th>Bonos</th>
-                    <th>Puntos crudos</th>
-                    <th>Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {riders.data.map((rider) => {
-                    const row = rows[rider.id] ?? emptyRow();
-                    return (
-                      <tr key={rider.id}>
-                        <td>
-                          <strong>{rider.name}</strong>
-                        </td>
-                        <td>
-                          <input
-                            type="checkbox"
-                            aria-label={`Salió: ${rider.name}`}
-                            checked={row.started}
-                            onChange={(event) => toggleStarted(rider.id, event.target.checked)}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="checkbox"
-                            aria-label={`Terminó: ${rider.name}`}
-                            disabled={!row.started}
-                            checked={row.finished}
-                            onChange={(event) =>
-                              toggleFinished(rider.id, event.target.checked)
-                            }
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="number"
-                            min={1}
-                            aria-label={`Posición: ${rider.name}`}
-                            disabled={!row.finished}
-                            value={row.position}
-                            onChange={(event) =>
-                              setRow(rider.id, { position: event.target.value })
-                            }
-                          />
-                        </td>
-                        <td className="codes">
-                          {penaltyCodes.map((code) => (
-                            <label key={code}>
-                              <input
-                                type="checkbox"
-                                aria-label={`Penalización ${code}: ${rider.name}`}
-                                checked={row.penalties.includes(code)}
-                                onChange={() => togglePenalty(rider.id, code)}
-                              />{" "}
-                              {code}
-                            </label>
-                          ))}
-                        </td>
-                        <td className="codes">
-                          {bonusCodes.length === 0 ? (
-                            <span className="muted">—</span>
-                          ) : (
-                            bonusCodes.map((code) => (
-                              <label key={code}>
-                                <input
-                                  type="checkbox"
-                                  aria-label={`Bono ${code}: ${rider.name}`}
-                                  checked={row.bonuses.includes(code)}
-                                  onChange={() => toggleBonus(rider.id, code)}
-                                />{" "}
-                                {code}
-                              </label>
-                            ))
-                          )}
-                        </td>
-                        <td>
-                          <input
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            aria-label={`Puntos crudos: ${rider.name}`}
-                            value={row.rawPoints}
-                            onChange={(event) =>
-                              setRow(rider.id, { rawPoints: event.target.value })
-                            }
-                          />
-                        </td>
-                        <td>
-                          <span className="muted">
-                            {deriveStatus({ started: row.started, finished: row.finished })}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+      {confirmRequest ? (
+        <ConfirmDialog
+          {...confirmRequest}
+          onClose={() => setConfirmRequest(null)}
+          onConfirm={() => {
+            const run = confirmRequest.onConfirm;
+            setConfirmRequest(null);
+            run();
+          }}
+        />
+      ) : null}
 
-              <Field
-                label="Motivo (obligatorio si la importación corrige resultados existentes)"
-                name="reason"
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-                placeholder="p. ej. corrección de la parrilla oficial"
-              />
-
-              {localError ? <Alert variant="error">{localError}</Alert> : null}
-              {serverError ? <Alert variant="error">{serverError}</Alert> : null}
-              {lastImport ? (
-                <Alert variant="success">
-                  Importación completada: {lastImport.created} creados,{" "}
-                  {lastImport.corrected} corregidos, {lastImport.unchanged} sin cambios y{" "}
-                  {lastImport.kept} conservados.
-                </Alert>
-              ) : null}
-
-              <Button type="submit" disabled={importMutation.isPending || entries.length === 0}>
-                {importMutation.isPending ? "Importando…" : "Importar resultados"}
-              </Button>
-            </form>
-          )}
-        </>
-      )}
+      {pendingChange ? (
+        <ConfirmDialog
+          {...pendingChange}
+          onClose={() => {
+            setPendingChange(null);
+            if (!pendingFromUrl.current) return;
+            pendingFromUrl.current = false;
+            // Cancelar un cambio que vino de la URL: revierte la URL al
+            // contexto de la cascada (la fuente de verdad) para que URL y
+            // cascada vuelvan a coincidir y el operador pueda reintentar la
+            // CTA (un re-click a la misma URL no re-dispararía la navegación).
+            const params = new URLSearchParams();
+            if (seasonId) params.set("season", seasonId);
+            if (gpId) params.set("gp", gpId);
+            if (eventId) params.set("event", eventId);
+            const query = params.toString();
+            window.history.replaceState(
+              null,
+              "",
+              query ? `?${query}` : window.location.pathname,
+            );
+            lastSyncedSearch.current = query;
+          }}
+          onConfirm={() => {
+            pendingFromUrl.current = false;
+            const run = pendingChange.onConfirm;
+            setPendingChange(null);
+            run();
+          }}
+        />
+      ) : null}
     </section>
   );
 }

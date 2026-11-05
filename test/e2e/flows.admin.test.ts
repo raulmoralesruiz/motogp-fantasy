@@ -37,6 +37,8 @@ test.describe("admin — panel y cadena de resultados (T-11)", () => {
   }) => {
     await page.goto("/admin");
     const card = page.locator("section#temporadas");
+    // Los formularios de alta van colapsados («Altas y configuración»).
+    await card.getByText("Altas y configuración de temporadas").click();
     await expect(card.getByRole("heading", { name: "Crear temporada" })).toBeVisible();
 
     const name = `E2E Temporada ${Date.now().toString(36)}`;
@@ -54,9 +56,8 @@ test.describe("admin — panel y cadena de resultados (T-11)", () => {
   test("importar corrección + marcar definitivo → recálculo con versión (US-16/US-18)", async ({
     page,
   }) => {
-    // "Marcar definitivo" y cancelar/neutralizar abren un window.confirm.
-    page.on("dialog", (dialog) => void dialog.accept());
-
+    // "Marcar definitivo" abre la confirmación con impacto del sistema
+    // (ConfirmDialog con «Sí, …»/«No, volver»): ya no hay diálogo nativo.
     await page.goto("/admin");
     const sec = page.locator("section#resultados");
     await expect(sec.getByRole("heading", { name: "Resultados" })).toBeVisible();
@@ -72,7 +73,9 @@ test.describe("admin — panel y cadena de resultados (T-11)", () => {
         : project === "mobile-430"
           ? "R3 · GP Ficticio 3"
           : "R1 · GP Ficticio 1";
-    await sec.getByLabel("Temporada").selectOption({ label: "Temporada Ficticia (2099)" });
+    await sec
+      .getByLabel("Temporada")
+      .selectOption({ label: "Temporada Ficticia (2099)" });
     await sec.getByLabel("GP").selectOption({ label: gpLabel });
     await sec.getByLabel("Evento").selectOption({ index: 1 });
 
@@ -90,7 +93,9 @@ test.describe("admin — panel y cadena de resultados (T-11)", () => {
       if ((await input.inputValue()) !== "") positionInput = input;
     }
     if (positionInput === null) {
-      throw new Error("E2E: sin posiciones cargadas en el evento (¿seed:fiction ejecutado?)");
+      throw new Error(
+        "E2E: sin posiciones cargadas en el evento (¿seed:fiction ejecutado?)",
+      );
     }
     const current = await positionInput.inputValue();
     await positionInput.fill(current === "99" ? "98" : "99");
@@ -98,7 +103,7 @@ test.describe("admin — panel y cadena de resultados (T-11)", () => {
     await sec.getByLabel(/Motivo/).fill("corrección E2E de la parrilla (T-11)");
     await importButton.click();
     await expect(
-      sec.getByText(/Importación completada: 0 creados, 1 corregidos/),
+      sec.getByText(/Importación completada \(.*\): 0 creados, 1 corregidos/),
     ).toBeVisible();
 
     // Estado del GP: si aún no es definitivo, lo marcamos (recálculo rv-1);
@@ -106,11 +111,13 @@ test.describe("admin — panel y cadena de resultados (T-11)", () => {
     const mark = sec.getByRole("button", { name: "Marcar definitivo" });
     if ((await mark.count()) > 0) {
       await mark.click();
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: "Sí, marcar definitivo" })
+        .click();
       await expect(sec.getByText(/GP definitivo: \d+ fila\(s\)/)).toBeVisible();
     }
-    await expect(
-      sec.locator("strong", { hasText: /definitivo \(rv-/ }),
-    ).toBeVisible();
+    await expect(sec.locator("strong", { hasText: /definitivo \(rv-/ })).toBeVisible();
   });
 });
 

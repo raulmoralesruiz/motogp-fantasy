@@ -59,9 +59,17 @@ describe("validateEntryForEvent — validación semántica por evento", () => {
   });
 
   it("pole en q2 sin posición → error", () => {
-    const entry: ResultValues = { ...baseEntry, position: null, started: false, finished: false, bonuses: ["pole"] };
+    const entry: ResultValues = {
+      ...baseEntry,
+      position: null,
+      started: false,
+      finished: false,
+      bonuses: ["pole"],
+    };
     const errors = validateEntryForEvent(entry, "q2");
-    expect(errors).toEqual(["El bono de pole exige que el piloto haya clasificado (posición en Q2)"]);
+    expect(errors).toEqual([
+      "El bono de pole exige que el piloto haya clasificado (posición en Q2)",
+    ]);
   });
 
   it("fastest-lap en race terminado → sin errores", () => {
@@ -70,9 +78,16 @@ describe("validateEntryForEvent — validación semántica por evento", () => {
   });
 
   it("fastest-lap en race sin terminar → error", () => {
-    const entry: ResultValues = { ...baseEntry, position: null, finished: false, bonuses: ["fastest-lap"] };
+    const entry: ResultValues = {
+      ...baseEntry,
+      position: null,
+      finished: false,
+      bonuses: ["fastest-lap"],
+    };
     const errors = validateEntryForEvent(entry, "race");
-    expect(errors).toEqual(["El bono de vuelta rápida exige que el piloto haya terminado la carrera"]);
+    expect(errors).toEqual([
+      "El bono de vuelta rápida exige que el piloto haya terminado la carrera",
+    ]);
   });
 
   it("pole en race → no aplicable", () => {

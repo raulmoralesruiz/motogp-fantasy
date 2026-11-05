@@ -16,9 +16,7 @@ interface CreateConstructorFormProps {
  * reutiliza (el servidor lo indica y no audita la reutilización). El
  * constructor es un activo distinto del equipo (invariante 5).
  */
-export default function CreateConstructorForm({
-  onCreated,
-}: CreateConstructorFormProps) {
+export default function CreateConstructorForm({ onCreated }: CreateConstructorFormProps) {
   const create = trpc.market.constructors.create.useMutation({
     onSuccess: onCreated,
   });

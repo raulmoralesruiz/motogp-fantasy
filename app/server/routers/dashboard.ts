@@ -15,11 +15,7 @@
 import type { GpStatus, PrismaClient } from "@prisma/client";
 
 import { LeagueService, type MyLeagueRanking } from "@/modules/leagues";
-import {
-  LineupService,
-  type GpBudget,
-  type LineupView,
-} from "@/modules/lineups";
+import { LineupService, type GpBudget, type LineupView } from "@/modules/lineups";
 import { ResultsService } from "@/modules/results";
 import { GpService } from "@/modules/seasons";
 
@@ -95,8 +91,7 @@ export function createDashboardRouter(deps: DashboardRouterDeps) {
       const gp = next?.gp ?? null;
       // Gate de cierre (US-13), evaluado en el servidor (AGENTS.md §8).
       const closed = gp
-        ? gp.status === "locked" ||
-          (gp.lockoutAt !== null && new Date() >= gp.lockoutAt)
+        ? gp.status === "locked" || (gp.lockoutAt !== null && new Date() >= gp.lockoutAt)
         : false;
 
       // Sin GP programado no hay presupuesto ni lineup (US-10/US-09), pero
@@ -114,7 +109,7 @@ export function createDashboardRouter(deps: DashboardRouterDeps) {
           notices.push({
             kind: "lockout",
             severity: "error",
-            message: `El GP ${gp.name} está cerrado (lockout): no se pueden guardar lineups.`,
+            message: `El GP ${gp.name} está bloqueado (lockout): no se pueden guardar lineups.`,
             gpId: gp.id,
             gpName: gp.name,
             at: gp.lockoutAt,

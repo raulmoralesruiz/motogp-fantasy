@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import type { CircuitView, SeasonWithRules } from "@/modules/seasons";
+import { Alert } from "@/shared/components";
 import { trpc } from "@/trpc/client";
 
 import CreateGpForm from "./create-gp-form";
@@ -47,7 +48,9 @@ export default function GpsSection({ seasons, circuits }: GpsSectionProps) {
           {gps.isPending ? (
             <p className="muted">Consultando…</p>
           ) : gps.isError ? (
-            <p className="bad">No se pudieron cargar los GPs: {gps.error.message}</p>
+            <Alert variant="error">
+              No se pudieron cargar los GPs: {gps.error.message}
+            </Alert>
           ) : gps.data.length === 0 ? (
             <p className="muted">Esta temporada aún no tiene GPs.</p>
           ) : (

@@ -84,7 +84,9 @@ describe("CreateRiderForm", () => {
 
   it("muestra el error de validación Zod por campo", () => {
     const error = clientError("Invalid input", {
-      zod: { issues: [{ path: ["name"], message: "El nombre del piloto es obligatorio" }] },
+      zod: {
+        issues: [{ path: ["name"], message: "El nombre del piloto es obligatorio" }],
+      },
       code: "BAD_REQUEST",
       message: "Invalid input",
     });

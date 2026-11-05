@@ -45,7 +45,10 @@ export function sameResultValues(a: ResultValues, b: ResultValues): boolean {
 }
 
 /** Calcula la diferencia mínima entre filas existentes y entradas entrantes. */
-export function diffResults(existing: ResultEntry[], incoming: ResultEntry[]): ResultDiff {
+export function diffResults(
+  existing: ResultEntry[],
+  incoming: ResultEntry[],
+): ResultDiff {
   const existingByRider = new Map(existing.map((e) => [e.riderId, e]));
   const incomingRiders = new Set(incoming.map((e) => e.riderId));
 

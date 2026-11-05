@@ -18,10 +18,7 @@ interface CreateTeamFormProps {
  * US-06). La creación es idempotente por nombre: si el equipo ya existe, se
  * reutiliza (el servidor lo indica y no audita la reutilización).
  */
-export default function CreateTeamForm({
-  constructors,
-  onCreated,
-}: CreateTeamFormProps) {
+export default function CreateTeamForm({ constructors, onCreated }: CreateTeamFormProps) {
   const create = trpc.market.teams.create.useMutation({ onSuccess: onCreated });
   const [constructorId, setConstructorId] = useState("");
 

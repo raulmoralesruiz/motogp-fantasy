@@ -100,10 +100,7 @@ function normalize(result: unknown): unknown {
     if ("missing" in r) return r.missing;
   }
   if (Array.isArray(result)) {
-    return result.map((m) => [
-      (m as BudgetMovement).type,
-      (m as BudgetMovement).amount,
-    ]);
+    return result.map((m) => [(m as BudgetMovement).type, (m as BudgetMovement).amount]);
   }
   if (result && typeof result === "object" && "type" in result && "amount" in result) {
     const m = result as BudgetMovement;

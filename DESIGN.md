@@ -4,6 +4,7 @@ description: "Fantasy de MotoGP propio y multi-liga, con una economía justa: ba
 colors:
   starting-light-red: "#e10600"
   starting-light-red-deep: "#b30500"
+  starting-light-red-text: "#ff4438"
   pit-night-blue: "#0b0f14"
   telemetry-screen: "#10151c"
   track-line-gray: "#21262d"
@@ -29,6 +30,11 @@ typography:
     fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif'
     fontSize: "1rem"
     fontWeight: 700
+    lineHeight: 1.5
+  subhead:
+    fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif'
+    fontSize: "0.9rem"
+    fontWeight: 600
     lineHeight: 1.5
   body:
     fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif'
@@ -64,6 +70,12 @@ components:
     height: "44px"
   button-primary-hover:
     backgroundColor: "{colors.starting-light-red-deep}"
+  button-secondary:
+    backgroundColor: "transparent"
+    textColor: "{colors.sign-white}"
+    rounded: "{rounded.md}"
+    padding: "0.65rem 1rem"
+    height: "44px"
   cta-link:
     backgroundColor: "{colors.starting-light-red}"
     textColor: "{colors.on-accent-white}"
@@ -140,6 +152,7 @@ Paleta de un solo acento: una voz roja de escasez deliberada sobre una familia d
 ### Primary
 - **Rojo de salida** (#e10600): el color de acción del producto. Enciende botones primarios, CTAs de tarjeta, enlaces, la pestaña activa, el contorno de foco (2 px), los checkboxes y la palabra marcada de cada título. Su escasez es el punto: si una pantalla se ve roja, algo va mal.
 - **Rojo de salida profundo** (#b30500): solo el estado hover del relleno primario. Nunca en reposo.
+- **Rojo de salida en texto** (#ff4438): la variante aclarada del acento para texto pequeño (enlaces, acciones fantasma de fila). El rojo sólido no alcanza 4.5:1 sobre el lienzo nocturno; esta variante sí (AA). Los rellenos, los bordes de foco y la palabra roja de los títulos (texto grande) siguen en rojo de salida.
 
 ### Secondary
 - **Verde de bandera** (#3fb950): confirmaciones de éxito y deltas positivos (tendencia «Sube», ▲). Nunca decorativo.
@@ -171,9 +184,10 @@ Paleta de un solo acento: una voz roja de escasez deliberada sobre una familia d
 ### Hierarchy
 - **Display** (700, 1.75 rem, interlínea 1.5): títulos de página (h1) y nada más; cada título marca exactamente una palabra en rojo de salida.
 - **Headline** (700, 1.1 rem): encabezados de sección (h2).
-- **Title** (700, 1 rem): títulos de tarjeta (h3).
+- **Title** (700, 1 rem): títulos de tarjeta (h3) y pasos del ritual.
+- **Subhead** (600, 0.9 rem): encabezados de bloque dentro de una sección (h4).
 - **Body** (400, 1 rem, interlínea 1.5): todo el texto de lectura; la medida ya la controla la columna de 56 rem.
-- **Label** (400, 0.9 rem, gris de cronometraje): etiquetas de campo y anotaciones secundarias.
+- **Label** (400, 0.9 rem, gris de cronometraje): etiquetas de campo, anotaciones secundarias y el nivel h5 (que nunca cae por debajo del texto de lectura).
 - **Table header** (600, 0.8 rem, gris de cronometraje, sin salto de línea): cabeceras de columna.
 - **Mono** (400, 0.85 rem, interlínea 1.4): editores de reglas JSON y payloads.
 
@@ -211,9 +225,10 @@ Lenguaje de formas de panel de instrumentos: rectángulos redondeados contenidos
 ### Buttons
 - **Shape:** redondeado suave (6 px), alto mínimo 44 px.
 - **Primary:** relleno rojo de salida, texto blanco puro (1 rem / 600), padding 0.65 rem 1 rem.
-- **Hover / Focus:** el hover profundiza a rojo de salida profundo (#b30500); el foco es contorno de 2 px del acento con 1 px de separación. Deshabilitado = opacidad 0.6 + cursor no permitido, y **siempre** acompañado del motivo escrito (compromiso de marca: nunca un control bloqueado sin explicación).
+- **Hover / Focus:** el hover profundiza a rojo de salida profundo (#b30500); el foco es contorno de 2 px del acento con 1 px de separación. Deshabilitado = opacidad 0.6 + cursor no permitido, y **siempre** acompañado del motivo escrito (compromiso de marca: nunca un control bloqueado sin explicación). Con motivo escrito el bloqueo usa `aria-disabled` —el botón sigue en el orden de foco para que el motivo se anuncie—; en estados transitorios sin motivo, `disabled` nativo.
 - **CTA de tarjeta:** el mismo relleno como enlace en bloque (0.95 rem / 600, padding 0.6 rem 1 rem) — la acción principal de cada tarjeta del dashboard.
 - **Row action (fantasma):** sin relleno, texto y borde de 1 px en rojo de salida (5 px de radio); el hover aplica un tinte del acento al 12%.
+- **Secondary (neutra):** sin relleno, filete de 1 px de gris de pista, texto blanco de letrero (6 px de radio, alto mínimo 44 px). Es la opción segura de los diálogos de confirmación («No, volver») — nunca lleva el acento.
 
 ### Tabs
 Chips redondeados (6 px) en fila flexible. Inactivo: pantalla de telemetría + filete de gris de pista. Activo (`aria-pressed="true"`): relleno rojo de salida con texto blanco. Alto mínimo 44 px; la fila envuelve sin desbordar.
@@ -233,10 +248,14 @@ Chips redondeados (6 px) en fila flexible. Inactivo: pantalla de telemetría + f
 ### Alerts
 Cuatro variantes con la misma anatomía (padding 0.6 rem 0.8 rem, radio 6 px, texto 0.9 rem): error (caja tintada de rojo de bandera), advertencia (ámbar de aviso), información (azul informativo) y éxito — esta última **sin caja**: solo texto verde de bandera. Las cajas siguen la Regla del Tinte 10/40.
 
+### Confirmación con impacto
+Para acciones irreversibles o que reescriben datos: un diálogo plano (superficie de pantalla de telemetría, filete de 1 px, radio 8 px, máx. 26 rem) sobre el lienzo atenuado. El título nombra la acción; el impacto escrito va como texto (o en aviso tintado 10/40 si es irreversible); dos controles y solo dos: «Sí, …» (relleno rojo de salida — la acción se nombra en el botón, nunca «Aceptar») y «No, volver» (secondary). El foco abre en la opción segura; Esc y el clic fuera descartan. Sustituye a cualquier diálogo nativo.
+
 ### Lists & Tables
 - **Status list:** contenedor con borde y radio de 8 px; filas separadas por filetes (padding 0.6 rem 1 rem). Es el patrón de datos de todo el producto (versiones de reglas, historial de precios, estado de servicios).
-- **Tables:** cuerpo 0.9 rem, celdas con filete, cabeceras 0.8 rem/600 en gris de cronometraje; el contenedor desborda en scroll horizontal.
-- **Anchor nav (admin):** barra fija de chips de superficie (6 px) cuyo borde se enciende en rojo al pasar el cursor.
+- **Tables:** cuerpo 0.9 rem, celdas con filete, cabeceras 0.8 rem/600 en gris de cronometraje; la tabla se desliza dentro de un wrapper `.table-scroll` (overflow-x) que preserva la semántica de `<table>`. Área de toque de los checkboxes por el label envolvente (≥ 44 px, Regla de los 44).
+- **Anchor nav (admin):** barra fija de chips de superficie (6 px) cuyo borde se enciende en rojo al pasar el cursor, agrupada por fases de trabajo (Carrera → Mercado → Temporada → Sistema) con etiquetas de fase en gris de cronometraje (no son enlaces).
+- **Altas colapsadas (admin):** los formularios de creación viven en un `details` («Altas y configuración») con el mismo control de 44 px que los pasos del ritual: el panel prioriza la lectura sobre el CRUD.
 
 ### Signature: la palabra roja y las flechas de estado
 El título de cada página marca una palabra en rojo de salida, y el estado se narra en línea con la pareja semántica: «Sube/Baja/Estable» en verde/gris/rojo y los deltas de posición con ▲/▼. Es la voz del muro de boxes: señal escasa, dato legible.

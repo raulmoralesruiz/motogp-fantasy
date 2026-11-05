@@ -24,19 +24,61 @@ const GP1 = { id: "gp-1", name: "GP de Jerez", round: 1 };
 const GP2 = { id: "gp-2", name: "GP de Portugal", round: 2 };
 
 const RIDERS = [
-  { riderId: "r1", name: "Piloto Uno", teamName: "Team A", constructorName: "Ctor A", price: 10 },
-  { riderId: "r2", name: "Piloto Dos", teamName: "Team A", constructorName: "Ctor A", price: 15 },
-  { riderId: "r3", name: "Piloto Tres", teamName: "Team B", constructorName: "Ctor B", price: 20 },
-  { riderId: "r4", name: "Piloto Cuatro", teamName: "Team B", constructorName: "Ctor B", price: 25 },
-  { riderId: "rx", name: "Piloto Sin Precio", teamName: "Team A", constructorName: "Ctor A", price: null },
+  {
+    riderId: "r1",
+    name: "Piloto Uno",
+    teamName: "Team A",
+    constructorName: "Ctor A",
+    price: 10,
+  },
+  {
+    riderId: "r2",
+    name: "Piloto Dos",
+    teamName: "Team A",
+    constructorName: "Ctor A",
+    price: 15,
+  },
+  {
+    riderId: "r3",
+    name: "Piloto Tres",
+    teamName: "Team B",
+    constructorName: "Ctor B",
+    price: 20,
+  },
+  {
+    riderId: "r4",
+    name: "Piloto Cuatro",
+    teamName: "Team B",
+    constructorName: "Ctor B",
+    price: 25,
+  },
+  {
+    riderId: "rx",
+    name: "Piloto Sin Precio",
+    teamName: "Team A",
+    constructorName: "Ctor A",
+    price: null,
+  },
 ];
 const CONSTRUCTORS = [
   { id: "ctor-a", name: "Ctor A", price: 5 },
   { id: "ctor-b", name: "Ctor B", price: 30 },
 ];
 const TEAMS = [
-  { id: "team-a", name: "Team A", constructorId: "ctor-a", constructorName: "Ctor A", price: 5 },
-  { id: "team-b", name: "Team B", constructorId: "ctor-b", constructorName: "Ctor B", price: 5.01 },
+  {
+    id: "team-a",
+    name: "Team A",
+    constructorId: "ctor-a",
+    constructorName: "Ctor A",
+    price: 5,
+  },
+  {
+    id: "team-b",
+    name: "Team B",
+    constructorId: "ctor-b",
+    constructorName: "Ctor B",
+    price: 5.01,
+  },
 ];
 
 /** Presupuesto por defecto del builder (primer GP, sin carry). */
@@ -198,9 +240,7 @@ describe("LineupsPage", () => {
     expect(
       screen.getByText("Selecciona un GP para componer tu lineup."),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("option", { name: "J1 · GP de Jerez" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "J1 · GP de Jerez" })).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Guardar lineup" }),
     ).not.toBeInTheDocument();
@@ -440,15 +480,11 @@ describe("LineupsPage", () => {
     await openGp1(user);
 
     expect(
-      screen.getByText(
-        "El GP está cerrado (lockout): no se pueden guardar lineups.",
-      ),
+      screen.getByText("El GP está bloqueado (lockout): no se pueden guardar lineups."),
     ).toBeInTheDocument();
 
     await fillDraft(user);
-    expect(
-      screen.getByRole("button", { name: "Guardar lineup" }),
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Guardar lineup" })).toBeDisabled();
   });
 
   it("GP cerrado (lockoutAt en el pasado): alerta de lockout", async () => {
@@ -462,9 +498,7 @@ describe("LineupsPage", () => {
     await openGp1(user);
 
     expect(
-      screen.getByText(
-        "El GP está cerrado (lockout): no se pueden guardar lineups.",
-      ),
+      screen.getByText("El GP está bloqueado (lockout): no se pueden guardar lineups."),
     ).toBeInTheDocument();
   });
 
@@ -478,13 +512,11 @@ describe("LineupsPage", () => {
         isError: false,
       }),
     );
-    asMockFn(trpc.lineups.get.useQuery).mockImplementation(
-      (input: { gpId: string }) => ({
-        data: input.gpId === GP1.id ? LINEUP_GP1 : null,
-        isPending: false,
-        isError: false,
-      }),
-    );
+    asMockFn(trpc.lineups.get.useQuery).mockImplementation((input: { gpId: string }) => ({
+      data: input.gpId === GP1.id ? LINEUP_GP1 : null,
+      isPending: false,
+      isError: false,
+    }));
     renderLineups(<LineupsPage />);
 
     const user = userEvent.setup();
@@ -526,9 +558,7 @@ describe("LineupsPage", () => {
     await user.selectOptions(screen.getByLabelText("Temporada"), SEASON_ID);
     await user.selectOptions(screen.getByLabelText("GP"), GP1.id);
 
-    expect(
-      screen.getByText("No se pudo cargar el mercado del GP."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("No se pudo cargar el mercado del GP.")).toBeInTheDocument();
   });
 
   it("US-12: muestra el historial de cambios (tipo, coste antes→después, motivo)", async () => {
@@ -584,9 +614,7 @@ describe("LineupsPage", () => {
     expect(screen.getByText(/swap rider r5/)).toBeInTheDocument();
     expect(screen.getByText(/coste 80 → 100/)).toBeInTheDocument();
     // Reasignación oro↔plata (gratis): coste invariable.
-    expect(
-      screen.getByText(/Reasignación oro↔plata \(r3\)/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Reasignación oro↔plata \(r3\)/)).toBeInTheDocument();
     expect(screen.getAllByText(/coste 100 → 100/)).toHaveLength(1);
     // Wildcard (reset completo) con motivo.
     expect(screen.getByText(/Wildcard \(reset completo\)/)).toBeInTheDocument();

@@ -3,18 +3,20 @@
 import { useState, type FormEvent } from "react";
 import type { GpStatus } from "@prisma/client";
 
-import { Alert, Button } from "@/shared/components";
-import { allowedGpStatusTransitions } from "@/modules/seasons/gp-status";
+import {
+  Alert,
+  Button,
+  ConfirmDialog,
+  RowAction,
+  type ConfirmRequest,
+} from "@/shared/components";
+import {
+  GP_STATUS_LABELS,
+  allowedGpStatusTransitions,
+} from "@/modules/seasons/gp-status";
 import type { GpView } from "@/modules/seasons";
 import { trpc } from "@/trpc/client";
 import { zodIssues } from "@/trpc/errors";
-
-export const GP_STATUS_LABELS: Record<GpStatus, string> = {
-  scheduled: "programado",
-  locked: "bloqueado",
-  finished: "finalizado",
-  cancelled: "cancelado",
-};
 
 const EVENT_TYPES = ["q1", "q2", "sprint", "race"] as const;
 type EventType = (typeof EVENT_TYPES)[number];
@@ -80,6 +82,9 @@ export default function GpActions({ gp, onChanged }: GpActionsProps) {
   const [lockoutAt, setLockoutAt] = useState("");
   const [eventType, setEventType] = useState("");
   const [eventTime, setEventTime] = useState("");
+  // Confirmación con impacto (patrón del sistema) para los cambios que
+  // afectan a todos los jugadores del GP.
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
 
   const allowed = allowedGpStatusTransitions(gp.status);
   const missingEvents = EVENT_TYPES.filter(
@@ -102,7 +107,13 @@ export default function GpActions({ gp, onChanged }: GpActionsProps) {
   function onStatusSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!status) return;
-    updateStatus.mutate({ gpId: gp.id, status: status as GpStatus });
+    const next = status as GpStatus;
+    setConfirmRequest({
+      title: "Cambiar el estado del GP",
+      impact: `El GP «R${gp.round} · ${gp.name}» pasará de «${GP_STATUS_LABELS[gp.status]}» a «${GP_STATUS_LABELS[next]}».`,
+      confirmLabel: "Sí, cambiar el estado",
+      onConfirm: () => updateStatus.mutate({ gpId: gp.id, status: next }),
+    });
   }
 
   function onAddEventSubmit(event: FormEvent<HTMLFormElement>) {
@@ -153,7 +164,13 @@ export default function GpActions({ gp, onChanged }: GpActionsProps) {
                 </option>
               ))}
             </select>{" "}
-            <Button type="submit" disabled={!status || updateStatus.isPending}>
+            <Button
+              type="submit"
+              disabled={!status || updateStatus.isPending}
+              disabledReason={
+                !status ? "Elige la transición destino en el selector." : undefined
+              }
+            >
               {updateStatus.isPending ? "Cambiando…" : "Cambiar"}
             </Button>
           </form>
@@ -169,24 +186,40 @@ export default function GpActions({ gp, onChanged }: GpActionsProps) {
         />{" "}
         <Button
           type="button"
+          variant="secondary"
           disabled={!lockoutAt || updateLockout.isPending}
+          disabledReason={!lockoutAt ? "Elige la fecha y hora del lockout." : undefined}
           onClick={() =>
-            updateLockout.mutate({
-              gpId: gp.id,
-              lockoutAt: new Date(lockoutAt),
+            setConfirmRequest({
+              title: `Fijar el lockout de R${gp.round} · ${gp.name}`,
+              impact:
+                `A partir de ${formatDateTime(lockoutAt)} los jugadores no podrán ` +
+                "editar sus lineups de este GP. El bloqueo afecta a todos los jugadores " +
+                "y solo se levanta desde este panel.",
+              confirmLabel: "Sí, fijar el lockout",
+              onConfirm: () =>
+                updateLockout.mutate({ gpId: gp.id, lockoutAt: new Date(lockoutAt) }),
             })
           }
         >
           Fijar
         </Button>{" "}
         {gp.lockoutAt && (
-          <Button
-            type="button"
+          <RowAction
+            onClick={() =>
+              setConfirmRequest({
+                title: `Quitar el lockout de R${gp.round} · ${gp.name}`,
+                impact:
+                  `Se quitará el lockout de R${gp.round} · ${gp.name}: los jugadores ` +
+                  "podrán volver a editar sus lineups hasta el siguiente cierre.",
+                confirmLabel: "Sí, quitar el lockout",
+                onConfirm: () => updateLockout.mutate({ gpId: gp.id, lockoutAt: null }),
+              })
+            }
             disabled={updateLockout.isPending}
-            onClick={() => updateLockout.mutate({ gpId: gp.id, lockoutAt: null })}
           >
             Borrar
-          </Button>
+          </RowAction>
         )}
       </div>
       {missingEvents.length > 0 && (
@@ -211,12 +244,28 @@ export default function GpActions({ gp, onChanged }: GpActionsProps) {
               value={eventTime}
               onChange={(event) => setEventTime(event.target.value)}
             />{" "}
-            <Button type="submit" disabled={!eventType || addEvent.isPending}>
+            <Button
+              type="submit"
+              variant="secondary"
+              disabled={!eventType || addEvent.isPending}
+              disabledReason={!eventType ? "Elige el evento que falta." : undefined}
+            >
               {addEvent.isPending ? "Añadiendo…" : "Añadir"}
             </Button>
           </form>
         </div>
       )}
+      {confirmRequest ? (
+        <ConfirmDialog
+          {...confirmRequest}
+          onClose={() => setConfirmRequest(null)}
+          onConfirm={() => {
+            const run = confirmRequest.onConfirm;
+            setConfirmRequest(null);
+            run();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

@@ -34,14 +34,23 @@
     {
       "id": "composicion-valida",
       "fn": "validateLineup",
-      "args": { "slots": "@slotsValidos", "affiliations": "@affiliations", "limits": "@limits" },
+      "args": {
+        "slots": "@slotsValidos",
+        "affiliations": "@affiliations",
+        "limits": "@limits"
+      },
       "expected": true
     },
     {
       "id": "composicion-3-oro",
       "fn": "validateLineup",
       "args": {
-        "slots": { "gold": ["r1", "r6", "r5"], "silver": ["r4", "r8"], "constructorId": "c1", "teamId": "t3" },
+        "slots": {
+          "gold": ["r1", "r6", "r5"],
+          "silver": ["r4", "r8"],
+          "constructorId": "c1",
+          "teamId": "t3"
+        },
         "affiliations": "@affiliations",
         "limits": "@limitsLenient"
       },
@@ -51,7 +60,12 @@
       "id": "duplicado-oro-plata",
       "fn": "validateLineup",
       "args": {
-        "slots": { "gold": ["r1", "r6"], "silver": ["r1", "r8"], "constructorId": "c1", "teamId": "t3" },
+        "slots": {
+          "gold": ["r1", "r6"],
+          "silver": ["r1", "r8"],
+          "constructorId": "c1",
+          "teamId": "t3"
+        },
         "affiliations": "@affiliations",
         "limits": "@limitsLenient"
       },
@@ -61,7 +75,12 @@
       "id": "concentracion-constructor",
       "fn": "validateLineup",
       "args": {
-        "slots": { "gold": ["r1", "r6"], "silver": ["r2", "r4"], "constructorId": "c1", "teamId": "t3" },
+        "slots": {
+          "gold": ["r1", "r6"],
+          "silver": ["r2", "r4"],
+          "constructorId": "c1",
+          "teamId": "t3"
+        },
         "affiliations": "@affiliations",
         "limits": "@limits"
       },
@@ -91,14 +110,30 @@
     {
       "id": "presupuesto-primer-save-carry",
       "fn": "firstSaveMovements",
-      "args": { "params": { "B": 100, "t": 0.25, "cmax": 8 }, "prevBalance": 8, "cost": 95 },
-      "expected": [["base", 100], ["carry", 2], ["spend", -95]]
+      "args": {
+        "params": { "B": 100, "t": 0.25, "cmax": 8 },
+        "prevBalance": 8,
+        "cost": 95
+      },
+      "expected": [
+        ["base", 100],
+        ["carry", 2],
+        ["spend", -95]
+      ]
     },
     {
       "id": "presupuesto-primer-save-tope-cmax",
       "fn": "firstSaveMovements",
-      "args": { "params": { "B": 100, "t": 0.25, "cmax": 8 }, "prevBalance": 40, "cost": 95 },
-      "expected": [["base", 100], ["carry", 8], ["spend", -95]]
+      "args": {
+        "params": { "B": 100, "t": 0.25, "cmax": 8 },
+        "prevBalance": 40,
+        "cost": 95
+      },
+      "expected": [
+        ["base", 100],
+        ["carry", 8],
+        ["spend", -95]
+      ]
     },
     {
       "id": "cambio-devolucion",
@@ -109,7 +144,13 @@
     {
       "id": "saldo-derivado",
       "fn": "balanceFromMovements",
-      "args": { "movements": [["base", 100], ["carry", 2], ["spend", -95]] },
+      "args": {
+        "movements": [
+          ["base", 100],
+          ["carry", 2],
+          ["spend", -95]
+        ]
+      },
       "expected": 7
     }
   ]

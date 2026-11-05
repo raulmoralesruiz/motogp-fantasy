@@ -16,11 +16,7 @@
  * por temporada).
  */
 
-import type {
-  ResultBonusCode,
-  ResultEventKind,
-  ResultPenaltyCode,
-} from "@/shared/types";
+import type { ResultBonusCode, ResultEventKind, ResultPenaltyCode } from "@/shared/types";
 
 import type { ResultValues } from "./types";
 
@@ -32,10 +28,24 @@ export const BONUS_CODES_BY_EVENT: Record<ResultEventKind, readonly ResultBonusC
 };
 
 /** Códigos de penalización aplicables por tipo de evento (ADR-0018). */
-export const PENALTY_CODES_BY_EVENT: Record<ResultEventKind, readonly ResultPenaltyCode[]> = {
+export const PENALTY_CODES_BY_EVENT: Record<
+  ResultEventKind,
+  readonly ResultPenaltyCode[]
+> = {
   q2: ["dq"],
   sprint: ["dq", "time-penalty"],
   race: ["dq", "time-penalty"],
+};
+
+/**
+ * Etiquetas en español de los códigos importables (glosario único de la UI):
+ * el operador reconoce el concepto; el código solo viaja en los datos.
+ */
+export const RESULT_CODE_LABELS: Record<ResultBonusCode | ResultPenaltyCode, string> = {
+  pole: "Pole",
+  "fastest-lap": "Vuelta rápida",
+  dq: "Descalificado",
+  "time-penalty": "Penalización de tiempo",
 };
 
 /** Etiqueta en español de un evento de resultados (para mensajes de rechazo). */
@@ -57,7 +67,10 @@ export function resultEventLabel(event: ResultEventKind): string {
  * válida). El servicio agrega los errores de todas las entradas y rechaza
  * la importación de forma atómica (todo o nada).
  */
-export function validateEntryForEvent(entry: ResultValues, event: ResultEventKind): string[] {
+export function validateEntryForEvent(
+  entry: ResultValues,
+  event: ResultEventKind,
+): string[] {
   const errors: string[] = [];
   const label = resultEventLabel(event);
 

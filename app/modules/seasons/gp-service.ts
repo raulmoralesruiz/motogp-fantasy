@@ -43,7 +43,11 @@ import {
 } from "@/shared/validation/seasons";
 
 import { WEEKEND_EVENT_ORDER } from "./calendar-source";
-import { allowedGpStatusTransitions, canTransitionGpStatus } from "./gp-status";
+import {
+  allowedGpStatusTransitions,
+  canTransitionGpStatus,
+  GP_STATUS_LABELS,
+} from "./gp-status";
 import type { AuditMeta } from "./season-service";
 
 export interface GpServiceDeps {
@@ -172,13 +176,6 @@ const EVENT_LABELS: Record<WeekendEventType, string> = {
   q2: "Q2",
   sprint: "sprint",
   race: "carrera",
-};
-
-const STATUS_LABELS: Record<GpStatus, string> = {
-  scheduled: "programado",
-  locked: "bloqueado",
-  finished: "finalizado",
-  cancelled: "cancelado",
 };
 
 export class GpService {
@@ -446,10 +443,10 @@ export class GpService {
         code: "BAD_REQUEST",
         message:
           allowed.length > 0
-            ? `Cambio de estado no válido: desde «${STATUS_LABELS[gp.status]}» solo se puede pasar a ${allowed
-                .map((s) => `«${STATUS_LABELS[s]}»`)
+            ? `Cambio de estado no válido: desde «${GP_STATUS_LABELS[gp.status]}» solo se puede pasar a ${allowed
+                .map((s) => `«${GP_STATUS_LABELS[s]}»`)
                 .join(" o ")}.`
-            : `Cambio de estado no válido: «${STATUS_LABELS[gp.status]}» es un estado terminal.`,
+            : `Cambio de estado no válido: «${GP_STATUS_LABELS[gp.status]}» es un estado terminal.`,
       });
     }
 

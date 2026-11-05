@@ -750,7 +750,7 @@ describe("US-09 · Lineups: composición, coste y cambios (PostgreSQL real)", ()
         ),
       ).rejects.toMatchObject({
         code: "PRECONDITION_FAILED",
-        message: "El GP está cerrado (lockout): no se pueden guardar lineups.",
+        message: "El GP está bloqueado (lockout): no se pueden guardar lineups.",
       });
     } finally {
       // Restaura el estado para el resto de la suite.
@@ -839,7 +839,7 @@ describe("US-09 · Lineups: composición, coste y cambios (PostgreSQL real)", ()
       lineups.save(lineupInput(gp2Id, [r1.id, r2.id], [r3.id, r4.id], ctorA.id, teamA.id)),
     ).rejects.toMatchObject({
       code: "PRECONDITION_FAILED",
-      message: "El GP está cerrado (lockout): no se pueden guardar lineups.",
+      message: "El GP está bloqueado (lockout): no se pueden guardar lineups.",
     });
   });
 
@@ -853,7 +853,7 @@ describe("US-09 · Lineups: composición, coste y cambios (PostgreSQL real)", ()
       lineups.save(lineupInput(gp3Id, [r1.id, r2.id], [r3.id, r4.id], ctorA.id, teamA.id)),
     ).rejects.toMatchObject({
       code: "PRECONDITION_FAILED",
-      message: "El GP está cerrado (lockout): no se pueden guardar lineups.",
+      message: "El GP está bloqueado (lockout): no se pueden guardar lineups.",
     });
   });
 
@@ -933,7 +933,7 @@ describe("US-09 · Lineups: composición, coste y cambios (PostgreSQL real)", ()
     for (const e of attempts) {
       expect(e).toMatchObject({
         code: "PRECONDITION_FAILED",
-        message: "El GP está cerrado (lockout): no se pueden guardar lineups.",
+        message: "El GP está bloqueado (lockout): no se pueden guardar lineups.",
       });
     }
 
@@ -1241,7 +1241,7 @@ describe("US-09 · Lineups: composición, coste y cambios (PostgreSQL real)", ()
       ),
     ).rejects.toMatchObject({
       code: "PRECONDITION_FAILED",
-      message: "El GP está cerrado (lockout): no se pueden guardar lineups.",
+      message: "El GP está bloqueado (lockout): no se pueden guardar lineups.",
     });
   });
 

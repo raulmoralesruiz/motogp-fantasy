@@ -42,7 +42,11 @@ const team = {
   constructorName: "Ducati",
 };
 
-function mockList(hook: unknown, data: unknown, refetch: ReturnType<typeof vi.fn> = vi.fn()) {
+function mockList(
+  hook: unknown,
+  data: unknown,
+  refetch: ReturnType<typeof vi.fn> = vi.fn(),
+) {
   mockResult(hook, {
     data,
     isPending: false,
@@ -80,7 +84,8 @@ describe("MarketSection", () => {
     render(<MarketSection seasons={[season]} />);
     // 3 listas (pilotos/constructores/equipos) + la lista de activos del
     // panel de precios (US-07).
-    expect(screen.getAllByText("Consultando…")).toHaveLength(4);
+    // Pilotos, constructores y equipos (los precios ya no viven aquí).
+    expect(screen.getAllByText("Consultando…")).toHaveLength(3);
   });
 
   it("muestra el error cuando no se pueden cargar los pilotos", () => {
@@ -143,9 +148,15 @@ describe("MarketSection", () => {
     mockList(trpc.market.teams.list.useQuery, []);
     render(<MarketSection seasons={[season]} />);
 
-    expect(screen.getByText("Aún no hay pilotos. Crea el primero abajo.")).toBeInTheDocument();
-    expect(screen.getByText("Aún no hay constructores. Crea el primero abajo.")).toBeInTheDocument();
-    expect(screen.getByText("Aún no hay equipos. Crea el primero abajo.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Aún no hay pilotos. Crea el primero abajo."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Aún no hay constructores. Crea el primero abajo."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Aún no hay equipos. Crea el primero abajo."),
+    ).toBeInTheDocument();
   });
 
   it("refresca las tres listas al crear un activo (onCreated → refetchAll)", async () => {
@@ -165,7 +176,8 @@ describe("MarketSection", () => {
 
     // El formulario llamó a mutate; se invoca el onSuccess capturado
     // (equivalente a la respuesta exitosa del servidor).
-    const options = asMockFn(trpc.market.riders.create.useMutation).mock.calls[0]?.[0] as {
+    const options = asMockFn(trpc.market.riders.create.useMutation).mock
+      .calls[0]?.[0] as {
       onSuccess?: () => void;
     };
     options.onSuccess?.();

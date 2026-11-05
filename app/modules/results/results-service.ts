@@ -40,7 +40,6 @@ import {
   type PrismaClient,
   type Result as DbResult,
   type ResultStatus,
-  type ResultsEventStatus,
   type WeekendEventStatus,
   type WeekendEventType,
 } from "@prisma/client";
@@ -193,8 +192,18 @@ export interface GpEventView {
   orderNum: number;
   /** Estado del evento del fin de semana (scheduled/finished/cancelled). */
   status: WeekendEventStatus;
-  /** Estado de `results_events` (`null` si aún no hay resultados). */
-  resultsStatus: ResultsEventStatus | null;
+  /**
+   * Flag `ResultsEvent.cancelled` (US-18, ADR-0020): el evento no puntúa
+   * (0 para todos) y el recálculo lo salta. Write-once e irreversible.
+   */
+  cancelled: boolean;
+  /**
+   * Flag `ResultsEvent.neutralized` (US-18, ADR-0020): metadatos (se
+   * puntúa con el resultado oficial declarado); no altera la puntuación.
+   */
+  neutralized: boolean;
+  /** Filas de resultado importadas para el evento (0 = sin resultados). */
+  resultCount: number;
 }
 
 /** Fila actual de un evento (pre-carga de la UI de admin). */
@@ -824,21 +833,34 @@ export class ResultsService {
     if (!gp) {
       throw new TRPCError({ code: "NOT_FOUND", message: "El GP no existe." });
     }
-    const [events, resultsEvents] = await Promise.all([
+    const [events, resultsEvents, results] = await Promise.all([
       this.prisma.weekendEvent.findMany({
         where: { gpId: input.gpId, type: { in: ["q2", "sprint", "race"] } },
         orderBy: { orderNum: "asc" },
       }),
       this.prisma.resultsEvent.findMany({ where: { gpId: input.gpId } }),
+      this.prisma.result.findMany({
+        where: { gpId: input.gpId },
+        select: { eventId: true },
+      }),
     ]);
-    const resultsByEvent = new Map(resultsEvents.map((r) => [r.eventId, r.status]));
-    return events.map((e) => ({
-      id: e.id,
-      type: e.type as ResultEventKind,
-      orderNum: e.orderNum,
-      status: e.status,
-      resultsStatus: resultsByEvent.get(e.id) ?? null,
-    }));
+    const flagsByEvent = new Map(resultsEvents.map((r) => [r.eventId, r]));
+    const countByEvent = new Map<string, number>();
+    for (const row of results) {
+      countByEvent.set(row.eventId, (countByEvent.get(row.eventId) ?? 0) + 1);
+    }
+    return events.map((e) => {
+      const flags = flagsByEvent.get(e.id);
+      return {
+        id: e.id,
+        type: e.type as ResultEventKind,
+        orderNum: e.orderNum,
+        status: e.status,
+        cancelled: flags?.cancelled ?? false,
+        neutralized: flags?.neutralized ?? false,
+        resultCount: countByEvent.get(e.id) ?? 0,
+      };
+    });
   }
 
   /**
@@ -2014,6 +2036,8 @@ export class ResultsService {
    * con el resultado oficial declarado (scoring.md §6); flag de metadatos
    * `ResultsEvent.neutralized` que no altera la puntuación pero se versiona
    * y se audita. No-op (sin auditoría) si ya estaba neutralizado.
+   * Rechazo (PRECONDITION_FAILED) si el evento está cancelado: cancelado es
+   * estado terminal (neutralizar un cancelado no tendría efecto).
    */
   async neutralizeEvent(
     gpId: string,
@@ -2071,7 +2095,9 @@ export class ResultsService {
   /**
    * Establece un flag de evento (`cancelled` o `neutralized`) en
    * `results_events` (US-18, ADR-0020). Transacción con `FOR UPDATE` del GP;
-   * no-op (sin auditoría) si el flag ya estaba puesto.
+   * no-op (sin auditoría) si el flag ya estaba puesto; neutralizar sobre
+   * cancelado se rechaza (cancelado es estado terminal: addendum
+   * 2026-11-05).
    */
   private async setEventFlag(
     gpId: string,
@@ -2107,6 +2133,17 @@ export class ResultsService {
         where: { gpId_eventId: { gpId, eventId } },
       });
       const isCancelled = flag.cancelled === true;
+      // Cancelado es estado terminal (ADR-0020, addendum 2026-11-05): el
+      // evento queda excluido del recálculo, así que neutralizarlo no
+      // tendría efecto. El servidor lo rechaza — la UI solo evita ofrecerlo.
+      if (!isCancelled && current?.cancelled) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message:
+            "El evento está cancelado (estado terminal): queda excluido del " +
+            "recálculo, así que neutralizarlo no tendría efecto.",
+        });
+      }
       const target = isCancelled ? current?.cancelled : current?.neutralized;
       if (target) {
         return { cancelled: isCancelled, neutralized: !isCancelled, noop: true };

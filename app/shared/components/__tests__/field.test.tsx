@@ -5,13 +5,24 @@ import { Field } from "../field";
 import { render, screen } from "../../../../test/rtl";
 
 describe("Field", () => {
-  it("renderiza etiqueta + input; el id se deriva de name", () => {
+  it("renderiza etiqueta + input con id único por instancia", () => {
     render(<Field label="Email" name="email" type="email" placeholder="tu@email.com" />);
     const input = screen.getByLabelText("Email");
     expect(input).toHaveAttribute("name", "email");
-    expect(input).toHaveAttribute("id", "email");
     expect(input).toHaveAttribute("type", "email");
     expect(input).toHaveAttribute("placeholder", "tu@email.com");
+    expect(input.id).not.toBe("");
+  });
+
+  it("dos campos con el mismo name no comparten id (las etiquetas no se cruzan)", () => {
+    render(
+      <>
+        <Field label="Nombre" name="name" />
+        <Field label="Nombre" name="name" />
+      </>,
+    );
+    const [first, second] = screen.getAllByLabelText("Nombre");
+    expect(first?.id).not.toBe(second?.id);
   });
 
   it("usa el id explícito si se pasa", () => {

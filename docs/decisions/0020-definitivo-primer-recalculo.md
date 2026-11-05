@@ -218,3 +218,40 @@ semánticas concretas que US-18 debe implementar:
 - **UI (admin):** botón "Marcar definitivo" + acciones de evento + badge de
   estado (React Testing Library).
 - **Cobertura:** mantener el gate global fusionado 99.9% (T-24).
+
+## Addendum (2026-11-05)
+
+**Hallazgo.** El enum `ResultsEventStatus` (`scheduled`/`finished`/
+`neutralized`/`cancelled`) nunca escribía `cancelled` ni `neutralized`: la
+única escritura era `finished` (importación) y el default `scheduled`. Los
+flags booleanos `results_events.cancelled`/`neutralized` son la **fuente de
+verdad**; la vista `GpEventView.resultsStatus` era información muerta (los
+tests de UI la mockeaban con valores que el servicio jamás produce,
+enmascarando que la "máquina de estados" de la UI ofrecía la transición
+cancelar → neutralizar, un no-op: el cancelado queda excluido del
+recálculo, así que neutralizar después no tiene ningún efecto).
+
+**Decisión.**
+
+1. `GpEventView` expone los flags reales (`cancelled`, `neutralized`) más
+   `resultCount` (filas importadas del evento) y deja de exponer
+   `resultsStatus`.
+2. `cancelado` es **estado terminal**: la UI solo ofrece cancelar cuando
+   `!cancelled`, y solo ofrece neutralizar cuando `!cancelled &&
+   !neutralized`; el cancelado muestra "sin transiciones".
+3. El servidor también lo impone (el cliente es una vista):
+   `neutralizeEvent` sobre un evento cancelado se rechaza con
+   `PRECONDITION_FAILED` (rechazo auditado: no hay escritura, no hay
+   auditoría). `cancelEvent` sobre cancelado sigue siendo no-op idempotente.
+4. Los diálogos de cancelar/neutralizar cuantifican el impacto con el
+   `resultCount` del evento ("Afecta a las N fila(s)…" / "aún no tiene
+   resultados importados").
+
+**Sin cambio de reglas.** La semántica de `scoring.md` §6 (cancelada → 0
+para todos; neutralizada → resultado oficial declarado, flag de metadatos)
+no se modifica; este addendum documenta el estado terminal y fija los flags
+como fuente de verdad de la UI.
+
+**Tests.** UI de admin reescrita sobre flags reales (máquina de estados,
+diálogos cuantificados); integración: `neutralizeEvent` sobre cancelado →
+`PRECONDITION_FAILED` + flags intactos + sin auditoría de neutralización.

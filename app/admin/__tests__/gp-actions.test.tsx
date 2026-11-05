@@ -58,7 +58,9 @@ describe("GpActions", () => {
   it("solo ofrece las transiciones válidas desde el estado actual", () => {
     render(<GpActions gp={gpFixture()} onChanged={vi.fn()} />);
 
-    expect(screen.getByRole("option", { name: "bloqueado" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "bloqueado (lockout)" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "cancelado" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "finalizado" })).not.toBeInTheDocument();
   });
@@ -76,6 +78,8 @@ describe("GpActions", () => {
     const user = userEvent.setup();
     await user.selectOptions(screen.getByLabelText("Cambiar estado"), "locked");
     await user.click(screen.getByRole("button", { name: "Cambiar" }));
+    // La confirmación con impacto nombra la transición antes de mutar.
+    await user.click(screen.getByRole("button", { name: "Sí, cambiar el estado" }));
     expect(mutate).toHaveBeenCalledWith({ gpId: "gp1", status: "locked" });
 
     const options = asMockFn(trpc.seasons.gps.updateStatus.useMutation).mock
@@ -109,6 +113,19 @@ describe("GpActions", () => {
       target: { value: "2026-04-19T12:00" },
     });
     await user.click(screen.getByRole("button", { name: "Fijar" }));
+
+    // Fijar el lockout bloquea la edición de todos los jugadores: la
+    // confirmación nombra el GP, la fecha y el alcance del bloqueo.
+    expect(
+      screen.getByRole("heading", {
+        name: "Fijar el lockout de R1 · GP de España",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/no podrán editar sus lineups de este GP/),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Sí, fijar el lockout" }));
     expect(mutate).toHaveBeenCalledWith({
       gpId: "gp1",
       lockoutAt: new Date("2026-04-19T12:00"),
@@ -121,6 +138,26 @@ describe("GpActions", () => {
     });
     expect(onChanged).toHaveBeenCalledTimes(1);
     expect(screen.getByLabelText("Lockout")).toHaveValue("");
+  });
+
+  it("no fija el lockout si se cancela la confirmación", async () => {
+    const mutate = vi.fn();
+    mockResult(trpc.seasons.gps.updateLockout.useMutation, {
+      mutate,
+      isPending: false,
+      isError: false,
+    });
+    render(<GpActions gp={gpFixture()} onChanged={vi.fn()} />);
+
+    const user = userEvent.setup();
+    fireEvent.change(screen.getByLabelText("Lockout"), {
+      target: { value: "2026-04-19T12:00" },
+    });
+    await user.click(screen.getByRole("button", { name: "Fijar" }));
+    await user.click(screen.getByRole("button", { name: "No, volver" }));
+
+    expect(mutate).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("borra el lockout cuando ya está fijado", async () => {
@@ -139,6 +176,8 @@ describe("GpActions", () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Borrar" }));
+    // Quitar el lockout reabre la edición de lineups: se confirma con impacto.
+    await user.click(screen.getByRole("button", { name: "Sí, quitar el lockout" }));
     expect(mutate).toHaveBeenCalledWith({ gpId: "gp1", lockoutAt: null });
   });
 

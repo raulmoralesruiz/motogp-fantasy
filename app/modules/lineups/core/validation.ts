@@ -11,15 +11,9 @@
  * español (AGENTS.md §2) para el mensaje de rechazo.
  */
 
-import type {
-  ConcentrationLimits,
-  LineupSlots,
-  RiderAffiliation,
-} from "./types";
+import type { ConcentrationLimits, LineupSlots, RiderAffiliation } from "./types";
 
-export type LineupValidation =
-  | { ok: true }
-  | { ok: false; reasons: string[] };
+export type LineupValidation = { ok: true } | { ok: false; reasons: string[] };
 
 export function validateLineup(
   slots: LineupSlots,

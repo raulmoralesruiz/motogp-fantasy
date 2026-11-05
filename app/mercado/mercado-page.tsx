@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { Alert } from "@/shared/components";
+import { Alert, RowAction } from "@/shared/components";
 import { trpc } from "@/trpc/client";
 
 /** Tipo de activo (misma enumeración que `AssetType` en `shared/validation/market`). */
@@ -22,7 +22,10 @@ interface ChartPoint {
  * AGENTS.md §8). Vacío → sin filtro; valor no vacío inválido → error local
  * y el filtro NO se envía.
  */
-function parsePriceFilter(value: string, label: string): {
+function parsePriceFilter(
+  value: string,
+  label: string,
+): {
   number?: number;
   error?: string;
 } {
@@ -257,7 +260,11 @@ export default function MercadoPage() {
       <h2>Temporada y GP</h2>
       <div className="field">
         <label htmlFor="season">Temporada</label>
-        <select id="season" value={seasonId} onChange={(e) => selectSeason(e.target.value)}>
+        <select
+          id="season"
+          value={seasonId}
+          onChange={(e) => selectSeason(e.target.value)}
+        >
           <option value="">— Temporada —</option>
           {seasons.data.map((s) => (
             <option key={s.id} value={s.id}>
@@ -279,9 +286,7 @@ export default function MercadoPage() {
           </select>
         </div>
       )}
-      {gpId === "" && (
-        <p className="muted">Selecciona un GP para explorar el mercado.</p>
-      )}
+      {gpId === "" && <p className="muted">Selecciona un GP para explorar el mercado.</p>}
 
       {gpId !== "" && (
         <div>
@@ -378,55 +383,53 @@ export default function MercadoPage() {
             <Alert variant="error">No se pudo cargar el mercado del GP.</Alert>
           )}
           {list.data && list.data.length > 0 && (
-            <table className="results-table">
-              <thead>
-                <tr>
-                  <th scope="col">Nombre</th>
-                  <th scope="col">Precio</th>
-                  <th scope="col">Tendencia</th>
-                  <th scope="col">Mini-histórico</th>
-                  <th scope="col">Lineups</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.data.map((a) => (
-                  <tr key={a.assetId}>
-                    <td>
-                      <button
-                        type="button"
-                        className="row-action"
-                        onClick={() => setSelected({ assetId: a.assetId })}
-                      >
-                        {a.name}
-                      </button>
-                      {assetType === "rider" &&
-                        (a.constructorName !== null || a.teamName !== null) && (
-                          <div className="muted">
-                            {[a.constructorName, a.teamName]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </div>
-                        )}
-                    </td>
-                    <td>
-                      {a.currentPrice === null ? (
-                        <span className="muted">—</span>
-                      ) : (
-                        a.currentPrice
-                      )}
-                      {a.isP0Fallback && <span className="muted"> (P0)</span>}
-                    </td>
-                    <td>
-                      <TrendBadge trend={a.trend} />
-                    </td>
-                    <td>
-                      <Sparkline points={a.miniHistory.map((p) => p.price)} />
-                    </td>
-                    <td>{a.popularity}</td>
+            <div className="table-scroll">
+              <table className="results-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Nombre</th>
+                    <th scope="col">Precio</th>
+                    <th scope="col">Tendencia</th>
+                    <th scope="col">Mini-histórico</th>
+                    <th scope="col">Lineups</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {list.data.map((a) => (
+                    <tr key={a.assetId}>
+                      <td>
+                        <RowAction onClick={() => setSelected({ assetId: a.assetId })}>
+                          {a.name}
+                        </RowAction>
+                        {assetType === "rider" &&
+                          (a.constructorName !== null || a.teamName !== null) && (
+                            <div className="muted">
+                              {[a.constructorName, a.teamName]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </div>
+                          )}
+                      </td>
+                      <td>
+                        {a.currentPrice === null ? (
+                          <span className="muted">—</span>
+                        ) : (
+                          a.currentPrice
+                        )}
+                        {a.isP0Fallback && <span className="muted"> (P0)</span>}
+                      </td>
+                      <td>
+                        <TrendBadge trend={a.trend} />
+                      </td>
+                      <td>
+                        <Sparkline points={a.miniHistory.map((p) => p.price)} />
+                      </td>
+                      <td>{a.popularity}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
           {list.data && list.data.length === 0 && (
             <p className="muted">Ningún activo coincide con los filtros.</p>
@@ -478,35 +481,31 @@ export default function MercadoPage() {
                     }))}
                   />
                   <h4>Historial completo</h4>
-                  <table className="results-table">
-                    <thead>
-                      <tr>
-                        <th scope="col">Ronda</th>
-                        <th scope="col">GP</th>
-                        <th scope="col">Precio</th>
-                        <th scope="col">Motivo</th>
-                        <th scope="col">Fecha</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {detail.data.history.map((h) => (
-                        <tr key={h.id}>
-                          <td>{h.gpRound === null ? "P0" : `J${h.gpRound}`}</td>
-                          <td>{h.gpName ?? "—"}</td>
-                          <td>{h.price}</td>
-                          <td>{h.reason === "formula" ? "Fórmula" : "Manual"}</td>
-                          <td>{h.createdAt.toISOString().slice(0, 10)}</td>
+                  <div className="table-scroll">
+                    <table className="results-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">Ronda</th>
+                          <th scope="col">GP</th>
+                          <th scope="col">Precio</th>
+                          <th scope="col">Motivo</th>
+                          <th scope="col">Fecha</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <button
-                    type="button"
-                    className="row-action"
-                    onClick={() => setSelected(null)}
-                  >
-                    Cerrar
-                  </button>
+                      </thead>
+                      <tbody>
+                        {detail.data.history.map((h) => (
+                          <tr key={h.id}>
+                            <td>{h.gpRound === null ? "P0" : `J${h.gpRound}`}</td>
+                            <td>{h.gpName ?? "—"}</td>
+                            <td>{h.price}</td>
+                            <td>{h.reason === "formula" ? "Fórmula" : "Manual"}</td>
+                            <td>{h.createdAt.toISOString().slice(0, 10)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <RowAction onClick={() => setSelected(null)}>Cerrar</RowAction>
                 </div>
               )}
             </div>

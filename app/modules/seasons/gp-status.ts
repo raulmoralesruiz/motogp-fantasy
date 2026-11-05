@@ -24,6 +24,14 @@ export const GP_STATUSES = ["scheduled", "locked", "finished", "cancelled"] as c
 
 export type GpStatusValue = (typeof GP_STATUSES)[number];
 
+/** Etiquetas en español del estado de un GP (glosario único de la UI). */
+export const GP_STATUS_LABELS: Record<GpStatusValue, string> = {
+  scheduled: "programado",
+  locked: "bloqueado (lockout)",
+  finished: "finalizado",
+  cancelled: "cancelado",
+};
+
 /**
  * Transiciones válidas por estado de origen (CA US-05 + US-13).
  *

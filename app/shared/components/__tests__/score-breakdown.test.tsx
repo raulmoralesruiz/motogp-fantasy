@@ -64,7 +64,14 @@ const SCORE: MyScoreView = {
       riderName: "Piloto E",
       weight: 0.5,
       points: 8.5,
-      breakdown: { q2: 5, sprint: 2, mainRace: 10, bonuses: [], penalties: [], total: 17 },
+      breakdown: {
+        q2: 5,
+        sprint: 2,
+        mainRace: 10,
+        bonuses: [],
+        penalties: [],
+        total: 17,
+      },
     },
     {
       riderId: "r5",

@@ -95,6 +95,8 @@ describe("barrels de módulos (Fase 0, T-03)", () => {
       "PULSELIVE_PROBE_ENDPOINT",
       "PulseLiveResultsSource",
       "PulseLiveSourceError",
+      "RESULT_CODE_LABELS",
+      "RESULT_STATUS_LABELS",
       "ResultsNormalizationError",
       "ResultsService",
       "SourceNotLinkedError",

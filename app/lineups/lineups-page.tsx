@@ -69,10 +69,7 @@ export default function LineupsPage() {
       prefilledFor.current = gpId;
       setDraft({
         gold: [lineup.data.slots.gold[0] ?? "", lineup.data.slots.gold[1] ?? ""],
-        silver: [
-          lineup.data.slots.silver[0] ?? "",
-          lineup.data.slots.silver[1] ?? "",
-        ],
+        silver: [lineup.data.slots.silver[0] ?? "", lineup.data.slots.silver[1] ?? ""],
         constructorId: lineup.data.slots.constructorId ?? "",
         teamId: lineup.data.slots.teamId ?? "",
       });
@@ -114,9 +111,7 @@ export default function LineupsPage() {
       if (!rider || rider.price === null) return null;
       values.push(rider.price);
     }
-    const ctor = builder.data?.constructors.find(
-      (c) => c.id === draft.constructorId,
-    );
+    const ctor = builder.data?.constructors.find((c) => c.id === draft.constructorId);
     if (!ctor || ctor.price === null) return null;
     const team = builder.data?.teams.find((t) => t.id === draft.teamId);
     if (!team || team.price === null) return null;
@@ -125,8 +120,7 @@ export default function LineupsPage() {
 
   const gpClosed = builder.data
     ? builder.data.gp.status === "locked" ||
-      (builder.data.gp.lockoutAt !== null &&
-        new Date() >= builder.data.gp.lockoutAt)
+      (builder.data.gp.lockoutAt !== null && new Date() >= builder.data.gp.lockoutAt)
     : false;
 
   const canSubmit =
@@ -160,12 +154,7 @@ export default function LineupsPage() {
     value: string,
     onChange: (value: string) => void,
   ) {
-    const taken = [
-      draft.gold[0],
-      draft.gold[1],
-      draft.silver[0],
-      draft.silver[1],
-    ];
+    const taken = [draft.gold[0], draft.gold[1], draft.silver[0], draft.silver[1]];
     return (
       <div className="field">
         <label htmlFor={id}>{label}</label>
@@ -173,8 +162,7 @@ export default function LineupsPage() {
           <option value="">— Piloto —</option>
           {riders.map((r) => {
             const disabled =
-              (taken.includes(r.riderId) && value !== r.riderId) ||
-              r.price === null;
+              (taken.includes(r.riderId) && value !== r.riderId) || r.price === null;
             return (
               <option key={r.riderId} value={r.riderId} disabled={disabled}>
                 {r.name} ({r.teamName})
@@ -228,9 +216,7 @@ export default function LineupsPage() {
           </select>
         </div>
       )}
-      {gpId === "" && (
-        <p className="muted">Selecciona un GP para componer tu lineup.</p>
-      )}
+      {gpId === "" && <p className="muted">Selecciona un GP para componer tu lineup.</p>}
 
       {gpId !== "" && (builder.isPending || lineup.isPending) && (
         <p className="muted">Consultando…</p>
@@ -243,7 +229,7 @@ export default function LineupsPage() {
         <div>
           {gpClosed && (
             <Alert variant="error">
-              El GP está cerrado (lockout): no se pueden guardar lineups.
+              El GP está bloqueado (lockout): no se pueden guardar lineups.
             </Alert>
           )}
           <h2>Lineup — {builder.data.gp.name}</h2>
@@ -291,7 +277,9 @@ export default function LineupsPage() {
               <select
                 id="constructor"
                 value={draft.constructorId}
-                onChange={(e) => setDraft((d) => ({ ...d, constructorId: e.target.value }))}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...d, constructorId: e.target.value }))
+                }
               >
                 <option value="">— Constructor —</option>
                 {builder.data.constructors.map((c) => (

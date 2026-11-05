@@ -41,11 +41,7 @@ describe("validateLineup", () => {
   });
 
   it("3 oro → rechazado con motivo", () => {
-    const r = validateLineup(
-      { ...valid, gold: ["r1", "r6", "r5"] },
-      affs,
-      limitsLenient,
-    );
+    const r = validateLineup({ ...valid, gold: ["r1", "r6", "r5"] }, affs, limitsLenient);
     expect(r).toMatchObject({ ok: false });
     if (!r.ok) {
       expect(r.reasons).toEqual([
@@ -77,11 +73,7 @@ describe("validateLineup", () => {
   });
 
   it("falta el constructor → rechazado con motivo", () => {
-    const r = validateLineup(
-      { ...valid, constructorId: null },
-      affs,
-      limitsLenient,
-    );
+    const r = validateLineup({ ...valid, constructorId: null }, affs, limitsLenient);
     if (!r.ok) {
       expect(r.reasons).toEqual(["Falta el constructor del lineup"]);
     }
@@ -95,46 +87,28 @@ describe("validateLineup", () => {
   });
 
   it("piloto duplicado entre oro y plata → rechazado con motivo", () => {
-    const r = validateLineup(
-      { ...valid, silver: ["r1", "r8"] },
-      affs,
-      limitsLenient,
-    );
+    const r = validateLineup({ ...valid, silver: ["r1", "r8"] }, affs, limitsLenient);
     if (!r.ok) {
       expect(r.reasons).toEqual(["Piloto duplicado en el lineup: r1"]);
     }
   });
 
   it("piloto duplicado dentro de oro → rechazado con motivo", () => {
-    const r = validateLineup(
-      { ...valid, gold: ["r1", "r1"] },
-      affs,
-      limitsLenient,
-    );
+    const r = validateLineup({ ...valid, gold: ["r1", "r1"] }, affs, limitsLenient);
     if (!r.ok) {
       expect(r.reasons).toEqual(["Piloto duplicado en el lineup: r1"]);
     }
   });
 
   it("piloto sin afiliación para el GP → rechazado con motivo", () => {
-    const r = validateLineup(
-      { ...valid, gold: ["r1", "r99"] },
-      affs,
-      limitsLenient,
-    );
+    const r = validateLineup({ ...valid, gold: ["r1", "r99"] }, affs, limitsLenient);
     if (!r.ok) {
-      expect(r.reasons).toEqual([
-        "El piloto r99 no tiene afiliación para este GP",
-      ]);
+      expect(r.reasons).toEqual(["El piloto r99 no tiene afiliación para este GP"]);
     }
   });
 
   it("concentración por constructor (3 de c1, máx 2) → rechazado", () => {
-    const r = validateLineup(
-      { ...valid, silver: ["r2", "r4"] },
-      affs,
-      limitsReal,
-    );
+    const r = validateLineup({ ...valid, silver: ["r2", "r4"] }, affs, limitsReal);
     if (!r.ok) {
       expect(r.reasons).toEqual([
         "Concentración excedida: 3 pilotos del constructor c1 (máx 2)",

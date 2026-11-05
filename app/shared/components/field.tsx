@@ -1,4 +1,4 @@
-import { type InputHTMLAttributes } from "react";
+import { type InputHTMLAttributes, useId } from "react";
 
 interface FieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "name"> {
   label: string;
@@ -9,9 +9,10 @@ interface FieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "name">
 /**
  * Campo de formulario de texto: etiqueta + input + mensaje de error.
  *
- * El `id` del input se deriva de `name` si no se pasa uno explícito.
- * El checkbox de términos (registro) sigue inline: una sola aparición,
- * aún no cumple la regla de la tercera aparición.
+ * El `id` del input es único por instancia (`useId`) salvo que se pase uno
+ * explícito: derivarlo del `name` cruzaba etiquetas entre formularios cuando
+ * varios convivían en el mismo DOM (p. ej. dos campos «Nombre» con
+ * `htmlFor="name"` apuntando al primer input del documento).
  */
 export function Field({
   label,
@@ -21,7 +22,8 @@ export function Field({
   type = "text",
   ...inputProps
 }: FieldProps) {
-  const inputId = id ?? name;
+  const generatedId = useId();
+  const inputId = id ?? generatedId;
   return (
     <div className="field">
       <label htmlFor={inputId}>{label}</label>

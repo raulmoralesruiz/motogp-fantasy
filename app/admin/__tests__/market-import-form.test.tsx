@@ -54,8 +54,20 @@ const market: NormalizedMarket = {
     },
   ],
   riders: [
-    { sourceId: "rider-source-id-1", name: "Marc", surname: "Marquez", number: 93, countryIso: "ES" },
-    { sourceId: "rider-source-id-2", name: "Jorge", surname: "Martin", number: 89, countryIso: null },
+    {
+      sourceId: "rider-source-id-1",
+      name: "Marc",
+      surname: "Marquez",
+      number: 93,
+      countryIso: "ES",
+    },
+    {
+      sourceId: "rider-source-id-2",
+      name: "Jorge",
+      surname: "Martin",
+      number: 89,
+      countryIso: null,
+    },
   ],
   affiliations: [
     { riderSourceId: "rider-source-id-1", teamSourceId: "t1", seasonYear: 2026 },
@@ -186,10 +198,10 @@ describe("MarketImportForm", () => {
       "2 mapeos de piloto creados, 0 actualizados, 0 ya correctos",
     );
     // `onSuccess` se pasa a `useMutation`; se invoca como en el resto de tests.
-    const options =
-      asMockFn(trpc.market.market.import.useMutation).mock.calls[0]?.[0] as {
-        onSuccess?: () => void;
-      };
+    const options = asMockFn(trpc.market.market.import.useMutation).mock
+      .calls[0]?.[0] as {
+      onSuccess?: () => void;
+    };
     options.onSuccess?.();
     expect(onImported).toHaveBeenCalledTimes(1);
   });

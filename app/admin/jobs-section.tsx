@@ -34,7 +34,11 @@ function formatDateTime(iso: string): string {
 }
 
 /** Contadores de una cola (fila del estado). */
-function QueueCounts({ name, counts, lastFailed }: {
+function QueueCounts({
+  name,
+  counts,
+  lastFailed,
+}: {
   name: string;
   counts: {
     waiting: number;
@@ -72,10 +76,10 @@ function QueueCounts({ name, counts, lastFailed }: {
       </ul>
       {lastFailed && (
         <Alert variant="warning">
-          Último fallo: «{lastFailed.name}» —{" "}
-          {lastFailed.failedReason ?? "sin motivo"}
-          {lastFailed.failedAt ? ` (${formatDateTime(lastFailed.failedAt)})` : ""}{" "}
-          tras {lastFailed.attemptsMade} intento(s).
+          Último fallo: «{lastFailed.name}» — {lastFailed.failedReason ?? "sin motivo"}
+          {lastFailed.failedAt
+            ? ` (${formatDateTime(lastFailed.failedAt)})`
+            : ""} tras {lastFailed.attemptsMade} intento(s).
         </Alert>
       )}
     </div>
@@ -96,9 +100,7 @@ export default function JobsSection() {
     try {
       setProbe(await checkSource.mutateAsync());
     } catch (error) {
-      setProbeError(
-        error instanceof Error ? error.message : String(error),
-      );
+      setProbeError(error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -107,14 +109,13 @@ export default function JobsSection() {
   }
   if (status.isError) {
     return (
-      <p className="bad">
+      <Alert variant="error">
         No se pudo cargar el estado de los jobs: {status.error.message}
-      </p>
+      </Alert>
     );
   }
 
-  const { queues, activeAlerts, probe: probeState, sentryEnabled } =
-    status.data;
+  const { queues, activeAlerts, probe: probeState, sentryEnabled } = status.data;
 
   return (
     <div style={{ display: "grid", gap: "1rem" }}>
@@ -145,8 +146,7 @@ export default function JobsSection() {
             <li>
               última comprobación:{" "}
               <strong>{formatDateTime(probeState.lastAttemptAt)}</strong>
-              {probeState.lastLatencyMs != null &&
-                ` (${probeState.lastLatencyMs} ms)`}
+              {probeState.lastLatencyMs != null && ` (${probeState.lastLatencyMs} ms)`}
             </li>
             <li>
               fallos consecutivos: <strong>{probeState.consecutiveFailures}</strong>
@@ -174,8 +174,8 @@ export default function JobsSection() {
               {activeAlerts.map((alert) => (
                 <li key={`${alert.gpId}:${alert.event}`}>
                   <strong>{resultEventLabel(alert.event)}</strong> — GP{" "}
-                  <code>{alert.gpId.slice(0, 8)}</code>:{" "}
-                  {alert.consecutiveFailures} fallos
+                  <code>{alert.gpId.slice(0, 8)}</code>: {alert.consecutiveFailures}{" "}
+                  fallos
                   {alert.lastError ? (
                     <>
                       {" "}
@@ -192,7 +192,14 @@ export default function JobsSection() {
           </p>
         )}
 
-        <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.75rem", alignItems: "center" }}>
+        <div
+          style={{
+            marginTop: "0.75rem",
+            display: "flex",
+            gap: "0.75rem",
+            alignItems: "center",
+          }}
+        >
           <Button
             type="button"
             onClick={() => void handleProbe()}
@@ -209,9 +216,7 @@ export default function JobsSection() {
               {formatDateTime(probe.probedAt.toISOString())}).
             </Alert>
           ) : (
-            <Alert variant="error">
-              PulseLive no responde: {probe.error}
-            </Alert>
+            <Alert variant="error">PulseLive no responde: {probe.error}</Alert>
           ))}
       </div>
 
@@ -219,13 +224,13 @@ export default function JobsSection() {
         <h3>Sentry (errores)</h3>
         {sentryEnabled ? (
           <Alert variant="success">
-            Activo: los errores de la web, el worker y los jobs llegan al
-            proyecto de Sentry (DSN fijado).
+            Activo: los errores de la web, el worker y los jobs llegan al proyecto de
+            Sentry (DSN fijado).
           </Alert>
         ) : (
           <Alert variant="info">
-            Desactivado: fija <code>NEXT_PUBLIC_SENTRY_DSN</code> y haz build
-            para activarlo (ADR-0036).
+            Desactivado: fija <code>NEXT_PUBLIC_SENTRY_DSN</code> y haz build para
+            activarlo.
           </Alert>
         )}
       </div>

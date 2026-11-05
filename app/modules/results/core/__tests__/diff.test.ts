@@ -49,8 +49,16 @@ describe("sameResultValues — comparación de valores", () => {
   });
 
   it("mismos códigos en distinto orden → true (comparación por conjunto)", () => {
-    const a: ResultValues = { ...r1, penalties: ["dq", "time-penalty"], bonuses: ["fastest-lap"] };
-    const b: ResultValues = { ...r1, penalties: ["time-penalty", "dq"], bonuses: ["fastest-lap"] };
+    const a: ResultValues = {
+      ...r1,
+      penalties: ["dq", "time-penalty"],
+      bonuses: ["fastest-lap"],
+    };
+    const b: ResultValues = {
+      ...r1,
+      penalties: ["time-penalty", "dq"],
+      bonuses: ["fastest-lap"],
+    };
     expect(sameResultValues(a, b)).toBe(true);
   });
 

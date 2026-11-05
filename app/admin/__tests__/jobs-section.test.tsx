@@ -140,9 +140,7 @@ describe("JobsSection (T-14, ADR-0036)", () => {
     });
     render(<JobsSection />);
 
-    expect(
-      screen.getByText(/Sin alertas activas/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Sin alertas activas/)).toBeInTheDocument();
     expect(
       screen.queryByText("Alertas activas (umbral alcanzado)"),
     ).not.toBeInTheDocument();
@@ -246,9 +244,7 @@ describe("JobsSection (T-14, ADR-0036)", () => {
       });
 
       expect(mutateAsync).toHaveBeenCalledTimes(1);
-      expect(
-        screen.getByText(/PulseLive responde/),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/PulseLive responde/)).toBeInTheDocument();
       expect(screen.getByText(/95 ms/)).toBeInTheDocument();
     });
 
@@ -272,9 +268,7 @@ describe("JobsSection (T-14, ADR-0036)", () => {
       });
 
       expect(mutateAsync).toHaveBeenCalledTimes(1);
-      expect(
-        screen.getByText(/PulseLive no responde/),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/PulseLive no responde/)).toBeInTheDocument();
       expect(screen.getByText(/fetch failed/)).toBeInTheDocument();
     });
 
@@ -293,9 +287,7 @@ describe("JobsSection (T-14, ADR-0036)", () => {
         await fireEvent.click(screen.getByText("Comprobar fuente ahora"));
       });
 
-      expect(
-        screen.getByText("No se pudo conectar con la API"),
-      ).toBeInTheDocument();
+      expect(screen.getByText("No se pudo conectar con la API")).toBeInTheDocument();
     });
   });
 });

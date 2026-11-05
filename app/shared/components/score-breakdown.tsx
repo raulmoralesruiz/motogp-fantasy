@@ -78,9 +78,9 @@ export function ScoreBreakdown({ score }: { score: MyScoreView }) {
     <>
       {score.status === "provisional" && (
         <Alert variant="info">
-          <strong>Puntuación provisional</strong>: calculada con los resultados
-          importados hasta ahora ({eventsLabel(score.eventsIncluded)}). Se
-          confirmará cuando el GP se marque definitivo.
+          <strong>Puntuación provisional</strong>: calculada con los resultados importados
+          hasta ahora ({eventsLabel(score.eventsIncluded)}). Se confirmará cuando el GP se
+          marque definitivo.
         </Alert>
       )}
       <h3>Oro</h3>
