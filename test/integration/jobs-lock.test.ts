@@ -42,6 +42,7 @@ function makeGatedPriceService() {
       unchanged: 0,
       skippedNoOpening: 0,
       skippedLocked: false,
+      changes: [],
     };
   });
   const service = { applyFormulaForGp: apply } as unknown as PriceService;

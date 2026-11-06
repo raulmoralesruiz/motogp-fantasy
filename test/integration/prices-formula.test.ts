@@ -267,6 +267,39 @@ describe("US-08 · Fórmula de precios y ajuste manual (PostgreSQL real)", () =>
       unchanged: 0,
       skippedNoOpening: 5, // los 5 activos sin P0
       skippedLocked: false,
+      // Diff antes → después (P2-2): los 3 activos creados, sin precio previo.
+      changes: [
+        {
+          gpRound: 2,
+          assetType: "rider",
+          assetId: r1Id,
+          assetName: world.riders[0].name,
+          previousPrice: null,
+          newPrice: 20,
+          reason: "formula",
+          rulesVersion: "pricing-v1",
+        },
+        {
+          gpRound: 2,
+          assetType: "constructor",
+          assetId: world.ctor.id,
+          assetName: world.ctor.name,
+          previousPrice: null,
+          newPrice: 14.69,
+          reason: "formula",
+          rulesVersion: "pricing-v1",
+        },
+        {
+          gpRound: 2,
+          assetType: "team",
+          assetId: world.team.id,
+          assetName: world.team.name,
+          previousPrice: null,
+          newPrice: 11.75,
+          reason: "formula",
+          rulesVersion: "pricing-v1",
+        },
+      ],
     });
 
     // Fila de r1: 20, motivo formula, rulesVersion pricing-v1, createdBy null.
@@ -306,6 +339,19 @@ describe("US-08 · Fórmula de precios y ajuste manual (PostgreSQL real)", () =>
     const result = await market.prices.applyFormula({ gpId: gp1Id });
     expect(result).toMatchObject({ created: 0, updated: 3, unchanged: 0 });
 
+    // Diff antes → después (P2-2): correcciones con precio previo.
+    expect(result.changes).toHaveLength(3);
+    expect(result.changes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          assetId: r1Id,
+          assetName: world.riders[0].name,
+          previousPrice: 20,
+          newPrice: 18.83,
+        }),
+      ]),
+    );
+
     // Valores corregidos: r1 18.83, ctor 14.25, team 11.40.
     expect(Number((await priceRow("rider", r1Id, gp2Id))!.price)).toBe(18.83);
     expect(Number((await priceRow("constructor", world.ctor.id, gp2Id))!.price)).toBe(14.25);
@@ -334,6 +380,7 @@ describe("US-08 · Fórmula de precios y ajuste manual (PostgreSQL real)", () =>
       unchanged: 0,
       skippedNoOpening: 0,
       skippedLocked: false,
+      changes: [],
     });
   });
 

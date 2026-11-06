@@ -118,10 +118,10 @@ export default function JobsSection() {
   const { queues, activeAlerts, probe: probeState, sentryEnabled } = status.data;
 
   return (
-    <div style={{ display: "grid", gap: "1rem" }}>
+    <div className="stack">
       <div>
         <h3>Colas de jobs (BullMQ)</h3>
-        <div style={{ display: "grid", gap: "1rem" }}>
+        <div className="stack">
           {queues.map((queue) => (
             <QueueCounts
               key={queue.name}
@@ -168,7 +168,7 @@ export default function JobsSection() {
         )}
 
         {activeAlerts.length > 0 ? (
-          <div style={{ marginTop: "0.5rem" }}>
+          <div>
             <h4>Alertas activas (umbral alcanzado)</h4>
             <ul className="status">
               {activeAlerts.map((alert) => (
@@ -187,19 +187,12 @@ export default function JobsSection() {
             </ul>
           </div>
         ) : (
-          <p className="muted" style={{ marginTop: "0.5rem" }}>
+          <p className="muted spaced">
             Sin alertas activas (ningún auto-import por encima del umbral).
           </p>
         )}
 
-        <div
-          style={{
-            marginTop: "0.75rem",
-            display: "flex",
-            gap: "0.75rem",
-            alignItems: "center",
-          }}
-        >
+        <div className="action-row">
           <Button
             type="button"
             onClick={() => void handleProbe()}

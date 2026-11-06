@@ -219,6 +219,14 @@ function mountFormulaScenario(
       return Promise.resolve([]);
     },
   );
+  // Nombres de los activos del grid (diff antes → después, P2-2).
+  fake.rider.findMany.mockResolvedValue([
+    { id: "r1", name: "Francesco Bagnaia" },
+    { id: "r2", name: "Marc Márquez" },
+    { id: "r3", name: "Rider Sin P0" },
+  ]);
+  fake.constructor.findMany.mockResolvedValue([{ id: "c1", name: "Ducati" }]);
+  fake.team.findMany.mockResolvedValue([{ id: "t1", name: "Ducati Lenovo Team" }]);
 }
 
 describe("PriceService.setOpeningPrice (US-07)", () => {
@@ -531,6 +539,48 @@ describe("PriceService.applyFormulaForGp (US-08)", () => {
       unchanged: 0,
       skippedNoOpening: 1,
       skippedLocked: false,
+      changes: [
+        {
+          gpRound: 2,
+          assetType: "rider",
+          assetId: "r1",
+          assetName: "Francesco Bagnaia",
+          previousPrice: null,
+          newPrice: 20,
+          reason: "formula",
+          rulesVersion: "pricing-v1",
+        },
+        {
+          gpRound: 2,
+          assetType: "rider",
+          assetId: "r2",
+          assetName: "Marc Márquez",
+          previousPrice: null,
+          newPrice: 14.38,
+          reason: "formula",
+          rulesVersion: "pricing-v1",
+        },
+        {
+          gpRound: 2,
+          assetType: "constructor",
+          assetId: "c1",
+          assetName: "Ducati",
+          previousPrice: null,
+          newPrice: 9.79,
+          reason: "formula",
+          rulesVersion: "pricing-v1",
+        },
+        {
+          gpRound: 2,
+          assetType: "team",
+          assetId: "t1",
+          assetName: "Ducati Lenovo Team",
+          previousPrice: null,
+          newPrice: 7.83,
+          reason: "formula",
+          rulesVersion: "pricing-v1",
+        },
+      ],
     });
     const created = fake.price.create.mock.calls.map(
       (c) => (c[0] as { data: Record<string, unknown> }).data,
@@ -594,7 +644,22 @@ describe("PriceService.applyFormulaForGp (US-08)", () => {
       unchanged: 0,
       skippedNoOpening: 1,
       skippedLocked: false,
+      changes: expect.arrayContaining([
+        expect.objectContaining({
+          assetId: "r1",
+          assetName: "Francesco Bagnaia",
+          previousPrice: null,
+          newPrice: 20,
+        }),
+        expect.objectContaining({
+          assetId: "t1",
+          assetName: "Ducati Lenovo Team",
+          previousPrice: null,
+          newPrice: 7.83,
+        }),
+      ]),
     });
+    expect(result.changes).toHaveLength(4);
     expect(fake.prisma.$transaction).toHaveBeenCalledTimes(2);
     expect(fake.auditLog.create).not.toHaveBeenCalled();
   });
@@ -633,6 +698,7 @@ describe("PriceService.applyFormulaForGp (US-08)", () => {
       unchanged: 4,
       skippedNoOpening: 1,
       skippedLocked: false,
+      changes: [],
     });
     expect(fake.price.create).not.toHaveBeenCalled();
     expect(fake.price.update).not.toHaveBeenCalled();
@@ -677,6 +743,48 @@ describe("PriceService.applyFormulaForGp (US-08)", () => {
       unchanged: 0,
       skippedNoOpening: 1,
       skippedLocked: false,
+      changes: [
+        {
+          gpRound: 2,
+          assetType: "rider",
+          assetId: "r1",
+          assetName: "Francesco Bagnaia",
+          previousPrice: 21,
+          newPrice: 20,
+          reason: "formula",
+          rulesVersion: "pricing-v1",
+        },
+        {
+          gpRound: 2,
+          assetType: "rider",
+          assetId: "r2",
+          assetName: "Marc Márquez",
+          previousPrice: null,
+          newPrice: 14.38,
+          reason: "formula",
+          rulesVersion: "pricing-v1",
+        },
+        {
+          gpRound: 2,
+          assetType: "constructor",
+          assetId: "c1",
+          assetName: "Ducati",
+          previousPrice: null,
+          newPrice: 9.79,
+          reason: "formula",
+          rulesVersion: "pricing-v1",
+        },
+        {
+          gpRound: 2,
+          assetType: "team",
+          assetId: "t1",
+          assetName: "Ducati Lenovo Team",
+          previousPrice: null,
+          newPrice: 7.83,
+          reason: "formula",
+          rulesVersion: "pricing-v1",
+        },
+      ],
     });
     expect(fake.price.update).toHaveBeenCalledWith({
       where: { id: "x1" },
@@ -720,6 +828,7 @@ describe("PriceService.applyFormulaForGp (US-08)", () => {
       unchanged: 0,
       skippedNoOpening: 0,
       skippedLocked: true,
+      changes: [],
     });
     expect(fake.price.create).not.toHaveBeenCalled();
     expect(fake.price.update).not.toHaveBeenCalled();
@@ -741,6 +850,7 @@ describe("PriceService.applyFormulaForGp (US-08)", () => {
       unchanged: 0,
       skippedNoOpening: 0,
       skippedLocked: false,
+      changes: [],
     });
     expect(fake.price.create).not.toHaveBeenCalled();
   });
@@ -764,6 +874,7 @@ describe("PriceService.applyFormulaForGp (US-08)", () => {
       unchanged: 0,
       skippedNoOpening: 0,
       skippedLocked: false,
+      changes: [],
     });
     expect(fake.price.create).not.toHaveBeenCalled();
     expect(fake.price.update).not.toHaveBeenCalled();
@@ -843,6 +954,7 @@ describe("PriceService.recalculateSeasonPrices (calibración P0)", () => {
         unchanged: 1,
         skippedNoOpening: 0,
         skippedLocked: false,
+        changes: [],
       });
 
     const result = await service.recalculateSeasonPrices({ seasonId: "s1" });
@@ -858,6 +970,76 @@ describe("PriceService.recalculateSeasonPrices (calibración P0)", () => {
     });
     expect(result.results).toHaveLength(1);
     expect(result.results[0]).toMatchObject({ gpRound: 1 });
+  });
+
+  it("agrega el diff de precios (antes → después) por GP (P2-2)", async () => {
+    const fake = makePrisma();
+    fake.gp.findMany.mockResolvedValue([
+      { id: "g1", round: 1 },
+      { id: "g2", round: 2 },
+      { id: "g3", round: 3 },
+    ]);
+    // GP1 y GP2 tienen carrera definitiva → ambos se recalculan.
+    fake.weekendEvent.findFirst.mockImplementation(
+      ({ where }: { where: { gpId: string } }) =>
+        Promise.resolve(
+          where.gpId === "g3"
+            ? null
+            : { id: `race-${where.gpId}`, gpId: where.gpId },
+        ),
+    );
+    fake.result.count.mockResolvedValue(5);
+    const service = new PriceService({ prisma: fake.prisma });
+
+    const changeG1 = {
+      gpRound: 2,
+      assetType: "rider" as const,
+      assetId: "r1",
+      assetName: "Francesco Bagnaia",
+      previousPrice: 21,
+      newPrice: 20,
+      reason: "formula" as const,
+      rulesVersion: "pricing-v1",
+    };
+    const changeG2 = {
+      gpRound: 3,
+      assetType: "team" as const,
+      assetId: "t1",
+      assetName: "Ducati Lenovo Team",
+      previousPrice: null,
+      newPrice: 7.83,
+      reason: "formula" as const,
+      rulesVersion: "pricing-v1",
+    };
+    vi.spyOn(service, "applyFormulaForGp")
+      .mockResolvedValueOnce({
+        targetGpId: "g2",
+        targetGpRound: 2,
+        created: 0,
+        updated: 1,
+        unchanged: 0,
+        skippedNoOpening: 0,
+        skippedLocked: false,
+        changes: [changeG1],
+      })
+      .mockResolvedValueOnce({
+        targetGpId: "g3",
+        targetGpRound: 3,
+        created: 1,
+        updated: 0,
+        unchanged: 0,
+        skippedNoOpening: 0,
+        skippedLocked: false,
+        changes: [changeG2],
+      });
+
+    const result = await service.recalculateSeasonPrices({ seasonId: "s1" });
+
+    expect(result.recalculated).toBe(2);
+    expect(result.skippedNoDefinitive).toBe(0);
+    expect(result.changes).toEqual([changeG1, changeG2]);
+    expect(result.results[0]!.changes).toEqual([changeG1]);
+    expect(result.results[1]!.changes).toEqual([changeG2]);
   });
 
   it("temporada sin GPs → NOT_FOUND", async () => {

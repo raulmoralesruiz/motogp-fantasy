@@ -127,10 +127,10 @@ export default function PricesPanel() {
 
   return (
     <section>
-      <h3>Precios de apertura (P0)</h3>
       <p className="muted">
-        Fija o cambia el precio de apertura de un activo (queda auditado y puede cambiarse
-        en cualquier momento). Abajo ves el histórico de precios del activo elegido.
+        Gestiona los precios de la temporada: P0 (precio de apertura: la semilla
+        desde la que la fórmula v1 calcula el precio de cada GP), precios por GP
+        y recálculo de la serie. Todo queda auditado y puede corregirse después.
       </p>
 
       <div className="field">
@@ -149,13 +149,12 @@ export default function PricesPanel() {
         </select>
       </div>
 
-      <h4>1. P0 automático (heurística de siembra)</h4>
+      <h3>1. P0 automático (heurística de siembra)</h3>
       <p className="muted">
-        Temporada: {seasonEcho}. Calcula los P0 de todos los activos a partir de la
-        clasificación del campeonato (posición → precio lineal sobre el rango P0
-        calibrado 17.4→5.8; cada posición tiene un precio único; equipos y
-        constructores = media de sus riders). Requiere que el mercado
-        esté importado antes (pilotos, equipos, constructores y afiliaciones).
+        Temporada: {seasonEcho}. Calcula los P0 de todos los activos desde la
+        clasificación del campeonato: posición → precio lineal sobre el rango
+        17.4→5.8 (equipos y constructores = media de sus riders). Requiere el
+        mercado importado (pilotos, constructores, equipos y afiliaciones).
         Idempotente: re-ejecutarlo actualiza los P0 (auditado).
       </p>
       <div>
@@ -189,10 +188,10 @@ export default function PricesPanel() {
         </Alert>
       )}
 
-      <h4>2. P0 manual</h4>
+      <h3>2. P0 manual</h3>
       <p className="muted">
         Activo: {selectedAsset ? `«${selectedAsset.name}»` : "sin elegir"}. El histórico
-        de precios de abajo sigue al activo elegido.
+        de abajo sigue al activo elegido.
       </p>
       <div className="field">
         <label htmlFor="priceAssetType">Tipo de activo</label>
@@ -325,12 +324,13 @@ export default function PricesPanel() {
         </>
       )}
 
-      <h4>3. Precios por GP (fórmula v1 y ajuste manual)</h4>
+      <h3>3. Precios por GP (fórmula v1 y ajuste manual)</h3>
       <p className="muted">
         Temporada: {seasonEcho}. Tras cada GP definitivo, la fórmula v1 calcula el precio
-        del siguiente GP (motivo «fórmula»). También puedes fijar un precio manual para un
-        GP concreto del activo elegido (motivo «manual», auditado). Los precios de un GP
-        en lockout no se pueden cambiar.
+        del siguiente GP (motivo «fórmula»). También puedes fijar un precio manual del
+        activo elegido para un GP concreto (motivo «manual»). Los precios de un GP en
+        lockout no se pueden cambiar: lockout = cierre de cambios de lineups de los
+        jugadores para ese GP (se fija o quita en la sección «GPs»).
       </p>
 
       {seasonId !== "" &&
@@ -344,7 +344,7 @@ export default function PricesPanel() {
           <p className="muted">Esta temporada aún no tiene GPs.</p>
         ) : null)}
 
-      <h5>Ajuste manual</h5>
+      <h4>Ajuste manual</h4>
       <div className="field">
         <label htmlFor="manualGp">GP (objetivo del precio manual)</label>
         <select
@@ -416,7 +416,7 @@ export default function PricesPanel() {
         </Alert>
       )}
 
-      <h5>Aplicar fórmula (pricing-v1)</h5>
+      <h4>Aplicar fórmula (pricing-v1)</h4>
       <div className="field">
         <label htmlFor="formulaGp">GP definitivo (fuente de la fórmula)</label>
         <select
@@ -471,13 +471,12 @@ export default function PricesPanel() {
         </Alert>
       )}
 
-      <h4>4. Recalcular temporada</h4>
+      <h3>4. Recalcular temporada</h3>
       <p className="muted">
-        Temporada: {seasonEcho}. Tras cambiar el P0 (p. ej. con el P0 automático de
-        arriba), recalcula los precios de la temporada GP a GP (solo los GPs con
-        resultados definitivos) para que la serie de precios quede consistente con el P0
-        vigente. Cada fila recalculada queda auditada (antes → después). Requiere una
-        temporada elegida arriba.
+        Temporada: {seasonEcho}. Tras cambiar el P0 (p. ej. con el automático de
+        arriba), recalcula la serie GP a GP (solo los GPs con resultados definitivos)
+        para que quede consistente con el P0 vigente. Cada fila recalculada queda
+        auditada (antes → después). Requiere una temporada elegida arriba.
       </p>
       <div>
         <Button
@@ -508,11 +507,50 @@ export default function PricesPanel() {
         </Alert>
       )}
       {recalculateSeason.isSuccess && (
-        <Alert variant="success">
-          Temporada recalculada: {recalculateSeason.data.recalculated} GP recalculados,{" "}
-          {recalculateSeason.data.skippedNoDefinitive} sin resultados definitivos (se
-          saltaron).
-        </Alert>
+        <>
+          <Alert variant="success">
+            Temporada recalculada: {recalculateSeason.data.recalculated} GP recalculados,{" "}
+            {recalculateSeason.data.skippedNoDefinitive} sin resultados definitivos (se
+            saltaron).
+          </Alert>
+          {recalculateSeason.data.changes.length > 0 ? (
+            <>
+              <h4>
+                Cambios de precio ({recalculateSeason.data.changes.length})
+              </h4>
+              <div className="table-scroll-bounded">
+                <table className="results-table">
+                  <thead>
+                    <tr>
+                      <th>GP</th>
+                      <th>Activo</th>
+                      <th>Antes → después</th>
+                      <th>Motivo</th>
+                      <th>Versión</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recalculateSeason.data.changes.map((c) => (
+                      <tr key={`${c.gpRound}:${c.assetType}:${c.assetId}`}>
+                        <td>R{c.gpRound}</td>
+                        <td>{c.assetName}</td>
+                        <td>
+                          {c.previousPrice ?? "—"} → {c.newPrice}
+                        </td>
+                        <td>{c.reason === "formula" ? "fórmula" : "manual"}</td>
+                        <td>{c.rulesVersion ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <p className="muted">
+              Sin cambios de precio: la serie ya era consistente con el P0 vigente.
+            </p>
+          )}
+        </>
       )}
 
       {confirmRequest ? (

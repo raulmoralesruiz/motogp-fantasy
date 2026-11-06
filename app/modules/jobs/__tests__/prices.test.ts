@@ -53,6 +53,7 @@ function makeFakePriceService(
     unchanged: 0,
     skippedNoOpening: 0,
     skippedLocked: false,
+    changes: [],
     ...result,
   }));
   const service = { applyFormulaForGp: apply } as unknown as PriceService;
@@ -102,6 +103,7 @@ describe("applyPricesForGp (US-08 job de precios)", () => {
       unchanged: 2,
       skippedNoOpening: 4,
       skippedLocked: true,
+      changes: [],
     });
   });
 

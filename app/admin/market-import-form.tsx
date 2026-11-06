@@ -96,7 +96,7 @@ export default function MarketImportForm({ seasons, onImported }: MarketImportFo
 
       {preview && (
         <div>
-          <h4>Constructores ({preview.constructors.length})</h4>
+          <h3>Constructores ({preview.constructors.length})</h3>
           <ul className="status">
             {preview.constructors.map((ctor) => (
               <li key={ctor.name}>
@@ -109,7 +109,7 @@ export default function MarketImportForm({ seasons, onImported }: MarketImportFo
 
       {preview && (
         <div>
-          <h4>Equipos ({preview.teams.length})</h4>
+          <h3>Equipos ({preview.teams.length})</h3>
           <ul className="status">
             {preview.teams.map((team) => (
               <li key={team.name}>
@@ -122,7 +122,7 @@ export default function MarketImportForm({ seasons, onImported }: MarketImportFo
 
       {preview && (
         <div>
-          <h4>Pilotos ({preview.riders.length})</h4>
+          <h3>Pilotos ({preview.riders.length})</h3>
           <ul className="status">
             {preview.riders.map((rider) => (
               <li key={rider.sourceId ?? rider.name}>
@@ -139,7 +139,7 @@ export default function MarketImportForm({ seasons, onImported }: MarketImportFo
 
       {preview && (
         <div>
-          <h4>Afiliaciones ({preview.affiliations.length})</h4>
+          <h3>Afiliaciones ({preview.affiliations.length})</h3>
           <ul className="status">
             {preview.affiliations.map((aff) => (
               <li key={aff.riderSourceId}>

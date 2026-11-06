@@ -111,6 +111,16 @@ describe("PricesPanel", () => {
       "true",
     );
     expect(screen.queryByText("Historial de precios")).not.toBeInTheDocument();
+    // Vocabulario (impeccable P1): P0 y lockout se definen en su primera
+    // aparición del panel, no solo dentro de los diálogos.
+    expect(
+      screen.getByText(
+        /P0 \(precio de apertura: la semilla desde la que la fórmula v1 calcula el precio de cada GP\)/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/lockout = cierre de cambios de lineups de los jugadores/),
+    ).toBeInTheDocument();
   });
 
   it("consulta los activos del tipo elegido y resetea el activo al cambiar de tipo", async () => {
@@ -939,6 +949,7 @@ describe("PricesPanel · Recalcular temporada (calibración P0, ADR-0032)", () =
         seasonId: "s1",
         recalculated: 18,
         skippedNoDefinitive: 1,
+        changes: [],
         results: [],
       },
     });
@@ -949,6 +960,61 @@ describe("PricesPanel · Recalcular temporada (calibración P0, ADR-0032)", () =
         "Temporada recalculada: 18 GP recalculados, 1 sin resultados definitivos (se saltaron).",
       ),
     ).toBeInTheDocument();
+    // Sin cambios → nota explícita (la serie ya era consistente).
+    expect(
+      screen.getByText(
+        "Sin cambios de precio: la serie ya era consistente con el P0 vigente.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("muestra el diff de precios (antes → después) del recálculo (P2-2)", () => {
+    mockResult(trpc.market.prices.recalculateSeason.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      data: {
+        seasonId: "s1",
+        recalculated: 2,
+        skippedNoDefinitive: 0,
+        changes: [
+          {
+            gpRound: 2,
+            assetType: "rider",
+            assetId: "r1",
+            assetName: "Francesco Bagnaia",
+            previousPrice: 21,
+            newPrice: 20,
+            reason: "formula",
+            rulesVersion: "pricing-v1",
+          },
+          {
+            gpRound: 3,
+            assetType: "team",
+            assetId: "t1",
+            assetName: "Ducati Lenovo Team",
+            previousPrice: null,
+            newPrice: 7.83,
+            reason: "formula",
+            rulesVersion: "pricing-v1",
+          },
+        ],
+        results: [],
+      },
+    });
+    render(<PricesPanel />);
+
+    expect(screen.getByText("Cambios de precio (2)")).toBeInTheDocument();
+    // Fila de corrección: antes → después.
+    expect(screen.getByText("21 → 20")).toBeInTheDocument();
+    // Fila creada: sin precio previo.
+    expect(screen.getByText("— → 7.83")).toBeInTheDocument();
+    expect(screen.getByText("Ducati Lenovo Team")).toBeInTheDocument();
+    expect(screen.getByText("R3")).toBeInTheDocument();
+    // Las dos filas: motivo «fórmula» y versión «pricing-v1».
+    expect(screen.getAllByText("fórmula")).toHaveLength(2);
+    expect(screen.getAllByText("pricing-v1")).toHaveLength(2);
   });
 
   it("muestra el error al no poder recalcular la temporada", () => {

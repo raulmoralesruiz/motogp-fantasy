@@ -60,17 +60,17 @@ h2 {
   color: var(--bad);
 }
 
+/* Lista de estado (utilidad compartida, 22 usos): líneas divisorias sin
+   caja interior (P3-2) — el contenedor (card, diálogo, main) ya pone el
+   fondo y el borde; aquí solo separa filas, alineado con el contenido. */
 .status {
   list-style: none;
   padding: 0;
   margin: 0.5rem 0 0;
-  border: 1px solid #21262d;
-  border-radius: 8px;
-  overflow: hidden;
 }
 
 .status li {
-  padding: 0.6rem 1rem;
+  padding: 0.6rem 0;
   border-bottom: 1px solid #21262d;
 }
 
@@ -242,9 +242,13 @@ select {
   border-radius: 8px;
 }
 
+/* Paso de ritual (token único, P2-1): un nivel (h3 = Title), un tamaño
+   (1rem/700) y un ritmo con más aire arriba que abajo, igual en
+   Resultados, Precios y Mercado. El detalle va en h4 (Subhead). */
 .card h3 {
-  margin: 0 0 0.5rem;
+  margin: 1.25rem 0 0.5rem;
   font-size: 1rem;
+  font-weight: 700;
 }
 
 /* Escala tipográfica cerrada (DESIGN.md): h4 = Subhead (0.9 rem/600) y
@@ -590,6 +594,38 @@ h5 {
   width: 100%;
   max-width: 100%;
   overflow-x: auto;
+}
+
+/* Tabla con scroll vertical acotado (diff de recálculo de precios, P2-2):
+   la tabla puede ser larga (muchos activos × GPs) y no debe desbordar la
+   página; se desplaza dentro de su contenedor. */
+.table-scroll-bounded {
+  width: 100%;
+  max-width: 100%;
+  max-height: 320px;
+  overflow: auto;
+}
+
+/* Utilidades de composición (P3-1): sustituyen los estilos inline de
+   gp-actions.tsx y jobs-section.tsx — el valor vive aquí, no en el JSX. */
+.inline {
+  display: inline;
+}
+
+.stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.spaced {
+  margin-top: 0.5rem;
+}
+
+.action-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
 }
 
 .results-table {

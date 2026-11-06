@@ -96,6 +96,28 @@ describe("useScrollSpy (impeccable P1-2)", () => {
     expect(observer?.observed).toEqual(els);
   });
 
+  it("re-anuda las secciones cuando se habilita tras el montaje (montaje tardío)", () => {
+    // En la página real las secciones se montan DESPUÉS de que la consulta
+    // `me` resuelve: al montar el hook aún no existen en el DOM. Con
+    // `enabled` el efecto se re-ejecuta cuando las secciones aparecen.
+    const { result, rerender } = renderHook(
+      ({ enabled }: { enabled: boolean }) => useScrollSpy(["a", "b"], enabled),
+      { initialProps: { enabled: false } },
+    );
+    expect(result.current).toBeNull();
+    // Deshabilitado: no se crea ninguna instancia.
+    expect(MockIntersectionObserver.instances).toHaveLength(0);
+
+    const els = makeSections(["a", "b"]);
+    rerender({ enabled: true });
+
+    const observer = MockIntersectionObserver.instances.at(-1);
+    expect(observer?.observed).toEqual(els);
+
+    act(() => observer?.trigger([{ id: "b", isIntersecting: true, top: 200 }]));
+    expect(result.current).toBe("b");
+  });
+
   it("marca la sección que entra en vista", () => {
     makeSections(["a", "b"]);
     const { result } = renderHook(() => useScrollSpy(["a", "b"]));

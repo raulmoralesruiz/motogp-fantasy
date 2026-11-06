@@ -178,6 +178,24 @@ describe("AdminPage", () => {
     expect(screen.getByText(/Jerez de la Frontera/)).toBeInTheDocument();
   });
 
+  it("explica el vocabulario de las reglas (JSON) en su primera aparición", () => {
+    mockMe(admin);
+    mockList(trpc.seasons.list.useQuery, []);
+    mockList(trpc.seasons.circuits.list.useQuery, []);
+    render(<AdminPage />);
+
+    // impeccable P1: B/t/cmax (carry) y pmaxRider/pmaxGroup (Pmax) solo
+    // existen en el JSON de los formularios de reglas; se explican una vez
+    // en el detalle «Altas y configuración de temporadas», en la primera
+    // aparición, con la fuente de verdad de reglas (docs/product/).
+    const help = screen.getByText(/Reglas \(JSON\): presupuesto por GP/);
+    expect(help).toBeInTheDocument();
+    expect(help).toHaveTextContent(/carry limitado \(t × sin usar, tope cmax\)/);
+    expect(help).toHaveTextContent(/pmaxRider\/pmaxGroup/);
+    expect(help).toHaveTextContent(/docs\/product\/economy\.md/);
+    expect(help).toHaveTextContent(/docs\/product\/scoring\.md/);
+  });
+
   it("muestra el error cuando no se cargan las temporadas", () => {
     mockMe(admin);
     mockResult(trpc.seasons.list.useQuery, {
@@ -553,6 +571,10 @@ describe("Consola del fin de semana de carrera", () => {
       "href",
       "#precios",
     );
+    // Vocabulario (impeccable P1): rv-N se define en su primera aparición.
+    expect(
+      scope.getByText(/rv-N = versión de resultados del GP/),
+    ).toBeInTheDocument();
   });
 
   it("muestra un GP cerrado sin versión de resultados", () => {

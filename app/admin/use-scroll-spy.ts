@@ -14,11 +14,26 @@ import { useEffect, useState } from "react";
  * la última que entró. Sin `IntersectionObserver` (jsdom, navegadores
  * antiguos) el hook no hace nada: la navegación sigue funcionando por
  * anclas, sin `aria-current`.
+ *
+ * `enabled`: las secciones del panel se montan DESPUÉS de que la consulta
+ * `me` resuelve (rama condicional de la página). Si el efecto corre solo al
+ * montar, `getElementById` no encuentra nada y el observer no observa
+ * ninguna sección — `aria-current` jamás se pinta. Por eso el efecto
+ * depende de `enabled`: cuando pasa a `true` (mismo commit en que se
+ * montan las secciones) se re-anuda el observer sobre los elementos ya
+ * presentes.
  */
-export function useScrollSpy(sectionIds: readonly string[]): string | null {
+export function useScrollSpy(
+  sectionIds: readonly string[],
+  enabled: boolean = true,
+): string | null {
   const [activeId, setActiveId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!enabled) {
+      setActiveId(null);
+      return;
+    }
     if (typeof IntersectionObserver === "undefined") {
       return;
     }
@@ -66,7 +81,7 @@ export function useScrollSpy(sectionIds: readonly string[]): string | null {
       observer.disconnect();
       elements.length = 0;
     };
-  }, [sectionIds]);
+  }, [sectionIds, enabled]);
 
   return activeId;
 }

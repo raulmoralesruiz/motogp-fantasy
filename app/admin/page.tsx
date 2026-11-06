@@ -84,8 +84,13 @@ export default function AdminPage() {
   });
 
   // Scroll-spy de la navegación ancla (impeccable P1-2): la sección en
-  // vista marca su chip con `aria-current="location"`.
-  const activeSection = useScrollSpy(ANCHOR_SECTION_IDS);
+  // vista marca su chip con `aria-current="location"`. `enabled` refleja
+  // la rama condicional que monta las secciones: el hook debe re-anudar el
+  // observer cuando aparecen, no solo al montar (ver `use-scroll-spy.ts`).
+  const activeSection = useScrollSpy(
+    ANCHOR_SECTION_IDS,
+    !me.isPending && !me.isError && isAdmin,
+  );
 
   // Consola del fin de semana de carrera (impeccable P1-1): opera sobre
   // «la temporada con GPs sin cerrar» (o la más reciente con actividad),
@@ -233,6 +238,13 @@ export default function AdminPage() {
                       )}
                     </p>
                   )}
+                  {/* Ayuda de vocabulario (impeccable P1): rv-N aparece aquí
+                      por primera vez en el panel; se define en su primera
+                      aparición, no solo dentro de los diálogos. */}
+                  <p className="muted">
+                    rv-N = versión de resultados del GP: cada recálculo auditable
+                    genera una nueva y conserva el histórico.
+                  </p>
                 </>
               )}
             </div>
@@ -317,6 +329,17 @@ export default function AdminPage() {
 
             <details className="form-collapse">
               <summary>Altas y configuración de temporadas</summary>
+              {/* Ayuda de vocabulario (impeccable P1): B/t/cmax y
+                  pmaxRider/pmaxGroup solo existen en el JSON de estas dos
+                  formas; se explican una sola vez, en su primera aparición. */}
+              <p className="muted">
+                Reglas (JSON): presupuesto por GP = <code>B</code> (base) +
+                carry limitado (<code>t</code> × sin usar, tope <code>cmax</code>);
+                Pmax (<code>pmaxRider</code>/<code>pmaxGroup</code>) = puntuación
+                máxima de referencia de la fórmula de precios. Fuente de verdad:{" "}
+                <code>docs/product/economy.md</code> y{" "}
+                <code>docs/product/scoring.md</code>.
+              </p>
               <div className="card">
                 <h2>Crear temporada</h2>
                 <CreateSeasonForm onCreated={() => void seasons.refetch()} />

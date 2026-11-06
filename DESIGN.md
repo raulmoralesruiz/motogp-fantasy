@@ -238,7 +238,8 @@ Chips redondeados (6 px) en fila flexible. Inactivo: pantalla de telemetría + f
 - **Background:** pantalla de telemetría.
 - **Border:** filete de 1 px de gris de pista.
 - **Shadow Strategy:** ninguna (ver Elevation & Depth).
-- **Internal Padding:** 0.9 rem 1 rem. Los títulos internos (h3) no llevan margen superior.
+- **Internal Padding:** 0.9 rem 1 rem.
+- **Título de tarjeta (h3) — paso de ritual (P2-1):** un token único `.card h3` (1 rem/700, margen 1.25 rem arriba / 0.5 rem abajo), igual en Resultados, Precios y Mercado: un nivel, un tamaño, un ritmo con más aire arriba que abajo. El detalle va en h4 (Subhead).
 
 ### Inputs / Fields
 - **Style:** etiqueta (0.9 rem, gris de cronometraje) → input (relleno pantalla de telemetría, filete gris de pista, 6 px, padding 0.55 rem 0.7 rem, alto mínimo 44 px) → error (0.85 rem, rojo de bandera).
@@ -252,13 +253,21 @@ Cuatro variantes con la misma anatomía (padding 0.6 rem 0.8 rem, radio 6 px, te
 Para acciones irreversibles o que reescriben datos: un diálogo plano (superficie de pantalla de telemetría, filete de 1 px, radio 8 px, máx. 26 rem) sobre el lienzo atenuado. El título nombra la acción; el impacto escrito va como texto (o en aviso tintado 10/40 si es irreversible); dos controles y solo dos: «Sí, …» (relleno rojo de salida — la acción se nombra en el botón, nunca «Aceptar») y «No, volver» (secondary). El foco abre en la opción segura; Esc y el clic fuera descartan. Sustituye a cualquier diálogo nativo.
 
 ### Lists & Tables
-- **Status list:** contenedor con borde y radio de 8 px; filas separadas por filetes (padding 0.6 rem 1 rem). Es el patrón de datos de todo el producto (versiones de reglas, historial de precios, estado de servicios).
+- **Status list:** sin caja interior (P3-2) — el contenedor (card, diálogo) ya pone el fondo y el borde; la lista solo separa filas con filetes de 1 px (padding 0.6 rem, `li:last-child` sin filete). Es el patrón de datos de todo el producto (versiones de reglas, historial de precios, estado de servicios, estados de evento).
 - **Tables:** cuerpo 0.9 rem, celdas con filete, cabeceras 0.8 rem/600 en gris de cronometraje; la tabla se desliza dentro de un wrapper `.table-scroll` (overflow-x) que preserva la semántica de `<table>`. Área de toque de los checkboxes por el label envolvente (≥ 44 px, Regla de los 44).
 - **Anchor nav (admin):** barra fija de chips de superficie (6 px) cuyo borde se enciende en rojo al pasar el cursor, agrupada por fases de trabajo (Carrera → Mercado → Temporada → Sistema) con etiquetas de fase en gris de cronometraje (no son enlaces). El chip de la sección en vista lleva `aria-current="location"` y se señala con el acento (texto + borde en rojo de salida, peso 600): un scroll-spy por `IntersectionObserver` (holgura de 80 px, igual que el `scroll-margin-top` de los destinos) responde a «¿dónde estoy?» en una página de ~10.600 px; sin `IntersectionObserver` la nav sigue funcionando por anclas, sin acento activo.
 - **Altas colapsadas (admin):** los formularios de creación viven en un `details` («Altas y configuración») con el mismo control de 44 px que los pasos del ritual: el panel prioriza la lectura sobre el CRUD.
+- **Estados de evento (admin):** una fila por evento en `ul.status` (nombre del evento + acciones de esa fila dentro del `li`); la distinción cancelado/neutralizado se explica en una línea de ayuda **antes** de la acción, no solo dentro del diálogo.
+- **Utilidades de composición (P3-1):** `.inline`, `.stack` (grid, gap 1 rem), `.spaced` (margen superior 0.5 rem) y `.action-row` (fila de acciones, gap 0.75 rem). El valor vive en `globals.css`, no en estilos inline del JSX.
 
 ### Signature: la palabra roja y las flechas de estado
 El título de cada página marca una palabra en rojo de salida, y el estado se narra en línea con la pareja semántica: «Sube/Baja/Estable» en verde/gris/rojo y los deltas de posición con ▲/▼. Es la voz del muro de boxes: señal escasa, dato legible.
+
+## Estado
+
+**F1 cerrada (2026-11-06):** panel `/admin` — el lenguaje de esta página ya es el del sistema completo; la ola de cierre añadió la confirmación con impacto, la consola del fin de semana, la línea de ayuda de cancelar/neutralizar, los estados de evento por fila, la jerarquía h3 del preview de mercado y el scroll-spy robusto (`useScrollSpy` con `enabled`, late-mount). Re-evaluación dual-agent: 31/40 → 35/40 (0 anti-patterns; los 3 puntos restantes — capa de ayuda, párrafo de acciones en línea, salto de encabezados — corregidos en la misma jornada: banda 36+/40). Historial de snapshots en `.impeccable/critique/`.
+
+**Siguiente:** F2 (consolidar este sistema en tokens/documentación para toda la app) y F3 (llevarlo a las páginas restantes: `/mercado` → `/lineups` → `/resultados` → `/puntuacion` → `/ligas` → `/` + `/perfil` → auth), mismas puertas de calidad y sin romper las reglas de esta página.
 
 ## Do's and Don'ts
 

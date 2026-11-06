@@ -1409,55 +1409,68 @@ export default function ResultsSection({ seasons }: ResultsSectionProps) {
                 ) : null}
 
                 {gpEvents.data && gpEvents.data.length > 0 && (
-                  <p>
-                    <span className="muted">Estados de evento: </span>
-                    {gpEvents.data.map((event) => {
-                      if (event.id !== eventId) {
-                        // Los demás eventos solo muestran su estado: las
-                        // acciones viven en el evento elegido (un solo
-                        // mecanismo de selección alimenta todo el ritual).
-                        return <span key={event.id}>{eventOptionLabel(event)} </span>;
-                      }
-                      // Solo se ofrece lo que el servidor ejecutará
-                      // (ADR-0020): cancelar es irreversible (después no hay
-                      // transición) y neutralizar es idempotente (repetir =
-                      // no-op). Nunca se ofrece neutralizar sobre cancelado:
-                      // el cancelado excluye el evento del recálculo, así que
-                      // la neutralización posterior no tendría efecto.
-                      const canCancel = !event.cancelled;
-                      const canNeutralize = !event.cancelled && !event.neutralized;
-                      return (
-                        <span key={event.id}>
-                          {eventOptionLabel(event)}:{" "}
-                          {canCancel ? (
-                            <RowAction
-                              onClick={() => onEventFlag(event, "cancel")}
-                              disabled={
-                                cancelEventMutation.isPending ||
-                                neutralizeEventMutation.isPending
-                              }
-                            >
-                              Cancelar evento
-                            </RowAction>
-                          ) : null}{" "}
-                          {canNeutralize ? (
-                            <RowAction
-                              onClick={() => onEventFlag(event, "neutralize")}
-                              disabled={
-                                cancelEventMutation.isPending ||
-                                neutralizeEventMutation.isPending
-                              }
-                            >
-                              Neutralizar evento
-                            </RowAction>
-                          ) : null}{" "}
-                          {!canCancel && !canNeutralize ? (
-                            <span className="muted">sin transiciones</span>
-                          ) : null}
-                        </span>
-                      );
-                    })}
-                  </p>
+                  <>
+                    {/* La distinción cancelar/neutralizar es la decisión más
+                        cara del panel: se explica ANTES de la acción, no solo
+                        dentro del diálogo de confirmación (impeccable P1). */}
+                    <p className="muted">
+                      Cancelar: el evento no puntúa y la decisión es
+                      irreversible. Neutralizar: se puntúa con el resultado
+                      oficial declarado.
+                    </p>
+                    <ul className="status">
+                      {gpEvents.data.map((event) => {
+                        if (event.id !== eventId) {
+                          // Los demás eventos solo muestran su estado: las
+                          // acciones viven en el evento elegido (un solo
+                          // mecanismo de selección alimenta todo el ritual).
+                          return <li key={event.id}>{eventOptionLabel(event)}</li>;
+                        }
+                        // Solo se ofrece lo que el servidor ejecutará
+                        // (ADR-0020): cancelar es irreversible (después no hay
+                        // transición) y neutralizar es idempotente (repetir =
+                        // no-op). Nunca se ofrece neutralizar sobre cancelado:
+                        // el cancelado excluye el evento del recálculo, así que
+                        // la neutralización posterior no tendría efecto.
+                        const canCancel = !event.cancelled;
+                        const canNeutralize =
+                          !event.cancelled && !event.neutralized;
+                        return (
+                          <li key={event.id}>
+                            {eventOptionLabel(event)}{" "}
+                            {canCancel ? (
+                              <RowAction
+                                onClick={() => onEventFlag(event, "cancel")}
+                                disabled={
+                                  cancelEventMutation.isPending ||
+                                  neutralizeEventMutation.isPending
+                                }
+                              >
+                                Cancelar evento
+                              </RowAction>
+                            ) : null}{" "}
+                            {canNeutralize ? (
+                              <RowAction
+                                onClick={() => onEventFlag(event, "neutralize")}
+                                disabled={
+                                  cancelEventMutation.isPending ||
+                                  neutralizeEventMutation.isPending
+                                }
+                              >
+                                Neutralizar evento
+                              </RowAction>
+                            ) : null}
+                            {!canCancel && !canNeutralize ? (
+                              <>
+                                {" "}
+                                <span className="muted">sin transiciones</span>
+                              </>
+                            ) : null}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </>
                 )}
               </>
             )}

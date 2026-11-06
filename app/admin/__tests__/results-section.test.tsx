@@ -1985,6 +1985,37 @@ describe("ResultsSection", () => {
       ).not.toBeInTheDocument();
     });
 
+    it("explica la distinción cancelar/neutralizar ANTES de la acción (impeccable P1)", async () => {
+      mockLoaded();
+      render(<ResultsSection seasons={[season]} />);
+      await selectEvent();
+
+      // La explicación vive junto a las acciones, no solo dentro del
+      // diálogo de confirmación: el operador entiende el coste antes de
+      // decidir (la decisión más cara del panel).
+      const help = screen.getByText(/Cancelar: el evento no puntúa/);
+      expect(help).toHaveTextContent("la decisión es irreversible");
+      expect(help).toHaveTextContent(
+        "Neutralizar: se puntúa con el resultado oficial declarado.",
+      );
+    });
+
+    it("muestra los estados de evento como lista: una fila por evento (impeccable P2)", async () => {
+      mockLoaded();
+      render(<ResultsSection seasons={[season]} />);
+      await selectEvent();
+
+      // La fila del evento elegido lleva su etiqueta Y la acción en el
+      // mismo elemento de lista (antes: párrafo con acciones en línea).
+      const row = screen
+        .getAllByRole("listitem")
+        .find((li) => li.textContent?.includes("carrera principal — sin resultados"));
+      expect(row).toBeDefined();
+      expect(row).toContainElement(
+        screen.getByRole("button", { name: "Cancelar evento" }),
+      );
+    });
+
     it("colapsa el paso manual con fuente vinculada y lo reabre con el summary", async () => {
       mockGps({ isPending: false, isError: false, isSuccess: true, data: [gpLinked] });
       mockGpEvents({ isPending: false, isError: false, isSuccess: true, data: [event] });

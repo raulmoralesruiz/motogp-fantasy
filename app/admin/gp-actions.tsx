@@ -151,7 +151,7 @@ export default function GpActions({ gp, onChanged }: GpActionsProps) {
         {allowed.length === 0 ? (
           <p className="muted">Estado terminal (no admite cambios).</p>
         ) : (
-          <form onSubmit={onStatusSubmit} style={{ display: "inline" }}>
+          <form onSubmit={onStatusSubmit} className="inline">
             <select
               id={`status-${gp.id}`}
               value={status}
@@ -225,7 +225,7 @@ export default function GpActions({ gp, onChanged }: GpActionsProps) {
       {missingEvents.length > 0 && (
         <div className="field">
           <label htmlFor={`event-${gp.id}`}>Añadir evento que falta</label>
-          <form onSubmit={onAddEventSubmit} style={{ display: "inline" }}>
+          <form onSubmit={onAddEventSubmit} className="inline">
             <select
               id={`event-${gp.id}`}
               value={eventType}

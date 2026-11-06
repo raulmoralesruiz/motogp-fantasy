@@ -149,6 +149,28 @@ export interface SetOpeningPriceResult {
   status: "created" | "updated" | "unchanged";
 }
 
+/**
+ * Cambio de precio individual (diff antes → después, P2-2): qué activo pasó
+ * de cuánto a cuánto al aplicar la fórmula. `previousPrice` es null si la
+ * fila se creó (no había precio previo para ese activo en ese GP).
+ */
+export interface PriceChange {
+  /** Ronda del GP objetivo (r+1) al que se escribió el precio. */
+  gpRound: number;
+  assetType: AssetType;
+  assetId: string;
+  /** Nombre del activo (para la tabla del diff). */
+  assetName: string;
+  /** Precio anterior; null si la fila se creó (no había precio previo). */
+  previousPrice: number | null;
+  /** Precio nuevo. */
+  newPrice: number;
+  /** Motivo del cambio (la fórmula siempre es "formula"). */
+  reason: "formula" | "manual";
+  /** Versión de reglas aplicada (null si manual). */
+  rulesVersion: string | null;
+}
+
 /** Resultado de aplicar la fórmula a un GP (US-08). */
 export interface ApplyFormulaForGpResult {
   /** GP objetivo (r+1) al que se escribió el precio; null si no hay siguiente. */
@@ -164,6 +186,8 @@ export interface ApplyFormulaForGpResult {
   skippedNoOpening: number;
   /** true si el GP objetivo estaba en lockout y no se tocó nada. */
   skippedLocked: boolean;
+  /** Cambios de precio (diff antes → después, P2-2). */
+  changes: PriceChange[];
 }
 
 /** Recálculo de precios de una temporada (calibración P0, 2026-10-31). */
@@ -184,6 +208,8 @@ export interface RecalculateSeasonPricesResult {
   recalculated: number;
   /** GPs fuente saltados (sin resultados definitivos). */
   skippedNoDefinitive: number;
+  /** Cambios de precio agregados (diff antes → después, P2-2). */
+  changes: PriceChange[];
   /** Detalle por GP fuente (r → precio de r+1). */
   results: Array<{
     gpRound: number;
@@ -193,6 +219,8 @@ export interface RecalculateSeasonPricesResult {
     unchanged: number;
     skippedNoOpening: number;
     skippedLocked: boolean;
+    /** Cambios de precio de este GP (diff antes → después, P2-2). */
+    changes: PriceChange[];
   }>;
 }
 
@@ -729,6 +757,7 @@ export class PriceService {
           unchanged: 0,
           skippedNoOpening: 0,
           skippedLocked: false,
+          changes: [],
         };
       }
       // Gate de lockout: el GP objetivo está cerrado → no tocar la BD.
@@ -741,6 +770,7 @@ export class PriceService {
           unchanged: 0,
           skippedNoOpening: 0,
           skippedLocked: true,
+          changes: [],
         };
       }
       // GP r debe tener resultados definitivos (el job corre tras el cierre).
@@ -850,11 +880,22 @@ export class PriceService {
         ...[...ctorIds].map((id) => ({ type: "constructor" as const, id })),
         ...[...teamIds].map((id) => ({ type: "team" as const, id })),
       ];
+      // Nombres de los activos del grid (diff antes → después, P2-2).
+      const [riderNames, ctorNames, teamNames] = await Promise.all([
+        tx.rider.findMany({ where: { id: { in: [...riderIds] } } }),
+        tx.constructor.findMany({ where: { id: { in: [...ctorIds] } } }),
+        tx.team.findMany({ where: { id: { in: [...teamIds] } } }),
+      ]);
+      const assetNameById = new Map<string, string>();
+      for (const r of riderNames) assetNameById.set(r.id, r.name);
+      for (const c of ctorNames) assetNameById.set(c.id, c.name);
+      for (const t of teamNames) assetNameById.set(t.id, t.name);
 
       let created = 0;
       let updated = 0;
       let unchanged = 0;
       let skippedNoOpening = 0;
+      const changes: PriceChange[] = [];
       for (const asset of assets) {
         const key = assetKey(asset.type, asset.id);
         const P0 = p0ByAsset.get(key);
@@ -916,6 +957,16 @@ export class PriceService {
             },
           });
           updated += 1;
+          changes.push({
+            gpRound: next.round,
+            assetType: asset.type,
+            assetId: asset.id,
+            assetName: assetNameById.get(asset.id) ?? asset.id,
+            previousPrice: Number(existing.price),
+            newPrice,
+            reason: "formula",
+            rulesVersion: PRICING_VERSION,
+          });
         } else {
           await tx.price.create({
             data: {
@@ -929,6 +980,16 @@ export class PriceService {
             },
           });
           created += 1;
+          changes.push({
+            gpRound: next.round,
+            assetType: asset.type,
+            assetId: asset.id,
+            assetName: assetNameById.get(asset.id) ?? asset.id,
+            previousPrice: null,
+            newPrice,
+            reason: "formula",
+            rulesVersion: PRICING_VERSION,
+          });
         }
       }
       return {
@@ -939,6 +1000,7 @@ export class PriceService {
         unchanged,
         skippedNoOpening,
         skippedLocked: false,
+        changes,
       };
     };
     try {
@@ -986,6 +1048,7 @@ export class PriceService {
     }
 
     const results: RecalculateSeasonPricesResult["results"] = [];
+    const changes: PriceChange[] = [];
     let recalculated = 0;
     let skippedNoDefinitive = 0;
     // Orden r=1→N−1: el precio de r+1 depende del precio (recalculado) de r.
@@ -1008,7 +1071,9 @@ export class PriceService {
         unchanged: r.unchanged,
         skippedNoOpening: r.skippedNoOpening,
         skippedLocked: r.skippedLocked,
+        changes: r.changes,
       });
+      changes.push(...r.changes);
       recalculated += 1;
     }
 
@@ -1016,6 +1081,7 @@ export class PriceService {
       seasonId: input.seasonId,
       recalculated,
       skippedNoDefinitive,
+      changes,
       results,
     };
   }
