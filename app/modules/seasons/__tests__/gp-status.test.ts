@@ -14,6 +14,7 @@ import {
   GP_STATUSES,
   GP_TRANSITIONS,
   isGpStatus,
+  isTerminalGpStatus,
 } from "../gp-status";
 
 describe("canTransitionGpStatus (US-05)", () => {
@@ -53,6 +54,18 @@ describe("canTransitionGpStatus (US-05)", () => {
       expect(GP_TRANSITIONS[status]).toBeDefined();
       expect(allowedGpStatusTransitions(status)).toEqual([...GP_TRANSITIONS[status]]);
     }
+  });
+});
+
+describe("isTerminalGpStatus", () => {
+  it("solo `finished` y `cancelled` son terminales (derivado de la tabla)", () => {
+    for (const status of GP_STATUSES) {
+      expect(isTerminalGpStatus(status)).toBe(GP_TRANSITIONS[status].length === 0);
+    }
+    expect(isTerminalGpStatus("finished")).toBe(true);
+    expect(isTerminalGpStatus("cancelled")).toBe(true);
+    expect(isTerminalGpStatus("scheduled")).toBe(false);
+    expect(isTerminalGpStatus("locked")).toBe(false);
   });
 });
 

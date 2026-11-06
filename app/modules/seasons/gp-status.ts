@@ -51,6 +51,17 @@ export function isGpStatus(value: unknown): value is GpStatusValue {
   return typeof value === "string" && (GP_STATUSES as readonly string[]).includes(value);
 }
 
+/**
+ * ¿Estado terminal de GP? Derivado de la tabla de transiciones (fuente
+ * única): un estado sin salidas es terminal — hoy `finished` y
+ * `cancelled` (no se reabren; la reapertura de US-13 solo toca
+ * `locked`). Así, si la tabla cambia, el concepto de «cerrado» cambia
+ * con ella sin tocar los consumidores.
+ */
+export function isTerminalGpStatus(status: GpStatusValue): boolean {
+  return GP_TRANSITIONS[status].length === 0;
+}
+
 /** ¿La transición `from → to` está permitida? (mismo estado: no). */
 export function canTransitionGpStatus(from: GpStatusValue, to: GpStatusValue): boolean {
   return GP_TRANSITIONS[from].includes(to);

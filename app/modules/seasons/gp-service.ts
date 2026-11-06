@@ -47,7 +47,9 @@ import {
   allowedGpStatusTransitions,
   canTransitionGpStatus,
   GP_STATUS_LABELS,
+  isTerminalGpStatus,
 } from "./gp-status";
+import type { SeasonActivity } from "./season-activity";
 import type { AuditMeta } from "./season-service";
 
 export interface GpServiceDeps {
@@ -354,6 +356,43 @@ export class GpService {
       include: { circuit: true, weekendEvents: true },
     });
     return { season, gp: gp ? this.toGpView(gp) : null };
+  }
+
+  /**
+   * Actividad de GPs por temporada (consola multi-temporada del panel,
+   * impeccable P1-1): total y GPs sin cerrar por temporada. Una sola
+   * agregación (`gp.groupBy` por `(seasonId, status)`) + temporadas;
+   * «sin cerrar» se deriva de la tabla de transiciones pura
+   * (`isTerminalGpStatus`). Orden determinista: año desc, nombre asc
+   * (la selección pura `selectConsoleSeason` se apoya en él en los
+   * empates).
+   */
+  async seasonActivity(): Promise<SeasonActivity[]> {
+    const [seasons, rows] = await Promise.all([
+      this.deps.prisma.season.findMany({
+        select: { id: true, name: true, year: true },
+        orderBy: [{ year: "desc" }, { name: "asc" }],
+      }),
+      this.deps.prisma.gp.groupBy({
+        by: ["seasonId", "status"],
+        _count: { _all: true },
+      }),
+    ]);
+    const totals = new Map<string, number>();
+    const open = new Map<string, number>();
+    for (const row of rows) {
+      totals.set(row.seasonId, (totals.get(row.seasonId) ?? 0) + row._count._all);
+      if (!isTerminalGpStatus(row.status)) {
+        open.set(row.seasonId, (open.get(row.seasonId) ?? 0) + row._count._all);
+      }
+    }
+    return seasons.map((season) => ({
+      seasonId: season.id,
+      name: season.name,
+      year: season.year,
+      totalGps: totals.get(season.id) ?? 0,
+      openGps: open.get(season.id) ?? 0,
+    }));
   }
 
   /** GP con su circuito y eventos. */

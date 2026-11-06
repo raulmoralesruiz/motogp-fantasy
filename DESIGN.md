@@ -254,7 +254,7 @@ Para acciones irreversibles o que reescriben datos: un diálogo plano (superfici
 ### Lists & Tables
 - **Status list:** contenedor con borde y radio de 8 px; filas separadas por filetes (padding 0.6 rem 1 rem). Es el patrón de datos de todo el producto (versiones de reglas, historial de precios, estado de servicios).
 - **Tables:** cuerpo 0.9 rem, celdas con filete, cabeceras 0.8 rem/600 en gris de cronometraje; la tabla se desliza dentro de un wrapper `.table-scroll` (overflow-x) que preserva la semántica de `<table>`. Área de toque de los checkboxes por el label envolvente (≥ 44 px, Regla de los 44).
-- **Anchor nav (admin):** barra fija de chips de superficie (6 px) cuyo borde se enciende en rojo al pasar el cursor, agrupada por fases de trabajo (Carrera → Mercado → Temporada → Sistema) con etiquetas de fase en gris de cronometraje (no son enlaces).
+- **Anchor nav (admin):** barra fija de chips de superficie (6 px) cuyo borde se enciende en rojo al pasar el cursor, agrupada por fases de trabajo (Carrera → Mercado → Temporada → Sistema) con etiquetas de fase en gris de cronometraje (no son enlaces). El chip de la sección en vista lleva `aria-current="location"` y se señala con el acento (texto + borde en rojo de salida, peso 600): un scroll-spy por `IntersectionObserver` (holgura de 80 px, igual que el `scroll-margin-top` de los destinos) responde a «¿dónde estoy?» en una página de ~10.600 px; sin `IntersectionObserver` la nav sigue funcionando por anclas, sin acento activo.
 - **Altas colapsadas (admin):** los formularios de creación viven en un `details` («Altas y configuración») con el mismo control de 44 px que los pasos del ritual: el panel prioriza la lectura sobre el CRUD.
 
 ### Signature: la palabra roja y las flechas de estado

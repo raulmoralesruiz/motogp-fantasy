@@ -25,4 +25,5 @@
 export * from "./calendar-source";
 export * from "./gp-service";
 export * from "./gp-status";
+export * from "./season-activity";
 export * from "./season-service";

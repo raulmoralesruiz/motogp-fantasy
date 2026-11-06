@@ -25,12 +25,17 @@ function makePrisma() {
     create: vi.fn(),
     findMany: vi.fn(),
   };
-  const season = { findUnique: vi.fn(), create: vi.fn() };
+  const season = {
+    findUnique: vi.fn(),
+    create: vi.fn(),
+    findMany: vi.fn(),
+  };
   const gp = {
     findUnique: vi.fn(),
     findUniqueOrThrow: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    groupBy: vi.fn(),
   };
   const weekendEvent = {
     findFirst: vi.fn(),
@@ -296,5 +301,48 @@ describe("GpService.importCalendar (T-24)", () => {
     );
     expect(auditCalls).toContain("gp.times-updated");
     expect(auditCalls).toContain("calendar.imported");
+  });
+});
+
+describe("GpService.seasonActivity (impeccable P1-1)", () => {
+  it("agrega total y GPs sin cerrar por temporada (terminales: finished/cancelled)", async () => {
+    const fake = makePrisma();
+    fake.season.findMany.mockResolvedValue([
+      { id: "s2026", name: "Temporada 2026", year: 2026 },
+      { id: "s2105", name: "E2E 2105", year: 2105 },
+    ]);
+    fake.gp.groupBy.mockResolvedValue([
+      { seasonId: "s2026", status: "scheduled", _count: { _all: 2 } },
+      { seasonId: "s2026", status: "locked", _count: { _all: 1 } },
+      { seasonId: "s2026", status: "finished", _count: { _all: 9 } },
+      { seasonId: "s2026", status: "cancelled", _count: { _all: 1 } },
+    ]);
+    const service = new GpService({ prisma: fake.prisma });
+
+    const result = await service.seasonActivity();
+
+    expect(result).toEqual([
+      { seasonId: "s2026", name: "Temporada 2026", year: 2026, totalGps: 13, openGps: 3 },
+      // Sin GPs: total 0 y 0 sin cerrar (nunca es candidata a la consola).
+      { seasonId: "s2105", name: "E2E 2105", year: 2105, totalGps: 0, openGps: 0 },
+    ]);
+    // Una sola agregación, no una consulta por temporada.
+    expect(fake.gp.groupBy).toHaveBeenCalledTimes(1);
+  });
+
+  it("solo cuenta como «sin cerrar» los estados no terminales de la tabla", async () => {
+    const fake = makePrisma();
+    fake.season.findMany.mockResolvedValue([
+      { id: "s1", name: "Temporada 1", year: 2026 },
+    ]);
+    fake.gp.groupBy.mockResolvedValue([
+      { seasonId: "s1", status: "finished", _count: { _all: 4 } },
+      { seasonId: "s1", status: "cancelled", _count: { _all: 2 } },
+    ]);
+    const service = new GpService({ prisma: fake.prisma });
+
+    const result = await service.seasonActivity();
+
+    expect(result[0]).toMatchObject({ totalGps: 6, openGps: 0 });
   });
 });

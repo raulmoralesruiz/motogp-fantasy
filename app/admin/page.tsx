@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense } from "react";
+import { Fragment, Suspense } from "react";
 
+import { selectConsoleSeason } from "@/modules/seasons/season-activity";
 import { Alert } from "@/shared/components";
 import { trpc } from "@/trpc/client";
 
@@ -16,6 +17,7 @@ import MarketImportForm from "./market-import-form";
 import MarketSection from "./market-section";
 import PricesPanel from "./prices-panel";
 import ResultsSection from "./results-section";
+import { useScrollSpy } from "./use-scroll-spy";
 
 const STATUS_LABELS: Record<string, string> = {
   planned: "planificada",
@@ -23,6 +25,41 @@ const STATUS_LABELS: Record<string, string> = {
   finished: "finalizada",
   archived: "archivada",
 };
+
+/**
+ * Grupos de la navegación ancla (DESIGN.md: fases de trabajo, etiquetas
+ * de fase que NO son enlaces). El orden de `id` es el orden de la página:
+ * el scroll-spy marca la sección en vista con `aria-current="location"`.
+ */
+const NAV_GROUPS: ReadonlyArray<{
+  phase: string;
+  items: ReadonlyArray<{ id: string; label: string }>;
+}> = [
+  {
+    phase: "Carrera",
+    items: [
+      { id: "fin-de-semana", label: "Fin de semana" },
+      { id: "resultados", label: "Resultados" },
+      { id: "precios", label: "Precios" },
+    ],
+  },
+  { phase: "Mercado", items: [{ id: "mercado", label: "Mercado" }] },
+  {
+    phase: "Temporada",
+    items: [
+      { id: "temporadas", label: "Temporadas" },
+      { id: "circuitos", label: "Circuitos" },
+      { id: "gps", label: "GPs" },
+      { id: "calendario", label: "Importar calendario" },
+      { id: "importar-mercado", label: "Importar mercado" },
+    ],
+  },
+  { phase: "Sistema", items: [{ id: "jobs-fuentes", label: "Jobs y fuentes" }] },
+];
+
+const ANCHOR_SECTION_IDS = NAV_GROUPS.flatMap((group) =>
+  group.items.map((item) => item.id),
+);
 
 /**
  * Panel de administración global (US-04, US-05, US-06, US-16, flujo 18):
@@ -46,14 +83,25 @@ export default function AdminPage() {
     enabled: isAdmin,
   });
 
-  // Consola del fin de semana de carrera: el último GP disputado de la
-  // temporada más reciente y el siguiente paso del ritual de resultados.
-  const latestSeason = seasons.data
-    ? [...seasons.data].sort((a, b) => b.year - a.year)[0]
-    : undefined;
+  // Scroll-spy de la navegación ancla (impeccable P1-2): la sección en
+  // vista marca su chip con `aria-current="location"`.
+  const activeSection = useScrollSpy(ANCHOR_SECTION_IDS);
+
+  // Consola del fin de semana de carrera (impeccable P1-1): opera sobre
+  // «la temporada con GPs sin cerrar» (o la más reciente con actividad),
+  // NO sobre la más reciente por año — en una BD viva con temporadas de
+  // test, la selección ciega dejaba «Siguiente paso» vacío sin motivo.
+  // Tres estados escritos: `open` (ritual), `closed` (sin pendientes, con
+  // salidas) y `empty` (sin GPs, con salidas).
+  const activity = trpc.seasons.activity.useQuery(undefined, {
+    enabled: isAdmin,
+  });
+  const selection = activity.data ? selectConsoleSeason(activity.data) : undefined;
+  const consoleSeason =
+    selection && selection.kind !== "empty" ? selection.activity : undefined;
   const weekendGps = trpc.seasons.gps.list.useQuery(
-    { seasonId: latestSeason?.id ?? "" },
-    { enabled: isAdmin && Boolean(latestSeason) },
+    { seasonId: consoleSeason?.seasonId ?? "" },
+    { enabled: isAdmin && selection?.kind === "open" },
   );
   const weekendGp = weekendGps.data
     ? [...weekendGps.data]
@@ -90,103 +138,125 @@ export default function AdminPage() {
           <section id="fin-de-semana">
             <div className="card">
               <h2>Fin de semana de carrera</h2>
-              {!latestSeason ? (
-                <p className="muted">
-                  Aún no hay temporadas. Cuando empiece el fin de semana de carrera, aquí
-                  verás el estado del último GP y el siguiente paso.
-                </p>
-              ) : weekendGps.isPending ? (
+              {activity.isPending ? (
                 <p className="muted">Consultando…</p>
-              ) : weekendGps.isError ? (
+              ) : activity.isError ? (
                 <Alert variant="error">
-                  No se pudieron cargar los GPs: {weekendGps.error.message}
+                  No se pudo cargar la actividad de temporadas: {activity.error.message}
                 </Alert>
-              ) : !weekendGp ? (
-                <p className="muted">
-                  {latestSeason.name} aún no tiene GPs disputados. Cuando empiece el fin
-                  de semana de carrera, aquí verás su estado y el siguiente paso.
-                </p>
-              ) : weekendState.isPending ? (
-                <p className="muted">Consultando…</p>
-              ) : weekendState.isError ? (
-                <Alert variant="error">
-                  No se pudo cargar el estado del GP: {weekendState.error.message}
-                </Alert>
+              ) : !selection || selection.kind === "empty" ? (
+                <>
+                  <p>
+                    Todavía no hay GPs en ninguna temporada: no hay fin de
+                    semana que gestionar.
+                  </p>
+                  <p className="muted">
+                    Siguiente paso:{" "}
+                    <a href="#temporadas">crea la primera temporada</a>,{" "}
+                    <a href="#gps">añade sus GPs</a> o{" "}
+                    <a href="#calendario">importa el calendario</a>.
+                  </p>
+                </>
+              ) : selection.kind === "closed" ? (
+                <>
+                  <p>
+                    <strong>{selection.activity.name}</strong> está cerrada:
+                    sus {selection.activity.totalGps} GPs están finalizados o
+                    cancelados — sin pendientes.
+                  </p>
+                  <p className="muted">
+                    Siguiente paso:{" "}
+                    <a href="#temporadas">crea la próxima temporada</a> o{" "}
+                    <a href="#calendario">importa su calendario</a>.
+                  </p>
+                </>
               ) : (
-                <p>
-                  Último GP disputado:{" "}
-                  <strong>
-                    R{weekendGp.round} · {weekendGp.name}
-                  </strong>{" "}
-                  —{" "}
-                  {weekendState.data.definitive
-                    ? `cerrado${
-                        weekendState.data.resultsVersion
-                          ? ` (${weekendState.data.resultsVersion})`
-                          : ""
-                      }, los lineups ya puntúan`
-                    : weekendState.data.totalResults === 0
-                      ? "sin resultados importados"
-                      : `resultados provisionales (${weekendState.data.counts.provisional} provisional(es), ${weekendState.data.counts.corrected} corregida(s))`}
-                  . <strong>Siguiente paso:</strong>{" "}
-                  {weekendState.data.definitive
-                    ? "revisa los precios del próximo GP en el paso 3 del panel de Precios."
-                    : weekendState.data.totalResults === 0
-                      ? "importa los resultados en el paso 1 del ritual de Resultados."
-                      : "revísalos y márcalos definitivos en el paso 3 del ritual de Resultados."}{" "}
-                  {weekendState.data.definitive ? (
-                    <a href="#precios">Ir a Precios</a>
+                <>
+                  <p className="muted">
+                    <strong>{selection.activity.name}</strong> —{" "}
+                    {selection.activity.openGps === 1
+                      ? "1 GP sin cerrar"
+                      : `${selection.activity.openGps} GPs sin cerrar`}{" "}
+                    de {selection.activity.totalGps}.
+                  </p>
+                  {weekendGps.isPending ? (
+                    <p className="muted">Consultando…</p>
+                  ) : weekendGps.isError ? (
+                    <Alert variant="error">
+                      No se pudieron cargar los GPs: {weekendGps.error.message}
+                    </Alert>
+                  ) : !weekendGp ? (
+                    <p className="muted">
+                      {selection.activity.name} aún no tiene GPs disputados.
+                      Cuando empiece el fin de semana de carrera, aquí verás
+                      su estado y el siguiente paso.
+                    </p>
+                  ) : weekendState.isPending ? (
+                    <p className="muted">Consultando…</p>
+                  ) : weekendState.isError ? (
+                    <Alert variant="error">
+                      No se pudo cargar el estado del GP: {weekendState.error.message}
+                    </Alert>
                   ) : (
-                    // Handoff consola → ritual (adapt): el enlace lleva el
-                    // contexto (?season=&gp=) y el ritual lo prellena al
-                    // navegar, en vez de solo hacer scroll a la sección.
-                    <Link
-                      href={`/admin?season=${latestSeason.id}&gp=${weekendGp.id}#resultados`}
-                    >
-                      Ir a Resultados
-                    </Link>
+                    <p>
+                      Último GP disputado:{" "}
+                      <strong>
+                        R{weekendGp.round} · {weekendGp.name}
+                      </strong>{" "}
+                      —{" "}
+                      {weekendState.data.definitive
+                        ? `cerrado${
+                            weekendState.data.resultsVersion
+                              ? ` (${weekendState.data.resultsVersion})`
+                              : ""
+                          }, los lineups ya puntúan`
+                        : weekendState.data.totalResults === 0
+                          ? "sin resultados importados"
+                          : `resultados provisionales (${weekendState.data.counts.provisional} provisional(es), ${weekendState.data.counts.corrected} corregida(s))`}
+                      . <strong>Siguiente paso:</strong>{" "}
+                      {weekendState.data.definitive
+                        ? "revisa los precios del próximo GP en el paso 3 del panel de Precios."
+                        : weekendState.data.totalResults === 0
+                          ? "importa los resultados en el paso 1 del ritual de Resultados."
+                          : "revísalos y márcalos definitivos en el paso 3 del ritual de Resultados."}{" "}
+                      {weekendState.data.definitive ? (
+                        <a href="#precios">Ir a Precios</a>
+                      ) : (
+                        // Handoff consola → ritual (adapt): el enlace lleva el
+                        // contexto (?season=&gp=) y el ritual lo prellena al
+                        // navegar, en vez de solo hacer scroll a la sección.
+                        <Link
+                          href={`/admin?season=${selection.activity.seasonId}&gp=${weekendGp.id}#resultados`}
+                        >
+                          Ir a Resultados
+                        </Link>
+                      )}
+                    </p>
                   )}
-                </p>
+                </>
               )}
             </div>
           </section>
 
           <nav className="anchor-nav" aria-label="Secciones del panel de administración">
             <ul>
-              <li className="anchor-phase">Carrera</li>
-              <li>
-                <a href="#fin-de-semana">Fin de semana</a>
-              </li>
-              <li>
-                <a href="#resultados">Resultados</a>
-              </li>
-              <li>
-                <a href="#precios">Precios</a>
-              </li>
-              <li className="anchor-phase">Mercado</li>
-              <li>
-                <a href="#mercado">Mercado</a>
-              </li>
-              <li className="anchor-phase">Temporada</li>
-              <li>
-                <a href="#temporadas">Temporadas</a>
-              </li>
-              <li>
-                <a href="#circuitos">Circuitos</a>
-              </li>
-              <li>
-                <a href="#gps">GPs</a>
-              </li>
-              <li>
-                <a href="#calendario">Importar calendario</a>
-              </li>
-              <li>
-                <a href="#importar-mercado">Importar mercado</a>
-              </li>
-              <li className="anchor-phase">Sistema</li>
-              <li>
-                <a href="#jobs-fuentes">Jobs y fuentes</a>
-              </li>
+              {NAV_GROUPS.map((group) => (
+                <Fragment key={group.phase}>
+                  <li className="anchor-phase">{group.phase}</li>
+                  {group.items.map((item) => (
+                    <li key={item.id}>
+                      <a
+                        href={`#${item.id}`}
+                        aria-current={
+                          activeSection === item.id ? "location" : undefined
+                        }
+                      >
+                        {item.label}
+                      </a>
+                    </li>
+                  ))}
+                </Fragment>
+              ))}
             </ul>
           </nav>
 

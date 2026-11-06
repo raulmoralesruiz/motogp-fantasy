@@ -326,6 +326,15 @@ h5 {
   border-color: var(--accent);
 }
 
+/* Chip activo del scroll-spy (aria-current="location", panel /admin):
+   la sección en vista se señala con el acento — el resto del panel
+   reserva el rojo para acción/destrucción, aquí es orientación. */
+.anchor-nav a[aria-current="location"] {
+  color: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
 /* Botón primario (componente <Button> de app/shared/components). */
 .button {
   margin-top: 0.5rem;

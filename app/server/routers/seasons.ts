@@ -71,6 +71,15 @@ export function createSeasonsRouter(deps: SeasonsRouterDeps) {
     /** Temporadas con sus versiones de reglas (cualquier usuario autenticado). */
     list: protectedProcedure.query(() => service.listSeasons()),
 
+    /**
+     * Actividad de GPs por temporada: total + sin cerrar por temporada
+     * (impeccable P1-1). La consola del panel usa `selectConsoleSeason`
+     * sobre este resultado para elegir temporada; solo `global_admin`
+     * (información del panel, como el resto de consultas de
+     * administración).
+     */
+    activity: adminProcedure.query(() => gpService.seasonActivity()),
+
     /** Una temporada con sus versiones de reglas. */
     get: protectedProcedure
       .input(seasonIdInputSchema)

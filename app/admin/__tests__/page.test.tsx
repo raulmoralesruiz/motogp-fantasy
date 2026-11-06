@@ -231,6 +231,15 @@ describe("AdminPage", () => {
     mockList(trpc.market.teams.list.useQuery, []);
     mockList(trpc.market.prices.list.useQuery, []);
     mockJobsStatus(); // T-14: también carga; solo la de temporadas pendiente
+    // P1-1: la actividad de la consola también carga; resuelta (vacía)
+    // para que solo la query de temporadas esté pendiente.
+    mockResult(trpc.seasons.activity.useQuery, {
+      data: [],
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      refetch: vi.fn(),
+    });
     render(<AdminPage />);
 
     expect(screen.getAllByText("Consultando…")).toHaveLength(1);
@@ -253,6 +262,15 @@ describe("AdminPage", () => {
     mockList(trpc.market.teams.list.useQuery, []);
     mockList(trpc.market.prices.list.useQuery, []);
     mockJobsStatus(); // T-14: también carga; solo la de circuitos pendiente
+    // P1-1: la actividad de la consola también carga; resuelta (vacía)
+    // para que solo la query de circuitos esté pendiente.
+    mockResult(trpc.seasons.activity.useQuery, {
+      data: [],
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      refetch: vi.fn(),
+    });
     render(<AdminPage />);
 
     expect(screen.getAllByText("Consultando…")).toHaveLength(1);
@@ -357,7 +375,38 @@ describe("Consola del fin de semana de carrera", () => {
     mockList(trpc.market.constructors.list.useQuery, []);
     mockList(trpc.market.teams.list.useQuery, []);
     mockList(trpc.market.prices.list.useQuery, []);
+    // Por defecto la temporada de la fixture está ABIERTA (2 GPs sin
+    // cerrar): los tests del ritual de resultados mantienen su contexto.
+    mockActivity([
+      {
+        seasonId: season.id,
+        name: season.name,
+        year: season.year,
+        totalGps: 5,
+        openGps: 2,
+      },
+    ]);
     mockJobsStatus();
+  }
+
+  function mockActivity(
+    data: Array<{
+      seasonId: string;
+      name: string;
+      year: number;
+      totalGps: number;
+      openGps: number;
+    }>,
+    extra: Record<string, unknown> = {},
+  ) {
+    mockResult(trpc.seasons.activity.useQuery, {
+      data,
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      refetch: vi.fn(),
+      ...extra,
+    });
   }
 
   function mockGps(data: GpView[], extra: Record<string, unknown> = {}) {
@@ -578,5 +627,141 @@ describe("Consola del fin de semana de carrera", () => {
       "href",
       `/admin?season=${season.id}&gp=${pastGp.id}#resultados`,
     );
+  });
+
+  it("indica cuántos GPs hay sin cerrar en la temporada abierta (contexto de la consola)", () => {
+    baseMocks();
+    mockGps([pastGp]);
+    mockGpState({
+      data: {
+        definitive: true,
+        resultsVersion: "rv-2026-05-02",
+        counts: { provisional: 0, definitive: 12, corrected: 0 },
+        totalResults: 12,
+        lineups: 3,
+      },
+    });
+    render(<AdminPage />);
+
+    const scope = consoleScope();
+    expect(scope.getByText("Temporada 2026")).toBeInTheDocument();
+    // El nombre va en `<strong>` (hijo del <p>): el texto directo del
+    // párrafo es " — 2 GPs sin cerrar de 5."
+    expect(scope.getByText(/2 GPs sin cerrar de 5\./)).toBeInTheDocument();
+  });
+
+  it("usa el singular cuando solo hay un GP sin cerrar", () => {
+    baseMocks();
+    mockActivity([
+      {
+        seasonId: season.id,
+        name: season.name,
+        year: season.year,
+        totalGps: 3,
+        openGps: 1,
+      },
+    ]);
+    render(<AdminPage />);
+
+    expect(
+      consoleScope().getByText(/1 GP sin cerrar de 3\./),
+    ).toBeInTheDocument();
+  });
+
+  it("muestra la temporada cerrada (sin GPs sin cerrar) con su salida", () => {
+    baseMocks();
+    mockActivity([
+      { seasonId: season.id, name: season.name, year: season.year, totalGps: 4, openGps: 0 },
+    ]);
+    render(<AdminPage />);
+
+    const scope = consoleScope();
+    expect(scope.getByText(/está cerrada/)).toBeInTheDocument();
+    // El párrafo intercala los enlaces (texto directo: "Siguiente paso:  o .").
+    expect(scope.getByText(/Siguiente paso:/)).toBeInTheDocument();
+    // La salida apunta a las secciones de temporada y calendario.
+    expect(scope.getByRole("link", { name: "crea la próxima temporada" })).toHaveAttribute(
+      "href",
+      "#temporadas",
+    );
+    expect(scope.getByRole("link", { name: "importa su calendario" })).toHaveAttribute(
+      "href",
+      "#calendario",
+    );
+  });
+
+  it("prefiere la temporada abierta aunque otra más reciente esté cerrada", () => {
+    baseMocks();
+    mockActivity([
+      { seasonId: "s2105", name: "Temporada 2105", year: 2105, totalGps: 6, openGps: 0 },
+      { seasonId: season.id, name: season.name, year: season.year, totalGps: 5, openGps: 2 },
+    ]);
+    mockGps([pastGp]);
+    mockGpState({
+      data: {
+        definitive: false,
+        totalResults: 0,
+      },
+    });
+    render(<AdminPage />);
+
+    // Opera sobre la temporada 2026 (abierta), no sobre la 2105 (cerrada).
+    const scope = consoleScope();
+    expect(scope.getByText("Temporada 2026")).toBeInTheDocument();
+    expect(scope.queryByText(/está cerrada/)).not.toBeInTheDocument();
+  });
+
+  it("muestra el estado vacío (sin GPs en ninguna temporada) con sus salidas", () => {
+    baseMocks();
+    mockActivity([
+      { seasonId: "s2105", name: "Temporada 2105", year: 2105, totalGps: 0, openGps: 0 },
+    ]);
+    render(<AdminPage />);
+
+    const scope = consoleScope();
+    expect(
+      scope.getByText(/Todavía no hay GPs en ninguna temporada/),
+    ).toBeInTheDocument();
+    // El párrafo intercala los enlaces (texto directo: "Siguiente paso: ,  o .").
+    expect(scope.getByText(/Siguiente paso:/)).toBeInTheDocument();
+    expect(scope.getByRole("link", { name: "crea la primera temporada" })).toHaveAttribute(
+      "href",
+      "#temporadas",
+    );
+    expect(scope.getByRole("link", { name: "añade sus GPs" })).toHaveAttribute(
+      "href",
+      "#gps",
+    );
+    expect(scope.getByRole("link", { name: "importa el calendario" })).toHaveAttribute(
+      "href",
+      "#calendario",
+    );
+  });
+
+  it("muestra 'Consultando…' mientras carga la actividad de temporadas", () => {
+    baseMocks();
+    mockActivity([], { isPending: true, isSuccess: false, isError: false, data: undefined });
+    render(<AdminPage />);
+
+    expect(consoleScope().getByText("Consultando…")).toBeInTheDocument();
+  });
+
+  it("muestra el error si la actividad de temporadas falla", () => {
+    baseMocks();
+    mockActivity(
+      [],
+      {
+        data: undefined,
+        isPending: false,
+        isError: true,
+        isSuccess: false,
+        error: new Error("sin conexión"),
+      },
+    );
+    render(<AdminPage />);
+
+    expect(
+      consoleScope().getByText("No se pudo cargar la actividad de temporadas: sin conexión"),
+    ).toBeInTheDocument();
   });
 });

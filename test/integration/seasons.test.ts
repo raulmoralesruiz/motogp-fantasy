@@ -264,4 +264,48 @@ describe("US-04 · Temporadas y season_rules versionado (PostgreSQL real)", () =
     expect(season.id).toBe(seasonId);
     expect(season.rules).toHaveLength(2);
   });
+
+  // --- P1-1 (impeccable): `seasons.activity` — actividad de la consola ---
+
+  it("sin sesión, activity rechaza con UNAUTHORIZED", async () => {
+    const { seasons } = await callerFor(ADMIN_IP);
+    await expect(seasons.activity()).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+  });
+
+  it("un usuario normal no ve la actividad (403 FORBIDDEN)", async () => {
+    const { seasons } = await callerFor(USER_IP, userToken);
+    await expect(seasons.activity()).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("admin: activity agrega el total de GPs y los sin cerrar por temporada", async () => {
+    const { seasons } = await callerFor(ADMIN_IP, adminToken);
+    // Un GP nuevo (estado `scheduled` → sin cerrar) en la temporada del test.
+    const circuit = await seasons.circuits.create({
+      name: `Circuito Test ${suffix}`,
+      country: "España",
+    });
+    await seasons.gps.create({
+      seasonId,
+      round: 1,
+      name: `GP Test ${suffix}`,
+      circuitId: circuit.id,
+      date: new Date("2026-03-08T13:00:00Z"),
+      events: [
+        { type: "q2" },
+        { type: "race" },
+      ],
+    });
+
+    const activity = await seasons.activity();
+    const row = activity.find((a) => a.seasonId === seasonId);
+    expect(row).toMatchObject({
+      seasonId,
+      name: SEASON_NAME,
+      year: 2026,
+      totalGps: 1,
+      openGps: 1,
+    });
+  });
 });
