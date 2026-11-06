@@ -173,6 +173,25 @@ Paleta de un solo acento: una voz roja de escasez deliberada sobre una familia d
 **La Regla del Tinte 10/40.** Los fondos de alerta son el color de estado al 10% de opacidad con borde del mismo color al 40% (rgba(…, 0.1) / rgba(…, 0.4)); el color sólido del estado aparece solo como texto.
 **La Regla de la Pareja Semántica.** Verde y rojo solo cargan significado (bien/error, sube/baja); el gris de cronometraje marca la ausencia («Consultando…», «—», «sin posición»). Ninguno de los tres decora.
 
+## Tokens (F2)
+
+Cada color de la paleta vive **una sola vez** — en el bloque `:root` de `app/globals.css` — y el resto del CSS solo referencia el token (cero hex fuera de ese bloque; verificado por grep). Renombrar la paleta o el rojo de marca es cambiar ese bloque, no buscar hex por el archivo:
+
+| Token | Paleta | Uso |
+|---|---|---|
+| `--bg` | azul noche de boxes | lienzo; scrim del diálogo de confirmación (70%) |
+| `--surface` | pantalla de telemetría | tarjetas, inputs, pestañas, chips, diálogo |
+| `--border` | gris de pista | filetes de 1 px y bordes de tabla |
+| `--fg` | blanco de letrero | texto principal |
+| `--muted` | gris de cronometraje | texto secundario, etiquetas, cabeceras |
+| `--accent` | rojo de salida | rellenos primarios, foco, pestaña activa, checkboxes |
+| `--accent-text` | rojo de salida en texto | texto rojo pequeño (AA) |
+| `--accent-deep` | rojo de salida profundo | solo hover del relleno primario |
+| `--on-accent` | blanco puro | texto sobre rellenos rojos |
+| `--ok` / `--bad` / `--warning` / `--info` | verde / rojo de bandera, ámbar, azul | estados, deltas, alertas |
+
+La Regla del Tinte 10/40 se **deriva** por `color-mix(in srgb, var(--estado) 10% o 40%, transparent)`: una sola fuente de color; cambiar el token cambia el tinte con él. La escala tipográfica (1.75 / 1.1 / 1 / 0.9 rem, más 0.85 mono y 0.8 de cabecera) está cerrada: ni CTA (0.9 rem) ni pestaña (0.9 rem) introducen un nivel propio.
+
 ## Typography
 
 **Display Font:** pila del sistema (system-ui, -apple-system, "Segoe UI", sans-serif)
@@ -226,7 +245,7 @@ Lenguaje de formas de panel de instrumentos: rectángulos redondeados contenidos
 - **Shape:** redondeado suave (6 px), alto mínimo 44 px.
 - **Primary:** relleno rojo de salida, texto blanco puro (1 rem / 600), padding 0.65 rem 1 rem.
 - **Hover / Focus:** el hover profundiza a rojo de salida profundo (#b30500); el foco es contorno de 2 px del acento con 1 px de separación. Deshabilitado = opacidad 0.6 + cursor no permitido, y **siempre** acompañado del motivo escrito (compromiso de marca: nunca un control bloqueado sin explicación). Con motivo escrito el bloqueo usa `aria-disabled` —el botón sigue en el orden de foco para que el motivo se anuncie—; en estados transitorios sin motivo, `disabled` nativo.
-- **CTA de tarjeta:** el mismo relleno como enlace en bloque (0.95 rem / 600, padding 0.6 rem 1 rem) — la acción principal de cada tarjeta del dashboard.
+- **CTA de tarjeta:** el mismo relleno como enlace en bloque (0.9 rem / 600 — Subhead, la escala está cerrada y el CTA no introduce un nivel propio — padding 0.6 rem 1 rem): la acción principal de cada tarjeta del dashboard.
 - **Row action (fantasma):** sin relleno, texto y borde de 1 px en rojo de salida (5 px de radio); el hover aplica un tinte del acento al 12%.
 - **Secondary (neutra):** sin relleno, filete de 1 px de gris de pista, texto blanco de letrero (6 px de radio, alto mínimo 44 px). Es la opción segura de los diálogos de confirmación («No, volver») — nunca lleva el acento.
 
@@ -265,9 +284,11 @@ El título de cada página marca una palabra en rojo de salida, y el estado se n
 
 ## Estado
 
-**F1 cerrada (2026-11-06):** panel `/admin` — el lenguaje de esta página ya es el del sistema completo; la ola de cierre añadió la confirmación con impacto, la consola del fin de semana, la línea de ayuda de cancelar/neutralizar, los estados de evento por fila, la jerarquía h3 del preview de mercado y el scroll-spy robusto (`useScrollSpy` con `enabled`, late-mount). Re-evaluación dual-agent: 31/40 → 35/40 (0 anti-patterns; los 3 puntos restantes — capa de ayuda, párrafo de acciones en línea, salto de encabezados — corregidos en la misma jornada: banda 36+/40). Historial de snapshots en `.impeccable/critique/`.
+**F1 cerrada (2026-11-06):** panel `/admin` — el lenguaje de esta página ya es el del sistema completo; la ola de cierre añadió la confirmación con impacto, la consola del fin de semana, la línea de ayuda de cancelar/neutralizar, los estados de evento por fila, la jerarquía h3 del preview de mercado, el scroll-spy robusto (`useScrollSpy` con `enabled`, late-mount) y la capa de ayuda de vocabulario (P0, lockout, carry, Pmax, rv-N en su primera aparición). Re-evaluación dual-agent: 31/40 → 36/40 (0 anti-patterns). Historial de snapshots en `.impeccable/critique/`.
 
-**Siguiente:** F2 (consolidar este sistema en tokens/documentación para toda la app) y F3 (llevarlo a las páginas restantes: `/mercado` → `/lineups` → `/resultados` → `/puntuacion` → `/ligas` → `/` + `/perfil` → auth), mismas puertas de calidad y sin romper las reglas de esta página.
+**F2 cerrada (2026-11-06):** el sistema vive ahora en tokens — `:root` de `globals.css` es la única fuente de verdad de la paleta (13 tokens, cero hex fuera del bloque) y los tintes 10/40 se derivan por `color-mix` del token de estado; escala tipográfica cerrada a 1.75/1.1/1/0.9 rem (CTA y pestaña a Subhead, 0.9 rem). Ver sección «Tokens».
+
+**Siguiente:** F3 (llevarlo a las páginas restantes: `/mercado` → `/lineups` → `/resultados` → `/puntuacion` → `/ligas` → `/` + `/perfil` → auth), mismas puertas de calidad y sin romper las reglas de esta página.
 
 ## Do's and Don'ts
 

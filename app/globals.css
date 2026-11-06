@@ -1,6 +1,12 @@
+/* Tokens de color (F2: única fuente de verdad de la paleta de DESIGN.md).
+   Cada valor aparece UNA vez, aquí; el resto del CSS (y los tintes 10/40,
+   derivados por color-mix) solo referencia el token. Renombrar la paleta
+   se hace en este bloque, no buscando hex por el archivo. */
 :root {
   color-scheme: dark;
   --bg: #0b0f14;
+  --surface: #10151c;
+  --border: #21262d;
   --fg: #e6edf3;
   --muted: #8b949e;
   --accent: #e10600;
@@ -8,8 +14,14 @@
      sobre el lienzo nocturno; esta variante aclarada sí (AA). Los rellenos
      y bordes siguen en --accent. */
   --accent-text: #ff4438;
+  /* Solo hover de relleno primario; nunca en reposo. */
+  --accent-deep: #b30500;
+  /* Solo texto sobre rellenos rojos. */
+  --on-accent: #ffffff;
   --ok: #3fb950;
   --bad: #f85149;
+  --warning: #d29922;
+  --info: #58a6ff;
 }
 
 * {
@@ -71,7 +83,7 @@ h2 {
 
 .status li {
   padding: 0.6rem 0;
-  border-bottom: 1px solid #21262d;
+  border-bottom: 1px solid var(--border);
 }
 
 .status li:last-child {
@@ -115,8 +127,8 @@ select {
   padding: 0.55rem 0.7rem;
   font-size: 1rem;
   color: var(--fg);
-  background: #10151c;
-  border: 1px solid #21262d;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 6px;
 }
 
@@ -127,8 +139,8 @@ select {
   line-height: 1.4;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   color: var(--fg);
-  background: #10151c;
-  border: 1px solid #21262d;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 6px;
   resize: vertical;
 }
@@ -177,14 +189,15 @@ select {
 
 /* Alert (componente <Alert>): skins tintadas 10 % fondo / 40 % borde —
    válidas dentro y fuera de `.form` (P2 audit: errores/éxitos del panel
-   anunciados por `role` y con caja). */
+   anunciados por `role` y con caja). El tinte se DERIVA del token por
+   color-mix (Regla del Tinte 10/40 con una sola fuente de color). */
 .alert-ok {
   margin: 0;
   padding: 0.6rem 0.8rem;
   font-size: 0.9rem;
   color: var(--ok);
-  background: rgba(63, 185, 80, 0.1);
-  border: 1px solid rgba(63, 185, 80, 0.4);
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
   border-radius: 6px;
 }
 
@@ -193,8 +206,8 @@ select {
   padding: 0.6rem 0.8rem;
   font-size: 0.9rem;
   color: var(--bad);
-  background: rgba(248, 81, 73, 0.1);
-  border: 1px solid rgba(248, 81, 73, 0.4);
+  background: color-mix(in srgb, var(--bad) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--bad) 40%, transparent);
   border-radius: 6px;
 }
 
@@ -203,9 +216,9 @@ select {
   margin: 0;
   padding: 0.6rem 0.8rem;
   font-size: 0.9rem;
-  color: #d29922;
-  background: rgba(210, 153, 34, 0.1);
-  border: 1px solid rgba(210, 153, 34, 0.4);
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning) 40%, transparent);
   border-radius: 6px;
 }
 
@@ -213,9 +226,9 @@ select {
   margin: 0;
   padding: 0.6rem 0.8rem;
   font-size: 0.9rem;
-  color: #58a6ff;
-  background: rgba(88, 166, 255, 0.1);
-  border: 1px solid rgba(88, 166, 255, 0.4);
+  color: var(--info);
+  background: color-mix(in srgb, var(--info) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--info) 40%, transparent);
   border-radius: 6px;
 }
 
@@ -237,8 +250,8 @@ select {
 
 .card {
   padding: 0.9rem 1rem;
-  background: #10151c;
-  border: 1px solid #21262d;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 8px;
 }
 
@@ -281,14 +294,16 @@ h5 {
   margin-top: 0;
 }
 
-/* CTA de tarjeta (tamaño de toque ≥44 px — user-flows.md §3). */
+/* CTA de tarjeta (tamaño de toque ≥44 px — user-flows.md §3). Tamaño de
+   Subhead (0.9 rem/600): la escala tipográfica está cerrada (DESIGN.md)
+   y el CTA no introduce un nivel propio. */
 .card .cta {
   display: inline-block;
   margin-top: 0.6rem;
   padding: 0.6rem 1rem;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 600;
-  color: #fff;
+  color: var(--on-accent);
   background: var(--accent);
   border-radius: 6px;
 }
@@ -300,8 +315,8 @@ h5 {
   z-index: 10;
   margin: 0 0 1rem;
   padding: 0.5rem;
-  background: #0b0f14;
-  border: 1px solid #21262d;
+  background: var(--bg);
+  border: 1px solid var(--border);
   border-radius: 8px;
 }
 
@@ -321,8 +336,8 @@ h5 {
   padding: 0.45rem 0.8rem;
   font-size: 0.9rem;
   color: var(--fg);
-  background: #10151c;
-  border: 1px solid #21262d;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 6px;
 }
 
@@ -345,7 +360,7 @@ h5 {
   padding: 0.65rem 1rem;
   font-size: 1rem;
   font-weight: 600;
-  color: #fff;
+  color: var(--on-accent);
   background: var(--accent);
   border: none;
   border-radius: 6px;
@@ -353,7 +368,7 @@ h5 {
 }
 
 .button:hover:not(:disabled):not([aria-disabled="true"]) {
-  background: #b30500;
+  background: var(--accent-deep);
 }
 
 .button:disabled,
@@ -378,7 +393,7 @@ h5 {
   font-weight: 600;
   color: var(--fg);
   background: transparent;
-  border: 1px solid #21262d;
+  border: 1px solid var(--border);
   border-radius: 6px;
   cursor: pointer;
 }
@@ -407,15 +422,15 @@ h5 {
   align-items: center;
   justify-content: center;
   padding: 1.25rem;
-  background: rgba(11, 15, 20, 0.7);
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
 }
 
 .confirm-dialog {
   width: 100%;
   max-width: 26rem;
   padding: 0.9rem 1rem;
-  background: #10151c;
-  border: 1px solid #21262d;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 8px;
 }
 
@@ -508,16 +523,16 @@ h5 {
 
 .tab {
   padding: 0.45rem 0.9rem;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   color: var(--fg);
-  background: #10151c;
-  border: 1px solid #21262d;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 6px;
   cursor: pointer;
 }
 
 .tab[aria-pressed="true"] {
-  color: #fff;
+  color: var(--on-accent);
   background: var(--accent);
   border-color: var(--accent);
 }
@@ -547,8 +562,8 @@ h5 {
   padding: 0.55rem 0.7rem;
   font-size: 1rem;
   color: var(--fg);
-  background: #10151c;
-  border: 1px solid #21262d;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 6px;
 }
 
@@ -577,7 +592,7 @@ h5 {
 }
 
 .row-action:hover:not(:disabled):not([aria-disabled="true"]) {
-  background: rgba(225, 6, 0, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .row-action:disabled,
@@ -637,7 +652,7 @@ h5 {
 .results-table th,
 .results-table td {
   padding: 0.4rem 0.5rem;
-  border: 1px solid #21262d;
+  border: 1px solid var(--border);
   text-align: left;
   vertical-align: middle;
 }
