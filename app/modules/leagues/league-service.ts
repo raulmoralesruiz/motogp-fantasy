@@ -29,6 +29,7 @@ import { TRPCError } from "@trpc/server";
 import type {
   League,
   LeagueEntryMode,
+  LeagueStatus,
   LeagueType,
   LeagueVisibility,
   Prisma,
@@ -157,6 +158,11 @@ export interface LeagueView {
   minMembers: number;
   maxMembers: number;
   entryMode: LeagueEntryMode;
+  /**
+   * Estado de la liga (F3 P2: "Mis ligas" la marca — una `finished`/`archived`
+   * no es idéntica a una activa; el directorio ya filtra a `active`).
+   */
+  status: LeagueStatus;
   /**
    * El admin ha habilitado que los miembros vean/compartan el código de
    * invitación (US-26, leagues.md §5: "invitar solo si el admin lo habilita").
@@ -1696,6 +1702,7 @@ export class LeagueService {
       minMembers: league.minMembers,
       maxMembers: league.maxMembers,
       entryMode: league.entryMode,
+      status: league.status,
       allowMemberInvites: league.allowMemberInvites,
       adjustedRankingEnabled: league.adjustedRankingEnabled,
       startDate: league.startDate,
