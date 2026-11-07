@@ -4,9 +4,17 @@ import { getQueryKey } from "@trpc/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
-import { Alert, Button, Field } from "@/shared/components";
+import type { LeagueStatus, LeagueType } from "@/modules/leagues";
+import {
+  Alert,
+  Button,
+  ConfirmDialog,
+  Field,
+  RowAction,
+  type ConfirmRequest,
+} from "@/shared/components";
 import { trpc } from "@/trpc/client";
 
 /**
@@ -19,10 +27,20 @@ import { trpc } from "@/trpc/client";
  *
  * **Panel de administración (US-26, leagues.md §5):** solo el admin gestiona
  * la liga — código de invitación (ver/rotar), habilitar que los miembros
- * vean el código, cambiar configuración (nombre/descripción/visibilidad),
- * transferir el rol, expulsar miembros y cerrar la liga. Un miembro solo
- * juega (ver ranking/miembros, colocar/cambiar lineup); el servidor revalida
- * cada acción (AGENTS.md §8) y devuelve 403 a un miembro.
+ * vean el código, cambiar configuración (nombre/descripción), transferir el
+ * rol, expulsar miembros y cerrar la liga. Un miembro solo juega (ver
+ * ranking/miembros, colocar/cambiar lineup); el servidor revalida cada acción
+ * (AGENTS.md §8) y devuelve 403 a un miembro.
+ *
+ * **F3 (impeccable):** las acciones destructivas («Hacer admin», «Expulsar»,
+ * «Cerrar liga», «Salir») piden confirmación con impacto escrito
+ * (`ConfirmDialog` — patrón del sistema, sustituye a `window.confirm`); el
+ * feedback de cada mutación vive junto a su control (no en un bloque
+ * compartido arriba); la visibilidad se muestra de solo-lectura derivada del
+ * tipo (el servidor la exige acoplada — un select libre era una trampa); el
+ * estado de la liga se marca en la cabecera y condiciona la unión; las listas
+ * usan `ul.status`, el formulario `form`+`.stack` y las fechas se formatean
+ * en es-ES local.
  *
  * Visibilidad (ADR-0024): pública ⇒ cualquiera la ve; privada ⇒ solo miembros
  * activos (un extraño recibe NOT_FOUND → "La liga no existe."). El código lo
@@ -39,6 +57,48 @@ function entryModeLabel(mode: "code" | "invite" | "mixed"): string {
   return "código o invitación";
 }
 
+/**
+ * Etiqueta legible del estado de la liga (F3 P1: marcar la no activa — una
+ * `finished`/`archived` no es idéntica a una activa). Tipada con la unión de
+ * dominio `LeagueStatus`: un estado nuevo es error de compilación, no una
+ * etiqueta «activa» silenciosa.
+ */
+function leagueStatusLabel(status: LeagueStatus): string {
+  if (status === "finished") return "finalizada";
+  if (status === "archived") return "archivada";
+  if (status === "planned") return "planificada";
+  return "activa";
+}
+
+/**
+ * Visibilidad derivada del tipo (F3 P1: el servidor la exige acoplada —
+ * `public` ⇒ `public`, `private` ⇒ no `public` — y `canViewLeague` solo mira
+ * el tipo), así que no es un control: un select libre era una trampa que
+ * enviaba al servidor un valor rechazado de forma garantizada.
+ */
+const VISIBILITY_BY_TYPE: Record<LeagueType, string> = {
+  private: "Privada (oculta)",
+  public: "Pública (directorio)",
+};
+
+/** Fecha local es-ES (F3 P3: no UTC — el usuario ve su zona horaria). */
+function formatDate(value: Date): string {
+  return value.toLocaleDateString("es-ES", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+/**
+ * F3 P3: `auth.me` falla con UNAUTHORIZED cuando no hay sesión, pero también
+ * puede fallar por un error real (500, red). Solo el UNAUTHORIZED significa
+ * "sin cuenta"; el resto es un fallo que no debe leerse como "inicia sesión".
+ */
+function isUnauthorized(error: unknown): boolean {
+  return (error as { data?: { code?: string } } | null)?.data?.code === "UNAUTHORIZED";
+}
+
 export default function LeagueDetailPage() {
   const params = useParams<{ id: string }>();
   const leagueId = params.id;
@@ -49,14 +109,31 @@ export default function LeagueDetailPage() {
   const ranking = trpc.leagues.ranking.useQuery({ leagueId });
   const me = trpc.auth.me.useQuery();
 
+  // Confirmación con impacto (patrón del sistema, F3 P0/P1) para las acciones
+  // que reescriben datos o son irreversibles: «Hacer admin», «Expulsar»,
+  // «Cerrar liga» y «Salir». Un solo diálogo a la vez (el último pedido gana).
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
+
+  // Feedback acotado por acción/sección (F3 P1): cada mutación muestra su
+  // resultado junto a su control, no en un bloque compartido arriba. En móvil,
+  // tras la acción el usuario está junto al control, no en la cabecera.
   const [rotated, setRotated] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [rotateError, setRotateError] = useState<string | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [updateSuccess, setUpdateSuccess] = useState<string | null>(null);
+  const [membersError, setMembersError] = useState<string | null>(null);
+  const [membersSuccess, setMembersSuccess] = useState<string | null>(null);
+  const [closeError, setCloseError] = useState<string | null>(null);
+  const [closeSuccess, setCloseSuccess] = useState<string | null>(null);
+  const [invitesError, setInvitesError] = useState<string | null>(null);
+  const [invitesSuccess, setInvitesSuccess] = useState<string | null>(null);
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
+  const [leaveSuccess, setLeaveSuccess] = useState<string | null>(null);
 
   // Formulario de configuración (US-26): se inicializa cuando carga la liga.
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [visibility, setVisibility] = useState("");
   const [adjustedRankingEnabled, setAdjustedRankingEnabled] = useState(false);
   const [configReady, setConfigReady] = useState(false);
 
@@ -64,7 +141,6 @@ export default function LeagueDetailPage() {
     if (league.data && !configReady) {
       setName(league.data.name);
       setDescription(league.data.description ?? "");
-      setVisibility(league.data.visibility);
       setAdjustedRankingEnabled(Boolean(league.data.adjustedRankingEnabled));
       setConfigReady(true);
     }
@@ -75,82 +151,83 @@ export default function LeagueDetailPage() {
     queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.leagues.get) });
   }
 
-  function clearFeedback() {
-    setError(null);
-    setSuccess(null);
-    setRotated(null);
-  }
-
   const rotate = trpc.leagues.rotateCode.useMutation({
     onSuccess: (newCode) => {
-      clearFeedback();
+      setRotateError(null);
       setRotated(newCode);
       invalidateLeague();
     },
     onError: (err) => {
-      setSuccess(null);
       setRotated(null);
-      setError(err instanceof Error ? err.message : "No se pudo rotar el código.");
+      setRotateError(err instanceof Error ? err.message : "No se pudo rotar el código.");
     },
   });
 
   const update = trpc.leagues.update.useMutation({
     onSuccess: () => {
-      clearFeedback();
-      setSuccess("Configuración guardada.");
+      setUpdateError(null);
+      setUpdateSuccess("Configuración guardada.");
       invalidateLeague();
     },
     onError: (err) => {
-      setSuccess(null);
-      setError(err instanceof Error ? err.message : "No se pudo guardar la configuración.");
+      setUpdateSuccess(null);
+      setUpdateError(
+        err instanceof Error ? err.message : "No se pudo guardar la configuración.",
+      );
     },
   });
 
   const transferAdmin = trpc.leagues.transferAdmin.useMutation({
     onSuccess: () => {
-      clearFeedback();
-      setSuccess("Rol de admin transferido.");
+      setMembersError(null);
+      setMembersSuccess("Rol de admin transferido.");
       invalidateLeague();
     },
     onError: (err) => {
-      setSuccess(null);
-      setError(err instanceof Error ? err.message : "No se pudo transferir el rol.");
+      setMembersSuccess(null);
+      setMembersError(
+        err instanceof Error ? err.message : "No se pudo transferir el rol.",
+      );
     },
   });
 
   const kick = trpc.leagues.kick.useMutation({
     onSuccess: () => {
-      clearFeedback();
-      setSuccess("Miembro expulsado.");
+      setMembersError(null);
+      setMembersSuccess("Miembro expulsado.");
       invalidateLeague();
     },
     onError: (err) => {
-      setSuccess(null);
-      setError(err instanceof Error ? err.message : "No se pudo expulsar al miembro.");
+      setMembersSuccess(null);
+      setMembersError(
+        err instanceof Error ? err.message : "No se pudo expulsar al miembro.",
+      );
     },
   });
 
   const close = trpc.leagues.close.useMutation({
     onSuccess: () => {
-      clearFeedback();
-      setSuccess("Liga cerrada.");
+      setCloseError(null);
+      setCloseSuccess("Liga cerrada.");
       invalidateLeague();
     },
     onError: (err) => {
-      setSuccess(null);
-      setError(err instanceof Error ? err.message : "No se pudo cerrar la liga.");
+      setCloseSuccess(null);
+      setCloseError(err instanceof Error ? err.message : "No se pudo cerrar la liga.");
     },
   });
 
   const setMemberInvites = trpc.leagues.setMemberInvites.useMutation({
     onSuccess: () => {
-      clearFeedback();
-      setSuccess("Ajuste de invitaciones guardado.");
+      setInvitesError(null);
+      setInvitesSuccess("Ajuste de invitaciones guardado.");
       invalidateLeague();
     },
     onError: (err) => {
-      setSuccess(null);
-      setError(err instanceof Error ? err.message : "No se pudo guardar el ajuste.");
+      setInvitesSuccess(null);
+      setInvitesError(
+        err instanceof Error ? err.message : "No se pudo guardar el ajuste.",
+      );
     },
   });
 
@@ -158,11 +235,11 @@ export default function LeagueDetailPage() {
   // actor está autenticado y no es miembro. El servidor revalida todo.
   const join = trpc.leagues.join.useMutation({
     onSuccess: () => {
-      setError(null);
+      setJoinError(null);
       invalidateLeague();
     },
     onError: (err) => {
-      setError(err instanceof Error ? err.message : "No se pudo unirse a la liga.");
+      setJoinError(err instanceof Error ? err.message : "No se pudo unirse a la liga.");
     },
   });
 
@@ -172,17 +249,17 @@ export default function LeagueDetailPage() {
   // es miembro, el botón de unión reaparece).
   const leave = trpc.leagues.leave.useMutation({
     onSuccess: (view) => {
-      clearFeedback();
+      setLeaveError(null);
       if (view.type === "private") {
         router.push("/ligas");
         return;
       }
-      setSuccess("Has salido de la liga. El histórico de puntos se conserva.");
+      setLeaveSuccess("Has salido de la liga. El histórico de puntos se conserva.");
       invalidateLeague();
     },
     onError: (err) => {
-      setSuccess(null);
-      setError(err instanceof Error ? err.message : "No se pudo salir de la liga.");
+      setLeaveSuccess(null);
+      setLeaveError(err instanceof Error ? err.message : "No se pudo salir de la liga.");
     },
   });
 
@@ -206,80 +283,139 @@ export default function LeagueDetailPage() {
   const l = league.data;
   const meId = me.data?.id;
 
+  // F3 P2: guard server-side de la UX — un nombre vacío llega rechazado al
+  // servidor; mejor no enviarlo y escribir el motivo junto al botón.
+  function submitBlockReason(): string | null {
+    if (update.isPending) return null;
+    if (name.trim() === "") return "Escribe un nombre para la liga.";
+    return null;
+  }
+
+  function handleConfigSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (update.isPending) return;
+    if (submitBlockReason() !== null) return;
+    update.mutate({
+      leagueId: l.id,
+      name,
+      description,
+      adjustedRankingEnabled,
+    });
+  }
+
+  const configBlockReason = submitBlockReason();
+
   return (
-    <div>
-      {error && <Alert variant="error">{error}</Alert>}
-      {success && <Alert variant="success">{success}</Alert>}
-      {rotated && (
-        <Alert variant="success">
-          Código rotado. El código anterior quedó revocado. Nuevo código:{" "}
-          <strong>{rotated}</strong>
-        </Alert>
-      )}
+    <div className="stack">
+      {/* Cabecera */}
+      <div>
+        <h2>{l.name}</h2>
+        {l.description && <p>{l.description}</p>}
+        <p className="muted">
+          {l.type === "private" ? "Privada" : "Pública"} · {l.activeMembers}/
+          {l.maxMembers} miembros · entrada {entryModeLabel(l.entryMode)}
+          {l.status !== "active" && (
+            <>
+              {" "}
+              · <strong>{leagueStatusLabel(l.status)}</strong>
+            </>
+          )}
+          {l.startDate && <> · inicio {formatDate(l.startDate)}</>}
+          {l.endDate && <> · fin {formatDate(l.endDate)}</>}
+        </p>
+      </div>
 
-      <h2>{l.name}</h2>
-      {l.description && <p>{l.description}</p>}
-      <p className="muted">
-        {l.type === "private" ? "Privada" : "Pública"} ·{" "}
-        {l.activeMembers}/{l.maxMembers} miembros · entrada {entryModeLabel(l.entryMode)}
-        {l.startDate && <> · inicio {l.startDate.toISOString().slice(0, 10)}</>}
-        {l.endDate && <> · fin {l.endDate.toISOString().slice(0, 10)}</>}
-      </p>
+      {/* Feedback de salida de la liga (US-27). F3 P2: vive a nivel de página,
+          NO dentro del bloque de miembro: al salir de una liga pública el
+          refetch vuelve `isMember: false` y ese bloque desaparece, perdiendo
+          el aviso. Aquí sobrevive al cambio de estado. */}
+      {leaveError && <Alert variant="error">{leaveError}</Alert>}
+      {leaveSuccess && <Alert variant="success">{leaveSuccess}</Alert>}
 
-      <h3>
-        Miembros ({l.activeMembers}
-        {l.activeMembers === 1 ? "" : "s"})
-      </h3>
-      {l.members.length === 0 ? (
-        <p className="muted">Todavía no hay miembros.</p>
-      ) : (
-        <ul>
-          {l.members.map((m) => {
-            const isSelf = meId !== undefined && m.userId === meId;
-            return (
-              <li key={m.userId}>
-                {m.username}
-                {m.role === "admin" && <span className="muted"> · admin</span>}
-                {l.isAdmin && !isSelf && (
-                  <span>
-                    {m.role !== "admin" && (
-                      <Button
-                        type="button"
+      {/* Miembros (US-24, leagues.md §9) */}
+      <div>
+        <h3>
+          Miembros ({l.activeMembers}
+          {l.activeMembers === 1 ? "" : "s"})
+        </h3>
+        {l.members.length === 0 ? (
+          <p className="muted">Todavía no hay miembros.</p>
+        ) : (
+          <ul className="status">
+            {l.members.map((m) => {
+              const isSelf = meId !== undefined && m.userId === meId;
+              return (
+                <li key={m.userId}>
+                  {m.username}
+                  {m.role === "admin" && <span className="muted"> · admin</span>}
+                  {l.isAdmin && !isSelf && (
+                    <span className="spaced">
+                      {m.role !== "admin" && (
+                        <RowAction
+                          aria-label={`Hacer admin a ${m.username}`}
+                          onClick={() =>
+                            setConfirmRequest({
+                              title: `Hacer admin a ${m.username}`,
+                              impact: (
+                                <>
+                                  <strong>{m.username}</strong> pasará a ser admin de la
+                                  liga y tú dejarás de serlo.
+                                </>
+                              ),
+                              confirmLabel: "Sí, hacer admin",
+                              onConfirm: () =>
+                                transferAdmin.mutate({
+                                  leagueId: l.id,
+                                  targetUserId: m.userId,
+                                }),
+                            })
+                          }
+                        >
+                          Hacer admin
+                        </RowAction>
+                      )}{" "}
+                      <RowAction
+                        aria-label={`Expulsar a ${m.username}`}
                         onClick={() =>
-                          transferAdmin.mutate({
-                            leagueId: l.id,
-                            targetUserId: m.userId,
+                          setConfirmRequest({
+                            title: `Expulsar a ${m.username}`,
+                            impact: (
+                              <>
+                                <strong>{m.username}</strong> saldrá de la liga y no podrá
+                                volver a entrar. Su histórico de puntos se conserva.
+                              </>
+                            ),
+                            irreversible: true,
+                            confirmLabel: "Sí, expulsar",
+                            onConfirm: () =>
+                              kick.mutate({
+                                leagueId: l.id,
+                                targetUserId: m.userId,
+                              }),
                           })
                         }
-                        disabled={transferAdmin.isPending}
                       >
-                        Hacer admin
-                      </Button>
-                    )}
-                    <Button
-                      type="button"
-                      onClick={() =>
-                        kick.mutate({ leagueId: l.id, targetUserId: m.userId })
-                      }
-                      disabled={kick.isPending}
-                    >
-                      Expulsar
-                    </Button>
-                  </span>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+                        Expulsar
+                      </RowAction>
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {membersError && <Alert variant="error">{membersError}</Alert>}
+        {membersSuccess && <Alert variant="success">{membersSuccess}</Alert>}
+      </div>
 
+      {/* Miembros que salieron (US-27, ADR-0027) */}
       {l.formerMembers.length > 0 && (
-        <>
+        <div>
           <h3>
             Miembros que salieron ({l.formerMembers.length}
             {l.formerMembers.length === 1 ? "" : "s"})
           </h3>
-          <ul>
+          <ul className="status">
             {l.formerMembers.map((m) => (
               <li key={m.userId}>
                 {m.username}{" "}
@@ -289,25 +425,50 @@ export default function LeagueDetailPage() {
               </li>
             ))}
           </ul>
-        </>
+        </div>
       )}
 
+      {/* Código de invitación para el miembro (US-26, leagues.md §5): el admin
+          lo habilita con `allowMemberInvites` y el servidor lo entrega al
+          miembro (toLeagueView); el miembro lo ve de solo-lectura para
+          compartirlo. F3 P1: la función no puede ser muerta para su público —
+          antes solo el panel de admin la mostraba. */}
+      {l.isMember && !l.isAdmin && l.code && (
+        <div>
+          <h3>Invitar a amigos</h3>
+          <p className="muted">
+            El admin de la liga ha habilitado las invitaciones. Comparte este código para
+            que otros se unan:
+          </p>
+          <Alert variant="info">
+            Código de invitación: <strong>{l.code}</strong>
+          </Alert>
+        </div>
+      )}
+
+      {/* Salir de la liga (US-27, ADR-0027): miembro activo no admin */}
       {l.isMember && !l.isAdmin && (
         <div>
           <h3>Salir de la liga</h3>
           <p className="muted">
-            Al salir dejas de participar en esta liga. Tu histórico de puntos
-            se conserva; puedes volver a unirte si la liga sigue abierta.
+            Al salir dejas de participar en esta liga. Tu histórico de puntos se conserva;
+            puedes volver a unirte si la liga sigue abierta.
           </p>
           <Button
             type="button"
-            onClick={() => {
-              const ok = window.confirm(
-                "¿Seguro que quieres salir de esta liga? Tu histórico de puntos se conserva.",
-              );
-              if (!ok) return;
-              leave.mutate({ leagueId: l.id });
-            }}
+            onClick={() =>
+              setConfirmRequest({
+                title: "Salir de la liga",
+                impact: (
+                  <>
+                    Dejarás de participar en esta liga. Tu histórico de puntos se
+                    conserva.
+                  </>
+                ),
+                confirmLabel: "Sí, salir",
+                onConfirm: () => leave.mutate({ leagueId: l.id }),
+              })
+            }
             disabled={leave.isPending}
           >
             {leave.isPending ? "Saliendo…" : "Salir de la liga"}
@@ -315,176 +476,267 @@ export default function LeagueDetailPage() {
         </div>
       )}
 
+      {/* Salir de la liga: el admin debe transferir primero el rol (US-27).
+          F3 P3: con un solo miembro no hay a quién transferirle — la única
+          salida es cerrar la liga. */}
       {l.isAdmin && (
         <div>
           <h3>Salir de la liga</h3>
-          <p className="muted">
-            Eres el admin de la liga: para salir, transfiere primero el rol a
-            otro miembro.
-          </p>
+          {l.activeMembers === 1 ? (
+            <p className="muted">
+              Eres el único miembro de la liga: no hay a quién transferir el rol. Si
+              quieres salir, cierra la liga desde el panel de administración.
+            </p>
+          ) : (
+            <p className="muted">
+              Eres el admin de la liga: para salir, transfiere primero el rol a otro
+              miembro con «Hacer admin» en la lista de miembros.
+            </p>
+          )}
         </div>
       )}
 
+      {/* Unión a la liga pública (US-25, entrada abierta ADR-0024) */}
       {l.type === "public" && !l.isMember && (
         <div>
           <h3>Unirse</h3>
-          {me.isPending ? (
+          {l.status !== "active" ? (
+            // F3 P1: una liga cerrada rechaza la unión (not_accepting_entries);
+            // mejor un aviso neutro con salida al directorio que un botón muerto.
+            <Alert variant="info">
+              Esta liga está {leagueStatusLabel(l.status)} y no admite nuevas entradas.{" "}
+              <Link href="/ligas">Ver otras ligas</Link>.
+            </Alert>
+          ) : me.isPending ? (
             <p className="muted">Consultando…</p>
-          ) : me.isError ? (
+          ) : me.isError && isUnauthorized(me.error) ? (
             <Alert variant="info">
               Para unirte a la liga necesitas una cuenta.{" "}
               <Link href="/login">Inicia sesión</Link> o{" "}
               <Link href="/registro">crea una cuenta</Link>.
             </Alert>
+          ) : me.isError ? (
+            // F3 P3: un fallo real de auth.me no debe leerse como "sin cuenta".
+            <Alert variant="error">
+              No se pudo verificar tu sesión. Recarga la página e inténtalo de nuevo.
+            </Alert>
           ) : (
-            <Button
-              type="button"
-              onClick={() => join.mutate({ leagueId: l.id })}
-              disabled={join.isPending}
-            >
-              {join.isPending ? "Uniéndose…" : "Unirme a la liga"}
-            </Button>
+            <>
+              <Button
+                type="button"
+                onClick={() => join.mutate({ leagueId: l.id })}
+                disabled={join.isPending}
+              >
+                {join.isPending ? "Uniéndose…" : "Unirme a la liga"}
+              </Button>
+              {joinError && <Alert variant="error">{joinError}</Alert>}
+            </>
           )}
         </div>
       )}
 
-      <h3>Ranking general</h3>
-      <p className="muted">
-        {l.adjustedRankingEnabled
-          ? "Ranking ajustado activo: el general cuenta los GPs desde la entrada del último miembro."
-          : "Ranking ajustado desactivado: cada miembro suma los GPs desde su propia entrada."}{" "}
-        Los cambios de esta opción se aplican en la siguiente publicación.
-      </p>
-      {ranking.isPending && <p className="muted">Consultando…</p>}
-      {ranking.isError && (
-        <Alert variant="error">No se pudo cargar el ranking.</Alert>
-      )}
-      {ranking.data && ranking.data.entries.length === 0 && (
+      {/* Ranking general (US-21/ADR-0022) */}
+      <div>
+        <h3>Ranking general</h3>
         <p className="muted">
-          Aún no hay ranking publicado (se calcula al publicarse resultados
-          definitivos).
+          {l.adjustedRankingEnabled
+            ? "Ranking ajustado activo: el general cuenta los GPs desde la entrada del último miembro."
+            : "Ranking ajustado desactivado: cada miembro suma los GPs desde su propia entrada."}{" "}
+          Los cambios de esta opción se aplican en la siguiente publicación.
         </p>
-      )}
-      {ranking.data && ranking.data.entries.length > 0 && (
-        <ol>
-          {ranking.data.entries.map((e) => (
-            <li key={e.position}>
-              {e.username} <span className="muted">— {e.points} pts</span>
-            </li>
-          ))}
-        </ol>
-      )}
+        {ranking.isPending && <p className="muted">Consultando…</p>}
+        {ranking.isError && <Alert variant="error">No se pudo cargar el ranking.</Alert>}
+        {ranking.data && ranking.data.entries.length === 0 && (
+          <p className="muted">
+            Aún no hay ranking publicado (se calcula al publicarse resultados
+            definitivos).
+          </p>
+        )}
+        {ranking.data && ranking.data.entries.length > 0 && (
+          <ol className="status">
+            {ranking.data.entries.map((e) => (
+              <li key={e.position}>
+                {e.username} <span className="muted">— {e.points} pts</span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
 
+      {/* Panel de administración (US-26, leagues.md §5) */}
       {l.isAdmin && (
-        <div>
+        <div className="stack">
           <h3>Administración</h3>
 
-          <h4>Código de invitación</h4>
-          {l.code ? (
-            <Alert variant="info">
-              Código de invitación: <strong>{l.code}</strong>{" "}
-              <Button
-                type="button"
-                onClick={() => rotate.mutate({ leagueId: l.id })}
-                disabled={rotate.isPending}
-              >
-                {rotate.isPending ? "Rotando…" : "Rotar código"}
-              </Button>
-            </Alert>
-          ) : (
-            <Alert variant="info">
-              Esta liga no usa código de invitación (modo «solo invitación»).
-            </Alert>
-          )}
-          <div className="field">
-            <label>
-              <input
-                type="checkbox"
-                checked={l.allowMemberInvites}
-                onChange={(e) =>
-                  setMemberInvites.mutate({
-                    leagueId: l.id,
-                    enabled: e.target.checked,
-                  })
-                }
-                disabled={setMemberInvites.isPending}
-              />{" "}
-              Permitir que los miembros vean y compartan el código de invitación
-            </label>
+          {/* Código de invitación (leagues.md §4) */}
+          <div>
+            <h4>Código de invitación</h4>
+            {l.code ? (
+              <>
+                <Alert variant="info">
+                  Código de invitación: <strong>{l.code}</strong>{" "}
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() =>
+                      // F3 P2: rotar revoca el código vigente (afecta a
+                      // terceros que lo tengan) — pide confirmación con el
+                      // impacto escrito, como el resto de acciones que
+                      // reescriben datos.
+                      setConfirmRequest({
+                        title: "Rotar el código de invitación",
+                        impact: (
+                          <>
+                            El código actual quedará <strong>revocado</strong>: quien lo
+                            tenga ya no podrá unirse con él.
+                          </>
+                        ),
+                        confirmLabel: "Sí, rotar",
+                        onConfirm: () => rotate.mutate({ leagueId: l.id }),
+                      })
+                    }
+                    disabled={rotate.isPending}
+                  >
+                    {rotate.isPending ? "Rotando…" : "Rotar código"}
+                  </Button>
+                </Alert>
+                {rotated && (
+                  <Alert variant="success">
+                    Código rotado. El código anterior quedó revocado. Nuevo código:{" "}
+                    <strong>{rotated}</strong>
+                  </Alert>
+                )}
+                {rotateError && <Alert variant="error">{rotateError}</Alert>}
+              </>
+            ) : (
+              <Alert variant="info">
+                Esta liga no usa código de invitación (modo «solo invitación»).
+              </Alert>
+            )}
           </div>
 
-          <h4>Configuración</h4>
+          {/* Invitaciones de miembros (US-26) */}
           <div>
-            <Field
-              label="Nombre"
-              name="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-            <Field
-              label="Descripción"
-              name="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-            <div className="field">
-              <label htmlFor="visibility">Visibilidad</label>
-              <select
-                id="visibility"
-                name="visibility"
-                value={visibility}
-                onChange={(e) => setVisibility(e.target.value)}
-              >
-                <option value="public">Pública</option>
-                <option value="unlisted">No listada</option>
-                <option value="private">Privada</option>
-              </select>
-            </div>
             <div className="field">
               <label>
                 <input
                   type="checkbox"
-                  checked={adjustedRankingEnabled}
-                  onChange={(e) => setAdjustedRankingEnabled(e.target.checked)}
+                  checked={l.allowMemberInvites}
+                  onChange={(e) =>
+                    setMemberInvites.mutate({
+                      leagueId: l.id,
+                      enabled: e.target.checked,
+                    })
+                  }
+                  disabled={setMemberInvites.isPending}
                 />{" "}
-                Ranking ajustado
+                Permitir que los miembros vean y compartan el código de invitación
               </label>
-              <p className="muted">
-                Cuenta el general solo desde la entrada del último miembro. Se
-                aplica en la siguiente publicación del ranking.
-              </p>
             </div>
-            <Button
-              type="button"
-              onClick={() =>
-                update.mutate({
-                  leagueId: l.id,
-                  name,
-                  description,
-                  visibility: visibility as "public" | "unlisted" | "private",
-                  adjustedRankingEnabled,
-                })
-              }
-              disabled={update.isPending}
-            >
-              {update.isPending ? "Guardando…" : "Guardar cambios"}
-            </Button>
+            {invitesError && <Alert variant="error">{invitesError}</Alert>}
+            {invitesSuccess && <Alert variant="success">{invitesSuccess}</Alert>}
           </div>
 
-          <h4>Cerrar liga</h4>
-          <p className="muted">
-            Al cerrar la liga pasa a «finalizada» y deja de aceptar cambios.
-            El histórico de puntos se conserva.
-          </p>
-          <Button
-            type="button"
-            onClick={() => close.mutate({ leagueId: l.id })}
-            disabled={close.isPending}
-          >
-            {close.isPending ? "Cerrando…" : "Cerrar la liga"}
-          </Button>
+          {/* Configuración (US-26) */}
+          <div>
+            <h4>Configuración</h4>
+            <form className="form" onSubmit={handleConfigSubmit} noValidate>
+              <div className="stack">
+                <Field
+                  label="Nombre"
+                  name="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  maxLength={80}
+                />
+                <Field
+                  label="Descripción (opcional)"
+                  name="description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  maxLength={500}
+                />
+              </div>
+              {/* F3 P1: la visibilidad está derivada del tipo (el servidor la
+                  exige acoplada), así que no es un control — lectura de solo
+                  lectura, como en la creación. */}
+              <p className="muted">Visibilidad: {VISIBILITY_BY_TYPE[l.type]}</p>
+              <div className="field">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={adjustedRankingEnabled}
+                    onChange={(e) => setAdjustedRankingEnabled(e.target.checked)}
+                  />{" "}
+                  Ranking ajustado
+                </label>
+                <p className="muted">
+                  Cuenta el general solo desde la entrada del último miembro. Se aplica en
+                  la siguiente publicación del ranking.
+                </p>
+              </div>
+              {updateError && <Alert variant="error">{updateError}</Alert>}
+              {updateSuccess && <Alert variant="success">{updateSuccess}</Alert>}
+              <Button
+                type="submit"
+                disabled={configBlockReason !== null || update.isPending}
+                disabledReason={configBlockReason ?? undefined}
+              >
+                {update.isPending ? "Guardando…" : "Guardar cambios"}
+              </Button>
+            </form>
+          </div>
+
+          {/* Cerrar liga (US-26). F3 P2: en una liga no activa el clic está
+              garantizado a rechazo ("La liga ya no está activa.") — un control
+              muerto; solo tiene sentido mientras la liga está activa. */}
+          {l.status === "active" && (
+            <div>
+              <h4>Cerrar liga</h4>
+              <p className="muted">
+                Al cerrar la liga pasa a «finalizada» y deja de aceptar cambios o nuevas
+                entradas. El histórico de puntos se conserva.
+              </p>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() =>
+                  setConfirmRequest({
+                    title: "Cerrar la liga",
+                    impact: (
+                      <>
+                        La liga pasará a <strong>finalizada</strong> y dejará de aceptar
+                        cambios o nuevas entradas. Esta acción no tiene vuelta atrás.
+                      </>
+                    ),
+                    irreversible: true,
+                    confirmLabel: "Sí, cerrar la liga",
+                    onConfirm: () => close.mutate({ leagueId: l.id }),
+                  })
+                }
+                disabled={close.isPending}
+              >
+                {close.isPending ? "Cerrando…" : "Cerrar la liga"}
+              </Button>
+              {closeError && <Alert variant="error">{closeError}</Alert>}
+              {closeSuccess && <Alert variant="success">{closeSuccess}</Alert>}
+            </div>
+          )}
         </div>
       )}
+
+      {/* Confirmación con impacto (patrón del sistema) */}
+      {confirmRequest ? (
+        <ConfirmDialog
+          {...confirmRequest}
+          onClose={() => setConfirmRequest(null)}
+          onConfirm={() => {
+            const run = confirmRequest.onConfirm;
+            setConfirmRequest(null);
+            run();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

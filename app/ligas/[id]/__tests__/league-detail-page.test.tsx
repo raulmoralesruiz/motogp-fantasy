@@ -37,6 +37,7 @@ const LEAGUE = {
   description: "Solo para la familia",
   type: "private",
   visibility: "private",
+  status: "active",
   minMembers: 2,
   maxMembers: 50,
   entryMode: "code",
@@ -155,6 +156,31 @@ describe("LeagueDetailPage (US-24)", () => {
     expect(screen.getByText(/por código/)).toBeInTheDocument();
   });
 
+  it("liga activa: NO marca el estado en la cabecera (lo activo es lo normal)", () => {
+    mockLeague({ ...LEAGUE, status: "active" });
+    mockRanking(RANKING);
+    renderDetail(<LeagueDetailPage />);
+
+    expect(screen.queryByText("activa")).not.toBeInTheDocument();
+    expect(screen.queryByText("finalizada")).not.toBeInTheDocument();
+  });
+
+  it("liga finalizada: marca el estado en la cabecera (F3 P1)", () => {
+    mockLeague({ ...LEAGUE, status: "finished" });
+    mockRanking(RANKING);
+    renderDetail(<LeagueDetailPage />);
+
+    expect(screen.getByText("finalizada")).toBeInTheDocument();
+  });
+
+  it("liga archivada: marca el estado en la cabecera (F3 P1)", () => {
+    mockLeague({ ...LEAGUE, status: "archived" });
+    mockRanking(RANKING);
+    renderDetail(<LeagueDetailPage />);
+
+    expect(screen.getByText("archivada")).toBeInTheDocument();
+  });
+
   it("muestra el ranking ajustado desactivado por defecto (US-30, D-10)", () => {
     mockLeague({ ...LEAGUE, adjustedRankingEnabled: false });
     mockRanking(RANKING);
@@ -224,9 +250,7 @@ describe("LeagueDetailPage (US-24)", () => {
     mockRanking({ entries: [], computedAt: null, resultsVersion: null });
     renderDetail(<LeagueDetailPage />);
 
-    expect(
-      screen.getByText(/Aún no hay ranking publicado/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Aún no hay ranking publicado/)).toBeInTheDocument();
   });
 
   it("muestra el vacío elegante si la liga no tiene miembros", () => {
@@ -255,9 +279,7 @@ describe("LeagueDetailPage (US-24)", () => {
     mockRanking(RANKING);
     renderDetail(<LeagueDetailPage />);
 
-    expect(
-      screen.getByText(/Esta liga no usa código de invitación/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Esta liga no usa código de invitación/)).toBeInTheDocument();
     // Sin código no hay botón de rotar.
     expect(
       screen.queryByRole("button", { name: "Rotar código" }),
@@ -278,7 +300,47 @@ describe("LeagueDetailPage (US-24)", () => {
     mockRanking(RANKING);
     renderDetail(<LeagueDetailPage />);
 
-    expect(screen.queryByRole("button", { name: "Rotar código" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Rotar código" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("ABC123XYZ9")).not.toBeInTheDocument();
+  });
+
+  it("miembro no admin con invitaciones habilitadas: ve el código de solo-lectura (F3 P1)", () => {
+    // El servidor entrega el código al miembro cuando el admin habilita
+    // `allowMemberInvites` (canInvite, league-service.ts). La página lo
+    // muestra de solo-lectura para que el miembro pueda compartirlo.
+    mockLeague({
+      ...LEAGUE,
+      isAdmin: false,
+      isMember: true,
+      allowMemberInvites: true,
+      code: "ABC123XYZ9",
+    });
+    mockRanking(RANKING);
+    renderDetail(<LeagueDetailPage />);
+
+    expect(screen.getByText(/Invitar a amigos/)).toBeInTheDocument();
+    expect(screen.getByText("ABC123XYZ9")).toBeInTheDocument();
+    // De solo-lectura: no hay botón de rotar para el miembro.
+    expect(
+      screen.queryByRole("button", { name: "Rotar código" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("miembro no admin sin invitaciones habilitadas: NO ve el código (F3 P1)", () => {
+    // Sin `allowMemberInvites` el servidor envía `code: null` → no hay bloque.
+    mockLeague({
+      ...LEAGUE,
+      isAdmin: false,
+      isMember: true,
+      allowMemberInvites: false,
+      code: null,
+    });
+    mockRanking(RANKING);
+    renderDetail(<LeagueDetailPage />);
+
+    expect(screen.queryByText(/Invitar a amigos/)).not.toBeInTheDocument();
     expect(screen.queryByText("ABC123XYZ9")).not.toBeInTheDocument();
   });
 
@@ -289,14 +351,15 @@ describe("LeagueDetailPage (US-24)", () => {
     renderDetail(<LeagueDetailPage />);
 
     const user = userEvent.setup();
+    // F3 P2: rotar revoca el código vigente — pide confirmación con impacto.
     await user.click(screen.getByRole("button", { name: "Rotar código" }));
+    expect(mutate).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Sí, rotar" }));
 
     expect(mutate.mock.calls[0]?.[0]).toEqual({ leagueId: "league-1" });
 
     await act(async () => {
-      mutationOptions(trpc.leagues.rotateCode.useMutation).onSuccess?.(
-        "NUEVO456CD7",
-      );
+      mutationOptions(trpc.leagues.rotateCode.useMutation).onSuccess?.("NUEVO456CD7");
     });
 
     // El aviso se divide en texto + <strong> con el nuevo código.
@@ -314,6 +377,7 @@ describe("LeagueDetailPage (US-24)", () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Rotar código" }));
+    await user.click(screen.getByRole("button", { name: "Sí, rotar" }));
 
     await act(async () => {
       mutationOptions(trpc.leagues.rotateCode.useMutation).onError?.(
@@ -332,6 +396,7 @@ describe("LeagueDetailPage (US-24)", () => {
       id: "pub-1",
       type: "public",
       visibility: "public",
+      status: "active",
       isAdmin: false,
       isMember: false,
       code: null,
@@ -339,11 +404,18 @@ describe("LeagueDetailPage (US-24)", () => {
     };
 
     function mockMe(isError = false) {
+      // El error real de `auth.me` sin sesión es un TRPCClientError con
+      // `data.code = "UNAUTHORIZED"` (la UI lo distingue de un fallo real).
+      const error = isError
+        ? Object.assign(new Error("No estás autenticado"), {
+            data: { code: "UNAUTHORIZED" },
+          })
+        : undefined;
       mockResult(trpc.auth.me.useQuery, {
         data: isError ? undefined : { username: "yo", email: "yo@liga.com", roles: [] },
         isPending: false,
         isError,
-        error: isError ? new Error("No estás autenticado") : undefined,
+        error,
       });
     }
 
@@ -364,7 +436,9 @@ describe("LeagueDetailPage (US-24)", () => {
       mockMe(true);
       renderDetail(<LeagueDetailPage />);
 
-      expect(screen.getByText(/Para unirte a la liga necesitas una cuenta/)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Para unirte a la liga necesitas una cuenta/),
+      ).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Inicia sesión" })).toHaveAttribute(
         "href",
         "/login",
@@ -383,6 +457,24 @@ describe("LeagueDetailPage (US-24)", () => {
       expect(
         screen.queryByRole("button", { name: "Unirme a la liga" }),
       ).not.toBeInTheDocument();
+    });
+
+    it("pública + finalizada: aviso neutro en vez del botón (F3 P1)", () => {
+      // El servidor rechaza la unión a una liga no activa
+      // (not_accepting_entries): un botón muerto engañaría.
+      mockLeague({ ...PUBLIC_LEAGUE, status: "finished" });
+      mockRanking(RANKING);
+      mockMe();
+      renderDetail(<LeagueDetailPage />);
+
+      expect(
+        screen.queryByRole("button", { name: "Unirme a la liga" }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByText(/no admite nuevas entradas/)).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Ver otras ligas" })).toHaveAttribute(
+        "href",
+        "/ligas",
+      );
     });
 
     it("privada: no muestra el botón de unión (se une por código en /unirse)", () => {
@@ -439,9 +531,10 @@ describe("LeagueDetailPage (US-24)", () => {
       await user.click(screen.getByRole("button", { name: "Unirme a la liga" }));
 
       await act(async () => {
-        mutationOptions(trpc.leagues.join.useMutation).onSuccess?.(
-          { ...PUBLIC_LEAGUE, isMember: true },
-        );
+        mutationOptions(trpc.leagues.join.useMutation).onSuccess?.({
+          ...PUBLIC_LEAGUE,
+          isMember: true,
+        });
       });
 
       expect(screen.queryByText("La liga está llena.")).not.toBeInTheDocument();
@@ -483,7 +576,7 @@ describe("LeagueDetailPage (US-24)", () => {
       });
     }
 
-    it("admin: muestra el formulario de configuración (nombre/descripción/visibilidad)", () => {
+    it("admin: muestra el formulario de configuración (nombre/descripción/visibilidad de solo-lectura)", () => {
       mockLeague(ADMIN_LEAGUE);
       mockRanking(RANKING);
       mockMeAs("user-1");
@@ -491,8 +584,11 @@ describe("LeagueDetailPage (US-24)", () => {
 
       expect(screen.getByRole("heading", { name: "Configuración" })).toBeInTheDocument();
       expect(screen.getByLabelText("Nombre")).toBeInTheDocument();
-      expect(screen.getByLabelText("Descripción")).toBeInTheDocument();
-      expect(screen.getByLabelText("Visibilidad")).toBeInTheDocument();
+      expect(screen.getByLabelText(/Descripción/)).toBeInTheDocument();
+      // F3 P1: la visibilidad es derivada del tipo (acoplada por el servidor) —
+      // lectura de solo-lectura, no un select libre (trampa).
+      expect(screen.getByText(/Visibilidad: Privada \(oculta\)/)).toBeInTheDocument();
+      expect(screen.queryByLabelText("Visibilidad")).not.toBeInTheDocument();
       expect(screen.getByLabelText(/Ranking ajustado/)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Guardar cambios" })).toBeInTheDocument();
     });
@@ -525,9 +621,14 @@ describe("LeagueDetailPage (US-24)", () => {
       mockMeAs("user-1");
       renderDetail(<LeagueDetailPage />);
 
-      // piloto2 (member, ajeno) → ambos botones.
-      expect(screen.getByRole("button", { name: "Hacer admin" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Expulsar" })).toBeInTheDocument();
+      // piloto2 (member, ajeno) → ambos botones. F3 P2: el nombre accesible
+      // incluye al usuario (contexto para lectores de pantalla).
+      expect(
+        screen.getByRole("button", { name: "Hacer admin a piloto2" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Expulsar a piloto2" }),
+      ).toBeInTheDocument();
     });
 
     it("admin único: NO muestra 'Expulsar'/'Hacer admin' sobre su propia fila", () => {
@@ -542,8 +643,12 @@ describe("LeagueDetailPage (US-24)", () => {
       mockMeAs("user-1");
       renderDetail(<LeagueDetailPage />);
 
-      expect(screen.queryByRole("button", { name: "Expulsar" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Hacer admin" })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Expulsar a piloto1" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Hacer admin a piloto1" }),
+      ).not.toBeInTheDocument();
     });
 
     it("miembro (no admin): no ve NINGÚN botón de gestión (US-26: solo el admin gestiona)", () => {
@@ -552,14 +657,24 @@ describe("LeagueDetailPage (US-24)", () => {
       mockMeAs("user-2");
       renderDetail(<LeagueDetailPage />);
 
-      expect(screen.queryByRole("heading", { name: "Administración" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Rotar código" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Hacer admin" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Expulsar" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Cerrar la liga" })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("heading", { name: "Administración" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Rotar código" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /Hacer admin a / }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /Expulsar a / }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Cerrar la liga" }),
+      ).not.toBeInTheDocument();
     });
 
-    it("clic en 'Hacer admin': envía leagueId + targetUserId", async () => {
+    it("clic en 'Hacer admin' + confirmar: envía leagueId + targetUserId", async () => {
       mockLeague(ADMIN_LEAGUE);
       mockRanking(RANKING);
       mockMeAs("user-1");
@@ -567,7 +682,10 @@ describe("LeagueDetailPage (US-24)", () => {
       renderDetail(<LeagueDetailPage />);
 
       const user = userEvent.setup();
-      await user.click(screen.getByRole("button", { name: "Hacer admin" }));
+      // F3 P0: la acción destructiva pide confirmación con impacto escrito.
+      await user.click(screen.getByRole("button", { name: "Hacer admin a piloto2" }));
+      expect(mutate).not.toHaveBeenCalled();
+      await user.click(screen.getByRole("button", { name: "Sí, hacer admin" }));
 
       expect(mutate.mock.calls[0]?.[0]).toEqual({
         leagueId: "league-1",
@@ -575,7 +693,7 @@ describe("LeagueDetailPage (US-24)", () => {
       });
     });
 
-    it("clic en 'Expulsar': envía leagueId + targetUserId", async () => {
+    it("clic en 'Expulsar' + confirmar (irreversible): envía leagueId + targetUserId", async () => {
       mockLeague(ADMIN_LEAGUE);
       mockRanking(RANKING);
       mockMeAs("user-1");
@@ -583,7 +701,9 @@ describe("LeagueDetailPage (US-24)", () => {
       renderDetail(<LeagueDetailPage />);
 
       const user = userEvent.setup();
-      await user.click(screen.getByRole("button", { name: "Expulsar" }));
+      await user.click(screen.getByRole("button", { name: "Expulsar a piloto2" }));
+      expect(mutate).not.toHaveBeenCalled();
+      await user.click(screen.getByRole("button", { name: "Sí, expulsar" }));
 
       expect(mutate.mock.calls[0]?.[0]).toEqual({
         leagueId: "league-1",
@@ -591,7 +711,7 @@ describe("LeagueDetailPage (US-24)", () => {
       });
     });
 
-    it("clic en 'Cerrar la liga': envía la leagueId", async () => {
+    it("clic en 'Cerrar la liga' + confirmar (irreversible): envía la leagueId", async () => {
       mockLeague(ADMIN_LEAGUE);
       mockRanking(RANKING);
       mockMeAs("user-1");
@@ -600,8 +720,35 @@ describe("LeagueDetailPage (US-24)", () => {
 
       const user = userEvent.setup();
       await user.click(screen.getByRole("button", { name: "Cerrar la liga" }));
+      expect(mutate).not.toHaveBeenCalled();
+      await user.click(screen.getByRole("button", { name: "Sí, cerrar la liga" }));
 
       expect(mutate.mock.calls[0]?.[0]).toEqual({ leagueId: "league-1" });
+    });
+
+    it("cancelar la confirmación (F3 P0): NO muta ninguna acción", async () => {
+      mockLeague(ADMIN_LEAGUE);
+      mockRanking(RANKING);
+      mockMeAs("user-1");
+      const transfer = mockMutation(trpc.leagues.transferAdmin.useMutation);
+      const kick = mockMutation(trpc.leagues.kick.useMutation);
+      const close = mockMutation(trpc.leagues.close.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      const user = userEvent.setup();
+      // «Hacer admin» + «No, volver» → cancela.
+      await user.click(screen.getByRole("button", { name: "Hacer admin a piloto2" }));
+      await user.click(screen.getByRole("button", { name: "No, volver" }));
+      // «Expulsar» + «No, volver» → cancela.
+      await user.click(screen.getByRole("button", { name: "Expulsar a piloto2" }));
+      await user.click(screen.getByRole("button", { name: "No, volver" }));
+      // «Cerrar la liga» + «No, volver» → cancela.
+      await user.click(screen.getByRole("button", { name: "Cerrar la liga" }));
+      await user.click(screen.getByRole("button", { name: "No, volver" }));
+
+      expect(transfer).not.toHaveBeenCalled();
+      expect(kick).not.toHaveBeenCalled();
+      expect(close).not.toHaveBeenCalled();
     });
 
     it("cambiar el ajuste de invitaciones: envía leagueId + enabled", async () => {
@@ -636,13 +783,34 @@ describe("LeagueDetailPage (US-24)", () => {
       await user.type(screen.getByLabelText("Nombre"), "Liga renombreada");
       await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
 
+      // F3 P1: la visibilidad no se envía (derivada del tipo, acoplada por el
+      // servidor) — solo nombre/descripción/ranking ajustado.
       expect(mutate.mock.calls[0]?.[0]).toEqual({
         leagueId: "league-1",
         name: "Liga renombreada",
         description: "Solo para la familia",
-        visibility: "private",
         adjustedRankingEnabled: false,
       });
+    });
+
+    it("nombre vacío: bloquea el envío y escribe el motivo (F3 P2)", async () => {
+      mockLeague(ADMIN_LEAGUE);
+      mockRanking(RANKING);
+      mockMeAs("user-1");
+      const mutate = mockMutation(trpc.leagues.update.useMutation);
+      renderDetail(<LeagueDetailPage />);
+
+      const user = userEvent.setup();
+      await user.clear(screen.getByLabelText("Nombre"));
+
+      // El botón se bloquea (aria-disabled) y el motivo se escribe junto a él.
+      const guardar = screen.getByRole("button", { name: "Guardar cambios" });
+      expect(guardar).toHaveAttribute("aria-disabled", "true");
+      expect(screen.getByText("Escribe un nombre para la liga.")).toBeInTheDocument();
+
+      // Un clic no envía nada.
+      await user.click(guardar);
+      expect(mutate).not.toHaveBeenCalled();
     });
 
     it("si una acción de gestión falla muestra el motivo del servidor (p. ej. 403)", async () => {
@@ -653,7 +821,9 @@ describe("LeagueDetailPage (US-24)", () => {
       renderDetail(<LeagueDetailPage />);
 
       const user = userEvent.setup();
-      await user.click(screen.getByRole("button", { name: "Expulsar" }));
+      // F3 P0: la acción destructiva pide confirmación con impacto escrito.
+      await user.click(screen.getByRole("button", { name: "Expulsar a piloto2" }));
+      await user.click(screen.getByRole("button", { name: "Sí, expulsar" }));
 
       await act(async () => {
         mutationOptions(trpc.leagues.kick.useMutation).onError?.(
@@ -666,7 +836,7 @@ describe("LeagueDetailPage (US-24)", () => {
       ).toBeInTheDocument();
     });
 
-    it("editar descripción y visibilidad: envía los cambios", async () => {
+    it("editar descripción: envía los cambios", async () => {
       mockLeague(ADMIN_LEAGUE);
       mockRanking(RANKING);
       mockMeAs("user-1");
@@ -674,16 +844,16 @@ describe("LeagueDetailPage (US-24)", () => {
       renderDetail(<LeagueDetailPage />);
 
       const user = userEvent.setup();
-      await user.clear(screen.getByLabelText("Descripción"));
-      await user.type(screen.getByLabelText("Descripción"), "Nueva descripción");
-      await user.selectOptions(screen.getByLabelText("Visibilidad"), "unlisted");
+      await user.clear(screen.getByLabelText(/Descripción/));
+      await user.type(screen.getByLabelText(/Descripción/), "Nueva descripción");
       await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
 
+      // F3 P1: la visibilidad no se envía (derivada del tipo, acoplada por el
+      // servidor) — solo nombre/descripción/ranking ajustado.
       expect(mutate.mock.calls[0]?.[0]).toEqual({
         leagueId: "league-1",
         name: "Liga de los amigos",
         description: "Nueva descripción",
-        visibility: "unlisted",
         adjustedRankingEnabled: false,
       });
     });
@@ -816,9 +986,7 @@ describe("LeagueDetailPage (US-24)", () => {
       await act(async () => {
         mutationOptions(trpc.leagues.setMemberInvites.useMutation).onSuccess?.();
       });
-      expect(
-        screen.getByText("Ajuste de invitaciones guardado."),
-      ).toBeInTheDocument();
+      expect(screen.getByText("Ajuste de invitaciones guardado.")).toBeInTheDocument();
     });
 
     it("setMemberInvites: error muestra el motivo del servidor", async () => {
@@ -861,9 +1029,7 @@ describe("LeagueDetailPage (US-24)", () => {
       expect(
         screen.queryByRole("button", { name: "Salir de la liga" }),
       ).not.toBeInTheDocument();
-      expect(
-        screen.getByText(/transfiere primero el rol/),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/transfiere primero el rol/)).toBeInTheDocument();
     });
 
     it("no miembro: no muestra el botón de salir", () => {
@@ -879,30 +1045,32 @@ describe("LeagueDetailPage (US-24)", () => {
     it("clic en 'Salir de la liga' (confirmado): envía la leagueId", async () => {
       mockLeague(MEMBER_LEAGUE);
       mockRanking(RANKING);
-      vi.spyOn(window, "confirm").mockReturnValue(true);
       const mutate = mockMutation(trpc.leagues.leave.useMutation);
       renderDetail(<LeagueDetailPage />);
 
       const user = userEvent.setup();
+      // F3 P1: la salida pide confirmación con impacto escrito (ConfirmDialog,
+      // patrón del sistema — sustituye a window.confirm).
       await user.click(screen.getByRole("button", { name: "Salir de la liga" }));
+      expect(mutate).not.toHaveBeenCalled();
+      await user.click(screen.getByRole("button", { name: "Sí, salir" }));
 
-      expect(window.confirm).toHaveBeenCalled();
       expect(mutate.mock.calls[0]?.[0]).toEqual({ leagueId: "league-1" });
-      vi.restoreAllMocks();
     });
 
     it("clic en 'Salir de la liga' (cancelado): NO muta", async () => {
       mockLeague(MEMBER_LEAGUE);
       mockRanking(RANKING);
-      vi.spyOn(window, "confirm").mockReturnValue(false);
       const mutate = mockMutation(trpc.leagues.leave.useMutation);
       renderDetail(<LeagueDetailPage />);
 
       const user = userEvent.setup();
       await user.click(screen.getByRole("button", { name: "Salir de la liga" }));
+      // El foco abre en «No, volver» (seguro por defecto): cancela sin
+      // confirmar.
+      await user.click(screen.getByRole("button", { name: "No, volver" }));
 
       expect(mutate).not.toHaveBeenCalled();
-      vi.restoreAllMocks();
     });
 
     it("leave: éxito en liga privada → vuelve al directorio (ya no es visible)", async () => {
@@ -931,9 +1099,7 @@ describe("LeagueDetailPage (US-24)", () => {
         });
       });
       expect(navigation.push).not.toHaveBeenCalled();
-      expect(
-        screen.getByText(/Has salido de la liga/),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/Has salido de la liga/)).toBeInTheDocument();
     });
 
     it("leave: error muestra el motivo del servidor (p. ej. admin)", async () => {
