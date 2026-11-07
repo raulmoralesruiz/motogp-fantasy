@@ -50,7 +50,8 @@ function RiderRow({ rider }: { rider: RiderScoreView }) {
       <strong>{rider.riderName}</strong>{" "}
       <span className="muted">(peso ×{fmt(rider.weight)})</span> →{" "}
       <strong>{fmt(rider.points)} pts</strong>
-      <ul>
+      {/* .status: el desglose por piloto es una lista de datos del sistema (F3). */}
+      <ul className="status">
         <li>Q2: {fmt(rider.breakdown.q2)}</li>
         <li>Sprint: {fmt(rider.breakdown.sprint)}</li>
         <li>Carrera: {fmt(rider.breakdown.mainRace)}</li>

@@ -125,6 +125,11 @@ async function openGp1(user: ReturnType<typeof userEvent.setup>) {
   await user.selectOptions(screen.getByLabelText("GP"), GP1.id);
 }
 
+/** Error tRPC con código (forma transformada del cliente: `error.data.code`). */
+function trpcError(message: string, code: string) {
+  return Object.assign(new Error(message), { data: { code } });
+}
+
 describe("PuntuacionPage", () => {
   beforeEach(() => {
     resetTrpcMocks();
@@ -239,15 +244,16 @@ describe("PuntuacionPage", () => {
     expect(screen.getByText(/Q2, sprint/)).toBeInTheDocument();
   });
 
-  it("muestra el error si el GP no tiene resultados importados", async () => {
+  it("estado legítimo «sin resultados» (PRECONDITION_FAILED): neutro (info), no rojo (F3 P1)", async () => {
     mockSeasons();
     mockGps();
     mockResult(trpc.results.myScore.useQuery, {
       data: undefined,
       isPending: false,
       isError: true,
-      error: new Error(
+      error: trpcError(
         "Este GP aún no tiene resultados importados; tu puntuación aparecerá cuando se importen los resultados o se marquen definitivos.",
+        "PRECONDITION_FAILED",
       ),
     });
     renderPuntuacion(<PuntuacionPage />);
@@ -255,26 +261,83 @@ describe("PuntuacionPage", () => {
     const user = userEvent.setup();
     await openGp1(user);
 
+    // Estado legítimo (sin resultados) → neutro (info), no error (rojo) (F3 P1).
     expect(
-      screen.getByText(/Este GP aún no tiene resultados importados/),
-    ).toBeInTheDocument();
+      screen
+        .getByText(/Este GP aún no tiene resultados importados/)
+        .closest("p"),
+    ).toHaveClass("alert-info");
     expect(screen.queryByText("170,5 puntos")).not.toBeInTheDocument();
   });
 
-  it("muestra el error si no hay lineup en el GP", async () => {
+  it("sin lineup: estado neutro (info) con enlace a /lineups, no error rojo (F3 P1)", async () => {
     mockSeasons();
     mockGps();
     mockResult(trpc.results.myScore.useQuery, {
       data: undefined,
       isPending: false,
       isError: true,
-      error: new Error("No tienes lineup para este GP."),
+      error: trpcError("No tienes lineup para este GP.", "NOT_FOUND"),
     });
     renderPuntuacion(<PuntuacionPage />);
 
     const user = userEvent.setup();
     await openGp1(user);
 
-    expect(screen.getByText("No tienes lineup para este GP.")).toBeInTheDocument();
+    // Estado legítimo (sin lineup) → neutro (info), no error (rojo) (F3 P1).
+    expect(
+      screen.getByText(/No tienes lineup para este GP/).closest("p"),
+    ).toHaveClass("alert-info");
+    // Salida accionable: enlace a montar el lineup.
+    expect(screen.getByRole("link", { name: "Monta tu lineup" })).toHaveAttribute(
+      "href",
+      "/lineups",
+    );
+  });
+
+  it("fallo real de `myScore`: error rojo con el motivo del servidor", async () => {
+    mockSeasons();
+    mockGps();
+    mockResult(trpc.results.myScore.useQuery, {
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: new Error("Fallo interno del servidor."),
+    });
+    renderPuntuacion(<PuntuacionPage />);
+
+    const user = userEvent.setup();
+    await openGp1(user);
+
+    // Fallo real (sin código legítimo) → error (rojo).
+    expect(screen.getByText("Fallo interno del servidor.").closest("p")).toHaveClass(
+      "alert-error",
+    );
+  });
+
+  it("`NOT_FOUND` «GP no existe» (sobrecarga del código): fallo real, sin CTA de lineup (F3 P2)", async () => {
+    mockSeasons();
+    mockGps();
+    mockResult(trpc.results.myScore.useQuery, {
+      data: undefined,
+      isPending: false,
+      isError: true,
+      // Mismo código `NOT_FOUND` que «sin lineup», pero el mensaje no es de
+      // lineup → fallo real, no estado legítimo.
+      error: trpcError("El GP no existe.", "NOT_FOUND"),
+    });
+    renderPuntuacion(<PuntuacionPage />);
+
+    const user = userEvent.setup();
+    await openGp1(user);
+
+    // Fallo real → error (rojo), NO el estado neutro «sin lineup».
+    expect(screen.getByText("El GP no existe.").closest("p")).toHaveClass(
+      "alert-error",
+    );
+    // Sin la salida accionable de «sin lineup».
+    expect(
+      screen.queryByRole("link", { name: "Monta tu lineup" }),
+    ).not.toBeInTheDocument();
   });
 });
