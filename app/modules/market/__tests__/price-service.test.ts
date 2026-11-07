@@ -1271,6 +1271,7 @@ describe("PriceService.listMarket (US-14)", () => {
         currentPrice: 19,
         isP0Fallback: false,
         trend: "down",
+        delta: -3,
         miniHistory: [
           { gpId: null, gpRound: null, gpName: null, price: 20 },
           { gpId: "g1", gpRound: 1, gpName: "GP de Qatar", price: 22 },
@@ -1288,6 +1289,7 @@ describe("PriceService.listMarket (US-14)", () => {
         currentPrice: 25,
         isP0Fallback: false,
         trend: "up",
+        delta: 11,
         miniHistory: [
           { gpId: null, gpRound: null, gpName: null, price: 15 },
           { gpId: "g1", gpRound: 1, gpName: "GP de Qatar", price: 14 },
@@ -1305,6 +1307,7 @@ describe("PriceService.listMarket (US-14)", () => {
         currentPrice: null,
         isP0Fallback: false,
         trend: "flat",
+        delta: null,
         miniHistory: [],
         popularity: 0,
       },
@@ -1323,6 +1326,7 @@ describe("PriceService.listMarket (US-14)", () => {
       currentPrice: 20,
       isP0Fallback: true,
       trend: "flat",
+      delta: null,
       miniHistory: [
         { gpId: null, gpRound: null, gpName: null, price: 20 },
         { gpId: "g1", gpRound: 1, gpName: "GP de Qatar", price: 22 },
@@ -1330,7 +1334,12 @@ describe("PriceService.listMarket (US-14)", () => {
       ],
     });
     const r2 = result.find((r) => r.assetId === "r2");
-    expect(r2).toMatchObject({ currentPrice: 15, isP0Fallback: true, trend: "flat" });
+    expect(r2).toMatchObject({
+      currentPrice: 15,
+      isP0Fallback: true,
+      trend: "flat",
+      delta: null,
+    });
   });
 
   it("tendencia sube frente al P0 cuando el GP es el primer punto con precio", async () => {
@@ -1344,10 +1353,12 @@ describe("PriceService.listMarket (US-14)", () => {
       currentPrice: 22,
       isP0Fallback: false,
       trend: "up",
+      delta: 2,
     });
     expect(result.find((r) => r.assetId === "r2")).toMatchObject({
       currentPrice: 14,
       trend: "down",
+      delta: -1,
     });
   });
 
@@ -1368,6 +1379,7 @@ describe("PriceService.listMarket (US-14)", () => {
       currentPrice: 22,
       isP0Fallback: false,
       trend: "flat",
+      delta: 0,
     });
   });
 
@@ -1499,6 +1511,7 @@ describe("PriceService.listMarket (US-14)", () => {
         currentPrice: 12,
         isP0Fallback: false,
         trend: "up",
+        delta: 2,
         miniHistory: [
           { gpId: null, gpRound: null, gpName: null, price: 10 },
           { gpId: "g3", gpRound: 3, gpName: "GP de España", price: 12 },
@@ -1573,6 +1586,7 @@ describe("PriceService.marketDetail (US-14)", () => {
       currentPrice: 19,
       isP0Fallback: false,
       trend: "down",
+      delta: -3,
       miniHistory: [
         { gpId: null, gpRound: null, gpName: null, price: 20 },
         { gpId: "g1", gpRound: 1, gpName: "GP de Qatar", price: 22 },

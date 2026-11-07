@@ -290,6 +290,7 @@ describe("US-14 · Exploración del mercado: lista + detalle (PostgreSQL real)",
       currentPrice: 19,
       isP0Fallback: false,
       trend: "down",
+      delta: -3,
       popularity: 1,
     });
     expect(r0?.miniHistory.map((p) => p.price)).toEqual([20, 22, 19]);
@@ -302,6 +303,7 @@ describe("US-14 · Exploración del mercado: lista + detalle (PostgreSQL real)",
       currentPrice: 10,
       isP0Fallback: true,
       trend: "flat",
+      delta: null,
       popularity: 1,
     });
     expect(r1?.miniHistory.map((p) => p.price)).toEqual([10]);
@@ -312,6 +314,7 @@ describe("US-14 · Exploración del mercado: lista + detalle (PostgreSQL real)",
       currentPrice: null,
       isP0Fallback: false,
       trend: "flat",
+      delta: null,
       popularity: 1,
     });
 
@@ -402,6 +405,7 @@ describe("US-14 · Exploración del mercado: lista + detalle (PostgreSQL real)",
       currentPrice: 19,
       isP0Fallback: false,
       trend: "down",
+      delta: -3,
       popularity: 1,
     });
     expect(detail.asset.miniHistory.map((p) => p.price)).toEqual([20, 22, 19]);

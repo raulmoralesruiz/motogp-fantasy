@@ -258,7 +258,7 @@ Chips redondeados (6 px) en fila flexible. Inactivo: pantalla de telemetría + f
 - **Border:** filete de 1 px de gris de pista.
 - **Shadow Strategy:** ninguna (ver Elevation & Depth).
 - **Internal Padding:** 0.9 rem 1 rem.
-- **Título de tarjeta (h3) — paso de ritual (P2-1):** un token único `.card h3` (1 rem/700, margen 1.25 rem arriba / 0.5 rem abajo), igual en Resultados, Precios y Mercado: un nivel, un tamaño, un ritmo con más aire arriba que abajo. El detalle va en h4 (Subhead).
+- **Título (h3) — Title (P2-1, global F3):** regla GLOBAL de `h3` (1 rem/700, margen 1.25 rem arriba / 0.5 rem abajo), igual en los títulos de tarjeta, los pasos de ritual y los h3 sueltos de las páginas sin tarjetas (Resultados, Lineups, Ligas, Mercado): un nivel, un tamaño, un ritmo con más aire arriba que abajo. Los pasos de ritual mantienen su override propio (`.ritual-step > summary > h3`, mayor especificidad). El detalle va en h4 (Subhead).
 
 ### Inputs / Fields
 - **Style:** etiqueta (0.9 rem, gris de cronometraje) → input (relleno pantalla de telemetría, filete gris de pista, 6 px, padding 0.55 rem 0.7 rem, alto mínimo 44 px) → error (0.85 rem, rojo de bandera).

@@ -11,7 +11,7 @@ import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { asMockFn, mockResult, resetTrpcMocks } from "../../../test/trpc-mock";
-import { render, screen, userEvent } from "../../../test/rtl";
+import { render, screen, userEvent, within } from "../../../test/rtl";
 
 import type { MarketAssetView, MarketDetailView } from "../../modules/market";
 import MercadoPage from "../mercado-page";
@@ -35,6 +35,7 @@ const RIDER_A: MarketAssetView = {
   currentPrice: 22,
   isP0Fallback: false,
   trend: "up",
+  delta: 2,
   miniHistory: [
     { gpId: null, gpRound: null, gpName: null, price: 20 },
     { gpId: "gp-1", gpRound: 1, gpName: "GP de Qatar", price: 22 },
@@ -51,6 +52,7 @@ const RIDER_B: MarketAssetView = {
   currentPrice: 10,
   isP0Fallback: true,
   trend: "flat",
+  delta: null,
   miniHistory: [{ gpId: null, gpRound: null, gpName: null, price: 10 }],
   popularity: 0,
 };
@@ -64,6 +66,7 @@ const RIDER_C: MarketAssetView = {
   currentPrice: 30,
   isP0Fallback: false,
   trend: "down",
+  delta: -5,
   miniHistory: [
     { gpId: null, gpRound: null, gpName: null, price: 35 },
     { gpId: "gp-1", gpRound: 1, gpName: "GP de Qatar", price: 30 },
@@ -163,6 +166,7 @@ const RIDER_SIN_PRECIO: MarketAssetView = {
   currentPrice: null,
   isP0Fallback: false,
   trend: "flat",
+  delta: null,
   miniHistory: [],
   popularity: 0,
 };
@@ -301,17 +305,19 @@ describe("MercadoPage (US-14)", () => {
     expect(screen.getByText("(P0)")).toBeInTheDocument();
 
     // Tendencia: sube / estable / baja.
-    expect(screen.getByText("Sube")).toBeInTheDocument();
+    // Tendencia con Δ (F3): dirección + magnitud junto a la insignia.
+    // RIDER_B solo tiene P0 (sin punto anterior) → solo la etiqueta.
+    expect(screen.getByText("Sube +2")).toBeInTheDocument();
     expect(screen.getByText("Estable")).toBeInTheDocument();
-    expect(screen.getByText("Baja")).toBeInTheDocument();
+    expect(screen.getByText("Baja −5")).toBeInTheDocument();
 
     // Mini-histórico: un sparkline por activo (SVG con aria-label).
     expect(screen.getAllByRole("img")).toHaveLength(3);
     expect(
-      screen.getByRole("img", { name: "Mini-histórico: 20, 22" }),
+      screen.getByRole("img", { name: "Mini-histórico: P0 20, J1 22" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("img", { name: "Mini-histórico: 10" }),
+      screen.getByRole("img", { name: "Mini-histórico: P0 10" }),
     ).toBeInTheDocument();
 
     // Popularidad (nº de lineups del GP que contienen el activo): última celda.
@@ -321,6 +327,37 @@ describe("MercadoPage (US-14)", () => {
     expect(popularity(0)).toBe("3");
     expect(popularity(1)).toBe("0");
     expect(popularity(2)).toBe("1");
+  });
+
+  it("explica el vocabulario de la tabla (Tendencia, P0, Lineups) antes de la lista (F3)", () => {
+    mockSeasons();
+    mockGps();
+    mockMarketList();
+    renderMercado(<MercadoPage />);
+
+    // Capa de ayuda de vocabulario (patrón F1 de /admin): cada término de la
+    // tabla se explica una sola vez, en su primera aparición.
+    expect(
+      screen.getByText((content) => content.includes("Tendencia:")),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText((content) => content.includes("(P0):")),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText((content) => content.includes("Lineups:")),
+    ).toBeInTheDocument();
+  });
+
+  it("agrupa los selectores Temporada y GP en una fila apilada (F3)", () => {
+    mockSeasons();
+    mockGps();
+    mockMarketList();
+    renderMercado(<MercadoPage />);
+
+    const stack = document.querySelector(".stack");
+    expect(stack).toBeInTheDocument();
+    expect(stack).toContainElement(screen.getByLabelText("Temporada"));
+    expect(stack).toContainElement(screen.getByLabelText("GP"));
   });
 
   it("sin GP programado no preselecciona ningún GP", () => {
@@ -436,6 +473,11 @@ describe("MercadoPage (US-14)", () => {
     await user.type(screen.getByLabelText("Precio máximo"), "25.5");
 
     expect(lastListInput()).toMatchObject({ priceMin: 10, priceMax: 25.5 });
+
+    // Sin error: el campo NO lleva aria-invalid (negativo de la aserción aria).
+    expect(screen.getByLabelText("Precio mínimo")).not.toHaveAttribute(
+      "aria-invalid",
+    );
   });
 
   it("muestra el detalle del activo: precio, popularidad, gráfico e histórico", async () => {
@@ -449,7 +491,7 @@ describe("MercadoPage (US-14)", () => {
     await user.click(screen.getByRole("button", { name: "Piloto Uno" }));
 
     expect(
-      screen.getByRole("heading", { level: 3, name: "Detalle — Piloto Uno" }),
+      screen.getByRole("heading", { level: 2, name: "Detalle — Piloto Uno" }),
     ).toBeInTheDocument();
 
     // Vista del activo en el GP.
@@ -468,7 +510,7 @@ describe("MercadoPage (US-14)", () => {
     ).toBeInTheDocument();
 
     // Histórico completo: P0 (manual) + J1 (fórmula).
-    expect(screen.getByRole("heading", { level: 4, name: "Historial completo" }))
+    expect(screen.getByRole("heading", { level: 3, name: "Historial completo" }))
       .toBeInTheDocument();
     const rows = screen.getAllByRole("table")[1]?.querySelectorAll("tbody tr") ?? [];
     expect(rows).toHaveLength(2);
@@ -492,13 +534,51 @@ describe("MercadoPage (US-14)", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Piloto Uno" }));
     expect(
-      screen.getByRole("heading", { level: 3, name: "Detalle — Piloto Uno" }),
+      screen.getByRole("heading", { level: 2, name: "Detalle — Piloto Uno" }),
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Cerrar" }));
     expect(
       screen.queryByRole("heading", { level: 3, name: "Detalle — Piloto Uno" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("detalle: la tendencia muestra la variación (Δ) del servidor (F3)", async () => {
+    mockSeasons();
+    mockGps();
+    mockMarketList();
+    mockDetail(DETAIL_R1);
+    renderMercado(<MercadoPage />);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Piloto Uno" }));
+
+    // Δ calculado en el servidor (mismo punto anterior que la tendencia).
+    // RIDER_A también aparece en el listado (mismo badge), así que acotamos
+    // la consulta al contenedor del detalle (el h2 vive en su <div> padre).
+    const detail = within(
+      screen
+        .getByRole("heading", { level: 2, name: "Detalle — Piloto Uno" })
+        .closest("div") as HTMLElement,
+    );
+    expect(detail.getByText("Sube +2")).toBeInTheDocument();
+  });
+
+  it("el botón Cerrar del detalle vive en una fila de acción (F3)", async () => {
+    mockSeasons();
+    mockGps();
+    mockMarketList();
+    mockDetail(DETAIL_R1);
+    renderMercado(<MercadoPage />);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Piloto Uno" }));
+
+    const actionRow = document.querySelector(".action-row");
+    expect(actionRow).toBeInTheDocument();
+    expect(actionRow).toContainElement(
+      screen.getByRole("button", { name: "Cerrar" }),
+    );
   });
 
   it("al cambiar de GP se limpia la selección y se re-pide la lista", async () => {
@@ -511,7 +591,7 @@ describe("MercadoPage (US-14)", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Piloto Uno" }));
     expect(
-      screen.getByRole("heading", { level: 3, name: "Detalle — Piloto Uno" }),
+      screen.getByRole("heading", { level: 2, name: "Detalle — Piloto Uno" }),
     ).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText("GP"), GP2.id);
@@ -568,6 +648,23 @@ describe("MercadoPage (US-14)", () => {
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 
+  it("estado vacío: 'Borrar filtros' limpia el cluster y re-pide la lista (F3)", async () => {
+    mockSeasons();
+    mockGps();
+    mockMarketList([]);
+    renderMercado(<MercadoPage />);
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Precio mínimo"), "5");
+    expect(lastListInput()).toMatchObject({ priceMin: 5 });
+
+    // Salida del estado vacío: un solo control limpia todos los filtros.
+    await user.click(screen.getByRole("button", { name: "Borrar filtros" }));
+
+    expect(screen.getByLabelText("Precio mínimo")).toHaveValue("");
+    expect(lastListInput()).not.toHaveProperty("priceMin");
+  });
+
   it("precio mínimo superior al máximo: error local y NO envía el filtro", async () => {
     mockSeasons();
     mockGps();
@@ -581,6 +678,60 @@ describe("MercadoPage (US-14)", () => {
       screen.getByText("Precio mínimo: el precio no puede superar 9999.99."),
     ).toBeInTheDocument();
     expect(lastListInput()).not.toHaveProperty("priceMin");
+  });
+
+  it("rango imposible (mín > máx): error local y NO envía los precios (F3)", async () => {
+    mockSeasons();
+    mockGps();
+    mockMarketList();
+    renderMercado(<MercadoPage />);
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Precio mínimo"), "20");
+    await user.type(screen.getByLabelText("Precio máximo"), "10");
+
+    // Un rango imposible es un error de usuario que hay que nombrar, no un
+    // "Ningún activo coincide" disfrazado de resultado.
+    expect(
+      screen.getByText("El mínimo no puede superar el máximo."),
+    ).toBeInTheDocument();
+    expect(lastListInput()).not.toHaveProperty("priceMin");
+    expect(lastListInput()).not.toHaveProperty("priceMax");
+
+    // El error queda asociado al campo (aria) para lectores de pantalla (F3).
+    const minInput = screen.getByLabelText("Precio mínimo");
+    expect(minInput).toHaveAttribute("aria-invalid", "true");
+    expect(minInput).toHaveAttribute("aria-describedby", "price-min-error");
+  });
+
+  it("precio máximo inválido: error local asociado al campo (aria) (F3)", async () => {
+    mockSeasons();
+    mockGps();
+    mockMarketList();
+    renderMercado(<MercadoPage />);
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Precio máximo"), "abc");
+
+    expect(
+      screen.getByText("Precio máximo: introduce un número positivo."),
+    ).toBeInTheDocument();
+    const maxInput = screen.getByLabelText("Precio máximo");
+    expect(maxInput).toHaveAttribute("aria-invalid", "true");
+    expect(maxInput).toHaveAttribute("aria-describedby", "price-max-error");
+  });
+
+  it("el bloque del GP lleva un h2 con el nombre del GP (F3)", () => {
+    mockSeasons();
+    mockGps();
+    mockMarketList();
+    renderMercado(<MercadoPage />);
+
+    // Mismo patrón que "Mi puntuación — GP" (/puntuacion) y
+    // "Mis resultados — GP" (/resultados): el bloque de contenido se nombra.
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Mercado — GP de Qatar" }),
+    ).toBeInTheDocument();
   });
 
   it("activo sin precio en la lista: guion en la celda de precio", () => {
@@ -606,7 +757,7 @@ describe("MercadoPage (US-14)", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Piloto Uno" }));
     expect(
-      screen.getByRole("heading", { level: 3, name: "Detalle — Piloto Uno" }),
+      screen.getByRole("heading", { level: 2, name: "Detalle — Piloto Uno" }),
     ).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText("Temporada"), SEASON_2025);
@@ -637,14 +788,14 @@ describe("MercadoPage (US-14)", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Piloto Uno" }));
     expect(
-      screen.getByRole("heading", { level: 3, name: "Detalle — Piloto Uno" }),
+      screen.getByRole("heading", { level: 2, name: "Detalle — Piloto Uno" }),
     ).toBeInTheDocument();
 
     // Filtro que excluye al activo de la lista; el detalle sigue pendiente.
     await user.type(screen.getByLabelText("Precio mínimo"), "100");
 
     expect(
-      screen.getByRole("heading", { level: 3, name: "Detalle — r1" }),
+      screen.getByRole("heading", { level: 2, name: "Detalle — r1" }),
     ).toBeInTheDocument();
   });
 

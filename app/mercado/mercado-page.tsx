@@ -49,22 +49,50 @@ const TREND_LABEL: Record<PriceTrend, string> = {
   flat: "Estable",
 };
 
-/** Tendencia sube/baja/estable con color (verde/rojo/gris). */
-function TrendBadge({ trend }: { trend: PriceTrend }) {
+/** Variación con signo (+2.6 / −1.5), sin ceros finales innecesarios. */
+function formatDelta(delta: number): string {
+  const value = Number(Math.abs(delta).toFixed(2));
+  return delta > 0 ? `+${value}` : `−${value}`;
+}
+
+/**
+ * Tendencia sube/baja/estable con color (verde/rojo/gris) y — si hay punto
+ * anterior — la variación (Δ) junto a la etiqueta: dirección + magnitud es
+ * el dato de decisión (F3, crítica /mercado). Sin Δ no se añade nada.
+ */
+function TrendBadge({
+  trend,
+  delta,
+}: {
+  trend: PriceTrend;
+  delta?: number | null;
+}) {
   const className = trend === "up" ? "ok" : trend === "down" ? "bad" : "muted";
-  return <span className={className}>{TREND_LABEL[trend]}</span>;
+  return (
+    <span className={className}>
+      {TREND_LABEL[trend]}
+      {delta !== null && delta !== undefined && delta !== 0 && (
+        <> {formatDelta(delta)}</>
+      )}
+    </span>
+  );
 }
 
 /**
  * Mini-histórico (sparkline) del activo en la lista: 0 puntos → "—",
  * 1 punto → punto, ≥2 → línea. SVG a mano alzada (cero dependencias).
  */
-function Sparkline({ points }: { points: number[] }) {
+function Sparkline({
+  points,
+}: {
+  points: Array<{ label: string; price: number }>;
+}) {
   if (points.length === 0) return <span className="muted">—</span>;
   const width = 96;
   const height = 24;
-  const min = Math.min(...points);
-  const max = Math.max(...points);
+  const values = points.map((p) => p.price);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
   const span = max - min;
   const x = (i: number) =>
     points.length === 1 ? width / 2 : 2 + (i / (points.length - 1)) * (width - 4);
@@ -75,18 +103,20 @@ function Sparkline({ points }: { points: number[] }) {
       width={width}
       height={height}
       role="img"
-      aria-label={`Mini-histórico: ${points.join(", ")}`}
+      aria-label={`Mini-histórico: ${points
+        .map((p) => `${p.label} ${p.price}`)
+        .join(", ")}`}
     >
       {points.length >= 2 && (
         <polyline
-          points={points.map((p, i) => `${x(i)},${y(p)}`).join(" ")}
+          points={points.map((p, i) => `${x(i)},${y(p.price)}`).join(" ")}
           fill="none"
           stroke="currentColor"
           strokeWidth="1.5"
         />
       )}
       {points.map((p, i) => (
-        <circle key={i} cx={x(i)} cy={y(p)} r="2" fill="currentColor" />
+        <circle key={i} cx={x(i)} cy={y(p.price)} r="2" fill="currentColor" />
       ))}
     </svg>
   );
@@ -128,13 +158,13 @@ function PriceChart({ points }: { points: ChartPoint[] }) {
         <polyline
           points={points.map((p, i) => `${x(i)},${y(p.price)}`).join(" ")}
           fill="none"
-          stroke="var(--accent)"
+          stroke="var(--fg)"
           strokeWidth="2"
         />
       )}
       {points.map((p, i) => (
         <g key={p.label}>
-          <circle cx={x(i)} cy={y(p.price)} r="3.5" fill="var(--accent)" />
+          <circle cx={x(i)} cy={y(p.price)} r="3.5" fill="var(--fg)" />
           <text
             x={x(i)}
             y={y(p.price) - 10}
@@ -200,6 +230,14 @@ export default function MercadoPage() {
 
   const priceMin = parsePriceFilter(priceMinText, "Precio mínimo");
   const priceMax = parsePriceFilter(priceMaxText, "Precio máximo");
+  // Cruce min/máx (F3): un rango imposible es un error de usuario que hay que
+  // nombrar, no un "Ningún activo coincide" disfrazado de resultado.
+  const rangeError =
+    priceMin.number !== undefined &&
+    priceMax.number !== undefined &&
+    priceMin.number > priceMax.number
+      ? "El mínimo no puede superar el máximo."
+      : undefined;
 
   const list = trpc.market.market.list.useQuery(
     {
@@ -207,8 +245,12 @@ export default function MercadoPage() {
       assetType,
       ...(assetType === "rider" && constructorId !== "" ? { constructorId } : {}),
       ...(assetType === "rider" && teamId !== "" ? { teamId } : {}),
-      ...(priceMin.number !== undefined ? { priceMin: priceMin.number } : {}),
-      ...(priceMax.number !== undefined ? { priceMax: priceMax.number } : {}),
+      ...(rangeError === undefined && priceMin.number !== undefined
+        ? { priceMin: priceMin.number }
+        : {}),
+      ...(rangeError === undefined && priceMax.number !== undefined
+        ? { priceMax: priceMax.number }
+        : {}),
     },
     { enabled: gpId !== "" },
   );
@@ -241,6 +283,14 @@ export default function MercadoPage() {
     setSelected(null);
   }
 
+  /** Salida del estado vacío (F3): limpiar todo el cluster de filtros de golpe. */
+  function clearFilters() {
+    setConstructorId("");
+    setTeamId("");
+    setPriceMinText("");
+    setPriceMaxText("");
+  }
+
   if (seasons.isPending) {
     return <p className="muted">Consultando…</p>;
   }
@@ -255,41 +305,55 @@ export default function MercadoPage() {
         list.data?.find((a) => a.assetId === selected.assetId)?.name ??
         selected.assetId);
 
+  /** GP seleccionado (h2 del bloque — patrón "X — {GP}" de /puntuacion y /resultados). */
+  const selectedGp = gps.data?.find((g) => g.id === gpId);
+
   return (
     <div>
       <h2>Temporada y GP</h2>
-      <div className="field">
-        <label htmlFor="season">Temporada</label>
-        <select
-          id="season"
-          value={seasonId}
-          onChange={(e) => selectSeason(e.target.value)}
-        >
-          <option value="">— Temporada —</option>
-          {seasons.data.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-      </div>
-      {seasonId !== "" && (
+      {/* .stack: los dos campos del mismo bloque comparten el gap del
+          sistema (F3) — antes quedaban apilados sin espacio entre sí. */}
+      <div className="stack">
         <div className="field">
-          <label htmlFor="gp">GP</label>
-          <select id="gp" value={gpId} onChange={(e) => selectGp(e.target.value)}>
-            <option value="">— GP —</option>
-            {gps.data?.map((g) => (
-              <option key={g.id} value={g.id}>
-                J{g.round} · {g.name}
+          <label htmlFor="season">Temporada</label>
+          <select
+            id="season"
+            value={seasonId}
+            onChange={(e) => selectSeason(e.target.value)}
+          >
+            <option value="">— Temporada —</option>
+            {seasons.data.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
               </option>
             ))}
           </select>
         </div>
-      )}
+        {seasonId !== "" && (
+          <div className="field">
+            <label htmlFor="gp">GP</label>
+            <select
+              id="gp"
+              value={gpId}
+              onChange={(e) => selectGp(e.target.value)}
+            >
+              <option value="">— GP —</option>
+              {gps.data?.map((g) => (
+                <option key={g.id} value={g.id}>
+                  J{g.round} · {g.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
       {gpId === "" && <p className="muted">Selecciona un GP para explorar el mercado.</p>}
 
       {gpId !== "" && (
         <div>
+          {/* h2 del bloque (F3): mismo patrón que "Mi puntuación — GP" en
+              /puntuacion y "Mis resultados — GP" en /resultados. */}
+          <h2>Mercado — {selectedGp?.name ?? "GP"}</h2>
           <div className="tabs" role="group" aria-label="Tipo de activo">
             <button
               type="button"
@@ -361,8 +425,16 @@ export default function MercadoPage() {
                 placeholder="p. ej. 10"
                 value={priceMinText}
                 onChange={(e) => setPriceMinText(e.target.value)}
+                aria-invalid={priceMin.error ?? rangeError ? "true" : undefined}
+                aria-describedby={
+                  priceMin.error ?? rangeError ? "price-min-error" : undefined
+                }
               />
-              {priceMin.error && <p className="field-error">{priceMin.error}</p>}
+              {(priceMin.error ?? rangeError) && (
+                <p className="field-error" id="price-min-error">
+                  {priceMin.error ?? rangeError}
+                </p>
+              )}
             </div>
             <div className="field">
               <label htmlFor="price-max">Precio máximo</label>
@@ -373,10 +445,26 @@ export default function MercadoPage() {
                 placeholder="p. ej. 30"
                 value={priceMaxText}
                 onChange={(e) => setPriceMaxText(e.target.value)}
+                aria-invalid={priceMax.error ? "true" : undefined}
+                aria-describedby={priceMax.error ? "price-max-error" : undefined}
               />
-              {priceMax.error && <p className="field-error">{priceMax.error}</p>}
+              {priceMax.error && (
+                <p className="field-error" id="price-max-error">
+                  {priceMax.error}
+                </p>
+              )}
             </div>
           </div>
+
+          {/* Capa de ayuda de vocabulario (F3, patrón F1 de /admin): los
+              términos de la tabla se explican una sola vez, en su primera
+              aparición — aquí, justo antes de la lista. */}
+          <p className="muted">
+            Tendencia: variación del precio respecto al punto anterior del
+            histórico (ronda anterior o P0). (P0): el GP aún no tiene precio
+            propio; se muestra el precio de apertura. Lineups: cuántos lineups
+            de este GP contienen el activo.
+          </p>
 
           {list.isPending && <p className="muted">Consultando…</p>}
           {list.isError && (
@@ -419,10 +507,15 @@ export default function MercadoPage() {
                         {a.isP0Fallback && <span className="muted"> (P0)</span>}
                       </td>
                       <td>
-                        <TrendBadge trend={a.trend} />
+                        <TrendBadge trend={a.trend} delta={a.delta} />
                       </td>
                       <td>
-                        <Sparkline points={a.miniHistory.map((p) => p.price)} />
+                        <Sparkline
+                          points={a.miniHistory.map((p) => ({
+                            label: p.gpRound === null ? "P0" : `J${p.gpRound}`,
+                            price: p.price,
+                          }))}
+                        />
                       </td>
                       <td>{a.popularity}</td>
                     </tr>
@@ -432,12 +525,21 @@ export default function MercadoPage() {
             </div>
           )}
           {list.data && list.data.length === 0 && (
-            <p className="muted">Ningún activo coincide con los filtros.</p>
+            <div>
+              <p className="muted">Ningún activo coincide con los filtros.</p>
+              {/* Salida del estado vacío (F3): no dejar al usuario limpiando
+                  hasta 4 campos a mano. */}
+              <div className="action-row">
+                <RowAction onClick={clearFilters}>Borrar filtros</RowAction>
+              </div>
+            </div>
           )}
 
           {selected && (
             <div>
-              <h3>Detalle — {selectedName}</h3>
+              {/* h2 (F3): bloque de contenido, igual que "Mi puntuación — GP"
+                  en /puntuacion y "Mis resultados — GP" en /resultados. */}
+              <h2>Detalle — {selectedName}</h2>
               {detail.isPending && <p className="muted">Consultando…</p>}
               {detail.isError && (
                 <Alert variant="error">No se pudo cargar el detalle del activo.</Alert>
@@ -457,7 +559,11 @@ export default function MercadoPage() {
                       )}
                     </li>
                     <li>
-                      Tendencia: <TrendBadge trend={detail.data.asset.trend} />
+                      Tendencia:{" "}
+                      <TrendBadge
+                        trend={detail.data.asset.trend}
+                        delta={detail.data.asset.delta}
+                      />
                     </li>
                     <li>
                       Lineups de este GP que contienen el activo:{" "}
@@ -480,7 +586,13 @@ export default function MercadoPage() {
                       price: h.price,
                     }))}
                   />
-                  <h4>Historial completo</h4>
+                  <h3>Historial completo</h3>
+                  {/* Motivo: primera aparición de Fórmula/Manual — explicarlo
+                      en el sitio, una sola vez (patrón F1 de /admin). */}
+                  <p className="muted">
+                    Motivo: Fórmula = calculado por la fórmula del sistema;
+                    Manual = ajuste manual del admin.
+                  </p>
                   <div className="table-scroll">
                     <table className="results-table">
                       <thead>
@@ -505,7 +617,9 @@ export default function MercadoPage() {
                       </tbody>
                     </table>
                   </div>
-                  <RowAction onClick={() => setSelected(null)}>Cerrar</RowAction>
+                  <div className="action-row">
+                    <RowAction onClick={() => setSelected(null)}>Cerrar</RowAction>
+                  </div>
                 </div>
               )}
             </div>

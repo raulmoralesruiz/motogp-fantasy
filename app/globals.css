@@ -60,6 +60,17 @@ h2 {
   margin: 1.5rem 0 0.5rem;
 }
 
+/* Title (h3): un nivel (1rem/700) y un ritmo con más aire arriba que abajo.
+   P2-1 (admin, F1) + F3 (impeccable): es GLOBAL — vale tanto para los títulos
+   de tarjeta como para los h3 sueltos de las páginas sin tarjetas
+   (resultados, lineups, ligas, mercado). Los pasos de ritual mantienen su
+   override propio (`.ritual-step > summary > h3`, mayor especificidad). */
+h3 {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
 .muted {
   color: var(--muted);
 }
@@ -253,15 +264,6 @@ select {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
-}
-
-/* Paso de ritual (token único, P2-1): un nivel (h3 = Title), un tamaño
-   (1rem/700) y un ritmo con más aire arriba que abajo, igual en
-   Resultados, Precios y Mercado. El detalle va en h4 (Subhead). */
-.card h3 {
-  margin: 1.25rem 0 0.5rem;
-  font-size: 1rem;
-  font-weight: 700;
 }
 
 /* Escala tipográfica cerrada (DESIGN.md): h4 = Subhead (0.9 rem/600) y

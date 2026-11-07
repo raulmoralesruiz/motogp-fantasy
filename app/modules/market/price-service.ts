@@ -261,6 +261,8 @@ export interface MarketAssetView {
   isP0Fallback: boolean;
   /** Sube/baja/estable frente al punto anterior del histórico. */
   trend: PriceTrend;
+  /** Variación (puntos) frente al punto anterior; null si no hay punto anterior. */
+  delta: number | null;
   /** Últimos puntos del histórico (orden P0 → ronda), máx. 8. */
   miniHistory: MarketPricePoint[];
   /** Nº de lineups de este GP que contienen el activo (sin PII). */
@@ -573,7 +575,7 @@ export class PriceService {
 
     const views = assets.map((asset) => {
       const points = pointsByAsset.get(asset.id) ?? [];
-      const { currentPrice, isP0Fallback, trend } =
+      const { currentPrice, isP0Fallback, trend, delta } =
         this.currentPriceAndTrend(points, input.gpId);
       const affiliation = isRider
         ? (affiliationByRider.get(asset.id) ?? null)
@@ -595,6 +597,7 @@ export class PriceService {
         currentPrice,
         isP0Fallback,
         trend,
+        delta,
         miniHistory: points.slice(-MINI_HISTORY_POINTS),
         popularity: lineupsByAsset.get(asset.id)?.size ?? 0,
       };
@@ -694,7 +697,7 @@ export class PriceService {
 
     const sorted = sortPriceRows(rows);
     const points = sorted.map(toPricePoint);
-    const { currentPrice, isP0Fallback, trend } =
+    const { currentPrice, isP0Fallback, trend, delta } =
       this.currentPriceAndTrend(points, input.gpId);
 
     const asset: MarketAssetView = {
@@ -707,6 +710,7 @@ export class PriceService {
       currentPrice,
       isP0Fallback,
       trend,
+      delta,
       miniHistory: points.slice(-MINI_HISTORY_POINTS),
       popularity: new Set(slots.map((s) => s.lineupId)).size,
     };
@@ -1269,6 +1273,7 @@ export class PriceService {
     currentPrice: number | null;
     isP0Fallback: boolean;
     trend: PriceTrend;
+    delta: number | null;
   } {
     const gpPoint = points.find((p) => p.gpId === gpId) ?? null;
     const p0Point = points.find((p) => p.gpId === null) ?? null;
@@ -1276,6 +1281,7 @@ export class PriceService {
     const isP0Fallback = gpPoint === null && p0Point !== null;
 
     let trend: PriceTrend = "flat";
+    let delta: number | null = null;
     if (currentPrice !== null) {
       const currentPoint = gpPoint ?? p0Point!;
       const idx = points.indexOf(currentPoint);
@@ -1287,9 +1293,10 @@ export class PriceService {
             : currentPrice < prev.price
               ? "down"
               : "flat";
+        delta = currentPrice - prev.price;
       }
     }
-    return { currentPrice, isP0Fallback, trend };
+    return { currentPrice, isP0Fallback, trend, delta };
   }
 
   /**
