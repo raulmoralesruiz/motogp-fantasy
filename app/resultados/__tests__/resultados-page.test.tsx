@@ -23,8 +23,8 @@ vi.mock("@/trpc/client", () => import("../../../test/trpc-mock"));
 import { trpc } from "@/trpc/client";
 
 const SEASON_ID = "season-2099";
-const GP1 = { id: "gp-1", name: "GP de Jerez", round: 1 };
-const GP2 = { id: "gp-2", name: "GP de Le Mans", round: 2 };
+const GP1 = { id: "gp-1", name: "GP de Jerez", round: 1, status: "scheduled" };
+const GP2 = { id: "gp-2", name: "GP de Le Mans", round: 2, status: "finished" };
 
 /** Liga con posición en el GP + delta negativo (bajó 1) + general. */
 const LEAGUE: MyLeagueGpRanking = {
@@ -183,9 +183,9 @@ function mockSeasons() {
   });
 }
 
-function mockGps() {
+function mockGps(gps: Array<typeof GP1> = [GP1, GP2]) {
   mockResult(trpc.seasons.gps.list.useQuery, {
-    data: [GP1, GP2],
+    data: gps,
     isPending: false,
     isError: false,
   });
@@ -205,6 +205,14 @@ function mockScore(score: MyScoreView) {
     isPending: false,
     isError: false,
   });
+}
+
+/**
+ * Error tRPC con código (shape v11 transformada: `data.code`), como el que
+ * llega del servidor para los estados legítimos de `myScore`.
+ */
+function trpcError(message: string, code: string) {
+  return Object.assign(new Error(message), { data: { code } });
 }
 
 /** Navega hasta el GP2 (temporada + GP). */
@@ -236,18 +244,31 @@ describe("ResultadosPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("muestra la selección de temporada y GP y pide un GP si no se elige", async () => {
+  it("elige la temporada más reciente y el primer GP programado por defecto", () => {
     mockSeasons();
     mockGps();
     renderResultados(<ResultadosPage />);
 
-    const user = userEvent.setup();
-    await user.selectOptions(screen.getByLabelText("Temporada"), SEASON_ID);
+    // Temporada por defecto: la más reciente (orden ascendente → última).
+    expect(screen.getByLabelText("Temporada")).toHaveValue(SEASON_ID);
+    // GP por defecto: el primero programado por ronda.
+    expect(screen.getByLabelText("GP")).toHaveValue(GP1.id);
+    expect(screen.getByRole("option", { name: "J2 · GP de Le Mans" })).toBeInTheDocument();
+  });
 
+  it("sin GP programado no preselecciona ningún GP", () => {
+    mockSeasons();
+    mockGps([
+      { id: "gp-1", name: "GP de Jerez", round: 1, status: "finished" },
+      { id: "gp-2", name: "GP de Le Mans", round: 2, status: "finished" },
+    ]);
+    renderResultados(<ResultadosPage />);
+
+    expect(screen.getByLabelText("Temporada")).toHaveValue(SEASON_ID);
+    expect(screen.getByLabelText("GP")).toHaveValue("");
     expect(
       screen.getByText("Selecciona un GP para ver tus resultados."),
     ).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "J2 · GP de Le Mans" })).toBeInTheDocument();
   });
 
   it("muestra estado, posición + delta, recálculo con histórico y desglose", async () => {
@@ -267,10 +288,17 @@ describe("ResultadosPage", () => {
     expect(screen.getByText("Resultados definitivos")).toBeInTheDocument();
     expect(screen.getByText("(versión rv-2)")).toBeInTheDocument();
 
+    // Capa de ayuda de vocabulario (F3): delta, general, provisional, corrección.
+    expect(screen.getByText(/Delta \(▲\/▼\): cambio de posición/)).toBeInTheDocument();
+    expect(screen.getByText(/General: posición acumulada en la liga/)).toBeInTheDocument();
+    expect(screen.getByText(/Corrección: ajuste de un resultado/)).toBeInTheDocument();
+
     // Posición en la liga + delta negativo (bajó 1) + general.
     expect(screen.getByText("Liga A")).toBeInTheDocument();
     expect(screen.getByText(/posición 2 \(120,5 pts\)/)).toBeInTheDocument();
     expect(screen.getByText("▼ 1 vs GP anterior")).toBeInTheDocument();
+    // Delta negativo = dato, no fallo → neutro (muted), no rojo (F3 P2).
+    expect(screen.getByText("▼ 1 vs GP anterior")).toHaveClass("muted");
     expect(screen.getByText(/general: 2 \(240,5 pts\)/)).toBeInTheDocument();
 
     // Recálculo: aviso + histórico anterior → nuevo (motivo + actor).
@@ -328,8 +356,9 @@ describe("ResultadosPage", () => {
       data: undefined,
       isPending: false,
       isError: true,
-      error: new Error(
+      error: trpcError(
         "Este GP aún no tiene resultados importados; tu puntuación aparecerá cuando se importen los resultados o se marquen definitivos.",
+        "PRECONDITION_FAILED",
       ),
     });
     renderResultados(<ResultadosPage />);
@@ -343,7 +372,99 @@ describe("ResultadosPage", () => {
     expect(
       screen.getByText(/Este GP aún no tiene resultados importados/),
     ).toBeInTheDocument();
+    // Estado legítimo (sin resultados) → neutro (info), no error (rojo) (F3 P1).
+    expect(
+      screen
+        .getByText(/Este GP aún no tiene resultados importados/)
+        .closest("p"),
+    ).toHaveClass("alert-info");
     expect(screen.queryByText("170,5 puntos")).not.toBeInTheDocument();
+  });
+
+  it("sin lineup: estado neutro (info) con enlace a /lineups, no error rojo", async () => {
+    mockSeasons();
+    mockGps();
+    mockResults({
+      ...RESULTS,
+      state: {
+        gpId: GP2.id,
+        gpName: GP2.name,
+        round: 2,
+        seasonName: "Temporada 2099",
+        definitive: false,
+        resultsVersion: null,
+        counts: { provisional: 0, definitive: 0, corrected: 0 },
+        totalResults: 0,
+        lineups: 0,
+      },
+    });
+    mockResult(trpc.results.myScore.useQuery, {
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: trpcError("No tienes lineup para este GP.", "NOT_FOUND"),
+    });
+    renderResultados(<ResultadosPage />);
+
+    const user = userEvent.setup();
+    await openGp2(user);
+
+    // Estado legítimo (sin lineup) → neutro (info), no error (rojo) (F3 P1).
+    expect(screen.getByText(/No tienes lineup para este GP/).closest("p")).toHaveClass(
+      "alert-info",
+    );
+    // Salida accionable: enlace a montar el lineup.
+    expect(
+      screen.getByRole("link", { name: "Monta tu lineup" }),
+    ).toHaveAttribute("href", "/lineups");
+  });
+
+  it("fallo real de `myScore`: error rojo con el motivo del servidor", async () => {
+    mockSeasons();
+    mockGps();
+    mockResults({ ...RESULTS });
+    mockResult(trpc.results.myScore.useQuery, {
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: new Error("Fallo interno del servidor."),
+    });
+    renderResultados(<ResultadosPage />);
+
+    const user = userEvent.setup();
+    await openGp2(user);
+
+    // Fallo real (sin código legítimo) → error (rojo).
+    expect(
+      screen.getByText("Fallo interno del servidor.").closest("p"),
+    ).toHaveClass("alert-error");
+  });
+
+  it("`NOT_FOUND` «GP no existe» (sobrecarga del código): fallo real, sin CTA de lineup (F3 P2)", async () => {
+    mockSeasons();
+    mockGps();
+    mockResults({ ...RESULTS });
+    mockResult(trpc.results.myScore.useQuery, {
+      data: undefined,
+      isPending: false,
+      isError: true,
+      // Mismo código `NOT_FOUND` que «sin lineup», pero el mensaje no es de
+      // lineup → fallo real, no estado legítimo.
+      error: trpcError("El GP no existe.", "NOT_FOUND"),
+    });
+    renderResultados(<ResultadosPage />);
+
+    const user = userEvent.setup();
+    await openGp2(user);
+
+    // Fallo real → error (rojo), NO el estado neutro «sin lineup».
+    expect(screen.getByText("El GP no existe.").closest("p")).toHaveClass(
+      "alert-error",
+    );
+    // Sin la salida accionable de «sin lineup».
+    expect(
+      screen.queryByRole("link", { name: "Monta tu lineup" }),
+    ).not.toBeInTheDocument();
   });
 
   it("provisional (ADR-0031): aviso + desglose provisional con eventos", async () => {
@@ -412,7 +533,12 @@ describe("ResultadosPage", () => {
     const user = userEvent.setup();
     await openGp2(user);
 
-    expect(screen.getByText("Aún no formas parte de ninguna liga.")).toBeInTheDocument();
+    expect(screen.getByText(/Aún no formas parte de ninguna liga/)).toBeInTheDocument();
+    // Salida accionable: enlace al directorio de ligas (F3 P1).
+    expect(screen.getByRole("link", { name: "Explora las ligas" })).toHaveAttribute(
+      "href",
+      "/ligas",
+    );
   });
 
   it("muestra 'sin posición en este GP' cuando la posición es null", async () => {

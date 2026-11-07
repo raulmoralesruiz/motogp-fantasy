@@ -84,21 +84,21 @@ export function ScoreBreakdown({ score }: { score: MyScoreView }) {
         </Alert>
       )}
       <h3>Oro</h3>
-      <ul>
+      <ul className="status">
         {score.gold.map((rider) => (
           <RiderRow key={rider.riderId} rider={rider} />
         ))}
       </ul>
 
       <h3>Plata</h3>
-      <ul>
+      <ul className="status">
         {score.silver.map((rider) => (
           <RiderRow key={rider.riderId} rider={rider} />
         ))}
       </ul>
 
       <h3>Constructor y equipo</h3>
-      <ul>
+      <ul className="status">
         <li>
           Constructor: <strong>{score.manufacturer.name}</strong> →{" "}
           <strong>{fmt(score.manufacturer.points)} pts</strong>
