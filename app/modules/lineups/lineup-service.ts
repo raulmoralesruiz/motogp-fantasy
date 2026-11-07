@@ -129,6 +129,10 @@ export interface BuilderView {
     constructorName: string;
     price: number | null;
   }[];
+  /** Wildcards usados esta temporada (US-12, ADR-0017: 1 por temporada). */
+  wildcardsUsed: number;
+  /** Wildcards permitidos por temporada (`season_rules.transfers`). */
+  wildcardsPerSeason: number;
 }
 
 /** Actor de la acción (el propio usuario). */
@@ -522,21 +526,28 @@ export class LineupService {
     if (!gp) {
       throw new TRPCError({ code: "NOT_FOUND", message: "El GP no existe." });
     }
-    const [affiliations, gpPrices, constructors, teams, budget] = await Promise.all([
-      this.prisma.riderAffiliation.findMany({
-        where: { gpId },
-        include: { rider: true, team: true, constructor: true },
-      }),
-      // Precios del GP con fallback al P0 (ADR-0015 addendum): el GP 1 no
-      // tiene precio propio y debe usar el P0, igual que el mercado.
-      this.resolveGpPrices(this.prisma, gpId),
-      this.prisma.constructor.findMany({ orderBy: { name: "asc" } }),
-      this.prisma.team.findMany({
-        orderBy: { name: "asc" },
-        include: { constructor: true },
-      }),
-      this.budgetForGp(gp, userId),
-    ]);
+    const [affiliations, gpPrices, constructors, teams, budget, rules, wildcardsUsed] =
+      await Promise.all([
+        this.prisma.riderAffiliation.findMany({
+          where: { gpId },
+          include: { rider: true, team: true, constructor: true },
+        }),
+        // Precios del GP con fallback al P0 (ADR-0015 addendum): el GP 1 no
+        // tiene precio propio y debe usar el P0, igual que el mercado.
+        this.resolveGpPrices(this.prisma, gpId),
+        this.prisma.constructor.findMany({ orderBy: { name: "asc" } }),
+        this.prisma.team.findMany({
+          orderBy: { name: "asc" },
+          include: { constructor: true },
+        }),
+        this.budgetForGp(gp, userId),
+        this.latestRules(this.prisma, gp.seasonId),
+        // Wildcard (US-12, ADR-0017): entradas `wildcard` de la temporada —
+        // el estado alimenta el botón "Usar wildcard" de la UI (F3).
+        this.prisma.lineupChange.count({
+          where: { userId, gp: { seasonId: gp.seasonId }, type: "wildcard" },
+        }),
+      ]);
     const priceOf = (assetType: string, assetId: string): number | null => {
       const price = gpPrices.find(
         (p) => p.assetType === assetType && p.assetId === assetId,
@@ -573,6 +584,8 @@ export class LineupService {
         constructorName: t.constructor.name,
         price: priceOf("team", t.id),
       })),
+      wildcardsUsed,
+      wildcardsPerSeason: rules.transfers.wildcardsPerSeason,
     };
   }
 

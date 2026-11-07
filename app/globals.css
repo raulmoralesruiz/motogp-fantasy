@@ -101,6 +101,17 @@ h3 {
   border-bottom: none;
 }
 
+/* Fila de estado destacada (borrador con cambios sin guardar, /lineups):
+   acento ÁMBAR por la izquierda — señal de ATENCIÓN NEUTRA ("esto cambia al
+   guardar"), no negativa (F3 P2: el rojo se reserva para señal negativa —
+   sobrecoste, lockout, error). Tinte 10% (Regla del Tinte 10/40, como las
+   alertas). */
+.status li.status-dirty {
+  border-left: 3px solid var(--warning);
+  padding-left: 0.75rem;
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+}
+
 a {
   /* Texto pequeño en rojo: --accent-text (variante aclarada, AA 4.5:1). */
   color: var(--accent-text);
