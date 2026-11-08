@@ -73,3 +73,19 @@ Los 6 son de pulido; ninguno rompe flujo, da señal falsa ni pierde trabajo. Se 
 1. Dado que /resultados es una página de *lectura*, ¿debería la auto-selección aterrizar en el último GP **con datos** (el que interesa al fan) en vez del próximo, a diferencia de /mercado y /lineups (que sí quieren el próximo)?
 2. Si "provisional" se explica ya en el desglose (`ScoreBreakdown`), ¿debería la página no repetirlo para no diluir la señal?
 3. Con la opción vacía que se revierte, ¿debería /resultados permitir explícitamente "quedarse sin GP" (estado de reposo) en vez de forzar siempre uno?
+
+## Barrido P2/P3 — cierre (2026-11-08)
+
+Cerrados 5 de los 6 P3 (triage por coste/riesgo: el P3 #2 queda abierto, ver abajo):
+
+- **P3 #1 (snap-back)** — CERRADO: flags `seasonCleared`/`gpCleared` en `resultados-page.tsx`; los efectos de auto-selección se saltan si el usuario deseleccionó a propósito (el efecto del GP también respeta `seasonCleared`: sin temporada no hay GP). Al re-seleccionar una temporada se re-activa la auto-selección del GP.
+- **P3 #3 (vocabulario)** — CERRADO: el titular pasa de "Resultados actualizados" a "Correcciones" (mismo término que define la capa de ayuda).
+- **P3 #4 (duplicación provisional)** — CERRADO en ambas páginas (mismo patrón): la línea de Total se limita a la versión de reglas (`(reglas scoring-v1)`); la explicación de "provisional" vive solo en el aviso de `ScoreBreakdown`. Afecta a `/resultados` y `/puntuacion`.
+- **P3 #5 (mayúsculas)** — CERRADO: `EVENT_LABELS` unificado a mayúsculas (`Q2`/`Sprint`/`Carrera`), coherente con `RiderRow` y `CODE_LABELS` (`score-breakdown.tsx`, compartido).
+- **P3 #6 (pista engañosa)** — CERRADO: la pista es coherente con el selector visible — sin temporada pide la temporada; con temporada pide el GP; sin temporadas no hay pista.
+
+**P3 #2 (auto-selección al último GP con datos)** — ABIERTO (decisión explícita): requiere preferir el último GP con resultados como por defecto; fuera del alcance de pulido (nuevo criterio de selección + posible endpoint). Registro para decisión posterior; la pregunta provocadora 1 sigue en pie.
+
+Tests: +3 nuevos en `resultados-page` (sin snap-back del GP; sin temporada pide la temporada; sin temporadas no hay pista) + 4 aserciones actualizadas (titular "Correcciones", línea de Total sin "provisional", mayúsculas `Q2, Sprint` en `score-breakdown`/`resultados`/`puntuacion`).
+
+Puertas en verde (2026-11-08): typecheck, lint 0 errores, unit 903/903, UI 704/704, build, detector `impeccable detect --json` → `[]` sobre los 3 archivos tocados.
