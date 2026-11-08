@@ -239,6 +239,27 @@ Lenguaje de formas de panel de instrumentos: rectángulos redondeados contenidos
 ### Named Rules
 **La Regla de los Tres Radios.** 5/6/8 px y nada más: ni 0 px ni píldora. La forma se reconoce antes que el color.
 
+## Motion
+
+El sistema es plano y quieto en reposo; el movimiento existe solo para **confirmar una acción, hacer legible un cambio de estado o mantener la continuidad** entre dos vistas. No hay coreografía de carga ni decoración: la app es un panel de boxes, no una escena.
+
+**Tokens (fuente de verdad en `:root` de `globals.css`):**
+
+| Token | Valor | Uso |
+|---|---|---|
+| `--motion-fast` | `120ms` | Feedback inmediato de control (hover de botones, enlaces, inputs, pestañas de fila). |
+| `--motion-base` | `200ms` | Cambio de estado de rutina (pestaña del mercado que cambia de activo a inactivo). |
+| `--ease-out` | `cubic-bezier(0.16, 1, 0.3, 1)` | Easing de referencia: rápido al inicio, asentamiento suave. |
+
+**Material permitido:** solo `background-color`, `border-color` y `color` — el compositor los interpolan sin mover layout. **Nunca** `width`/`height`/`top`/`left`/`margin`/`transform` en una transición de control: el sistema no anima geometría.
+
+**Cobertura (animate A1):** botones primario/secundario, CTA de tarjeta, acciones fantasma de fila, enlaces de cabecera y de navegación ancla, inputs/selects (fast); pestañas del mercado (base). Todo el feedback de hover/focus de los controles de la app pasa por estos dos tiempos.
+
+### Named Rules
+**La Regla del Movimiento con Propósito.** Toda transición confirma una acción o hace legible un cambio de estado; si no cumple una de las dos, no existe. El movimiento es señal, no adorno.
+
+**La Regla del Reposo Respetado.** Con `prefers-reduced-motion: reduce` **ninguna** transición ni animación corre: el feedback de estado (color, borde, opacidad) se conserva, solo se elimina el movimiento. Toda transición nueva entra también en el guard de reduced-motion.
+
 ## Components
 
 ### Buttons
@@ -288,7 +309,9 @@ El título de cada página marca una palabra en rojo de salida, y el estado se n
 
 **F2 cerrada (2026-11-06):** el sistema vive ahora en tokens — `:root` de `globals.css` es la única fuente de verdad de la paleta (13 tokens, cero hex fuera del bloque) y los tintes 10/40 se derivan por `color-mix` del token de estado; escala tipográfica cerrada a 1.75/1.1/1/0.9 rem (CTA y pestaña a Subhead, 0.9 rem). Ver sección «Tokens».
 
-**Siguiente:** F3 (llevarlo a las páginas restantes: `/mercado` → `/lineups` → `/resultados` → `/puntuacion` → `/ligas` → `/` + `/perfil` → auth), mismas puertas de calidad y sin romper las reglas de esta página.
+**F3 cerrada (2026-11-07):** las 10 páginas restantes llevan el sistema — `/mercado`, `/lineups`, `/resultados`, `/puntuacion`, `/ligas`, `/ligas/[id]`, `/`, `/perfil`, auth y `/unirse`; 10/10 con 0 P0/P1 y detector limpio. Barrido P2/P3 de cierre (S1 `/lineups`, S2 `/resultados`, S3 cross) cerrado el 2026-11-08: detector global `[]` sobre las 12 superficies.
+
+**animate A1 cerrada (2026-11-08):** fundación de motion + feedback de control — tokens `--motion-fast`/`--motion-base`/`--ease-out`, transiciones (solo color/borde/fondo) en todos los controles, guard de reduced-motion completo y sección «Motion» en esta página. Ver sección «Motion».
 
 ## Do's and Don'ts
 
@@ -300,6 +323,7 @@ El título de cada página marca una palabra en rojo de salida, y el estado se n
 - **Do** dejar que los datos anchos se deslicen dentro de su contenedor.
 - **Do** usar los colores semánticos solo para su semántica (pareja verde/rojo/gris de ausencia).
 - **Do** redactar la UI, los errores y los motivos de rechazo en español (compromiso del producto).
+- **Do** animar solo `background-color`/`border-color`/`color` con los tokens `--motion-fast`/`--motion-base` cuando una transición confirma una acción o hace legible un cambio de estado (Regla del Movimiento con Propósito).
 
 ### Don't:
 - **Don't** añadir sombras, degradados, glassmorphism ni glow: el sistema es plano por convicción.
@@ -309,3 +333,5 @@ El título de cada página marca una palabra en rojo de salida, y el estado se n
 - **Don't** renderizar tablas más anchas que el viewport ni ensanchar el documento en móvil.
 - **Don't** usar branding, logos ni datos licenciados de MotoGP (compromiso duradero: identidad propia).
 - **Don't** introducir tipografías de pago o licenciadas: la pila del sistema es deliberada.
+- **Don't** animar geometría (`width`/`height`/`top`/`left`/`margin`/`transform`) en una transición de control: el sistema no mueve layout.
+- **Don't** añadir transiciones o animaciones sin `prefers-reduced-motion` — el guard las neutraliza y el feedback de estado se conserva.
