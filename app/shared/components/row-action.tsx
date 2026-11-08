@@ -1,3 +1,5 @@
+"use client";
+
 import { type ButtonHTMLAttributes, useId } from "react";
 
 import { DisabledReason } from "./button";

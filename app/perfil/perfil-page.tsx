@@ -7,20 +7,9 @@ import { type FormEvent, useState } from "react";
 
 import { Alert, Button, Field, RowAction } from "@/shared/components";
 import { trpc } from "@/trpc/client";
-import { zodIssues } from "@/trpc/errors";
+import { isUnauthorized, zodIssues } from "@/trpc/errors";
 
 import { TotpSection } from "./totp-section";
-
-/**
- * F3 P2: `profile.me` falla con UNAUTHORIZED cuando no hay sesión (estado
- * normal), pero también puede fallar por un error real (500, red). Solo el
- * UNAUTHORIZED significa "sin sesión"; el resto es un fallo que hay que
- * mostrar, no enmascarar como "no has iniciado sesión" (mismo criterio que
- * la home, F3 P3-1).
- */
-function isUnauthorized(error: unknown): boolean {
-  return (error as { data?: { code?: string } } | null)?.data?.code === "UNAUTHORIZED";
-}
 
 /** Descarga un objeto como archivo JSON en el navegador (US-03). */
 function downloadJson(data: unknown, filename: string) {
@@ -80,7 +69,7 @@ export default function PerfilPage() {
     if (isUnauthorized(me.error)) {
       return (
         <p className="muted">
-          No has iniciado sesión. <a href="/login">Inicia sesión</a>
+          No has iniciado sesión. <a href="/login">Iniciar sesión</a>
         </p>
       );
     }

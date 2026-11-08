@@ -42,25 +42,39 @@ async function loginViaUi(page: Page, email: string, password: string): Promise<
   await page.getByRole("button", { name: /Iniciar sesión/i }).click();
 }
 
+/**
+ * T-26: la sesión vive en la cabecera global — «logueado» = el header
+ * muestra «Cerrar sesión» (antes: el texto «Sesión activa» de la home).
+ */
+async function expectLoggedIn(page: Page): Promise<void> {
+  await expect(page.getByRole("button", { name: /Cerrar sesión/i })).toBeVisible();
+}
+
+/** T-26: «anónimo» = el header ofrece «Iniciar sesión» y no «Cerrar sesión». */
+async function expectAnonymous(page: Page): Promise<void> {
+  await expect(page.getByRole("link", { name: "Iniciar sesión" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Cerrar sesión/i })).not.toBeVisible();
+}
+
 test.describe("flujos E2E — auth (T-11)", () => {
   test("registro válido → redirige al home con sesión activa", async ({ page }) => {
     const email = `e2e-${uniq("e2e")}@ficticio.test`;
     await registerViaUi(page, email, "Password123");
     await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByText(/Sesión activa/i)).toBeVisible();
+    await expectLoggedIn(page);
   });
 
   test("registro → logout → login válida → sesión activa", async ({ page }) => {
     const email = `e2e-${uniq("e2e")}@ficticio.test`;
     await registerViaUi(page, email, "Password123");
-    await expect(page.getByText(/Sesión activa/i)).toBeVisible();
+    await expectLoggedIn(page);
 
     await page.getByRole("button", { name: /Cerrar sesión/i }).click();
-    await expect(page.getByText(/No has iniciado sesión/i)).toBeVisible();
+    await expectAnonymous(page);
 
     await loginViaUi(page, email, "Password123");
     await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByText(/Sesión activa/i)).toBeVisible();
+    await expectLoggedIn(page);
   });
 
   test("registro → logout → login inválida → error 'Credenciales incorrectas.'", async ({
@@ -69,7 +83,7 @@ test.describe("flujos E2E — auth (T-11)", () => {
     const email = `e2e-${uniq("e2e")}@ficticio.test`;
     await registerViaUi(page, email, "Password123");
     await page.getByRole("button", { name: /Cerrar sesión/i }).click();
-    await expect(page.getByText(/No has iniciado sesión/i)).toBeVisible();
+    await expectAnonymous(page);
 
     await loginViaUi(page, email, "WrongPassword123");
     await expect(page.getByText("Credenciales incorrectas.")).toBeVisible();
@@ -78,10 +92,10 @@ test.describe("flujos E2E — auth (T-11)", () => {
   test("registro → logout → sesión anónima en home", async ({ page }) => {
     const email = `e2e-${uniq("e2e")}@ficticio.test`;
     await registerViaUi(page, email, "Password123");
-    await expect(page.getByText(/Sesión activa/i)).toBeVisible();
+    await expectLoggedIn(page);
 
     await page.getByRole("button", { name: /Cerrar sesión/i }).click();
-    await expect(page.getByText(/No has iniciado sesión/i)).toBeVisible();
+    await expectAnonymous(page);
   });
 
   test("registro con email duplicado → error 'El email ya está registrado.'", async ({
@@ -89,11 +103,11 @@ test.describe("flujos E2E — auth (T-11)", () => {
   }) => {
     const email = `e2e-${uniq("e2e")}@ficticio.test`;
     await registerViaUi(page, email, "Password123");
-    await expect(page.getByText(/Sesión activa/i)).toBeVisible();
+    await expectLoggedIn(page);
 
     // Logout antes de repetir el registro (el duplicado se detecta por email).
     await page.getByRole("button", { name: /Cerrar sesión/i }).click();
-    await expect(page.getByText(/No has iniciado sesión/i)).toBeVisible();
+    await expectAnonymous(page);
 
     await registerViaUi(page, email, "Password123");
     await expect(page.getByText("El email ya está registrado.")).toBeVisible();

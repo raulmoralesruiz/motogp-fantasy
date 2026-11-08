@@ -398,14 +398,6 @@ h5 {
   border-bottom: none;
 }
 
-/* Navegación de secciones (home, F3 P2): target táctil ≥ 44 px (T-16).
-   Solo afecta a la nav de secciones de la home, no a los 22 usos de `.status`. */
-.sections-nav a {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-}
-
 /* Panel admin: navegación ancla entre secciones (sticky). */
 .anchor-nav {
   position: sticky;
@@ -828,4 +820,203 @@ h5 {
    para no quedar ocultos bajo la barra al saltar. */
 section[id] {
   scroll-margin-top: 5rem;
+}
+
+/* ── Cabecera global (T-26) ─────────────────────────────────────────────
+   Barra persistente en todas las páginas: brand + secciones + sesión.
+   No sticky (deliberado: el .anchor-nav sticky de /admin ya ocupa el
+   top; «persistente» = presente en todas las páginas, no pegada). */
+.site-header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Sin flex-wrap (anti-CLS, T-26): la zona de sesión se monta de forma
+   asíncrona (auth.me); si la barra envolviera, su aparición podría
+   cambiar la altura de la barra. La nav absorbe la presión (min-width 0)
+   y sus links envuelven DENTRO de la nav — la altura es estable. */
+.site-header-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem 1rem;
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: 0.5rem 1.25rem;
+}
+
+/* Brand → home. La marca es texto (sin logo licenciado); el span lleva el
+   acento, como el h1 de cada página. */
+.site-header-brand {
+  font-weight: 700;
+  font-size: 1.1rem; /* Escala tipográfica cerrada (DESIGN.md): headline. */
+  color: var(--fg);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.site-header-brand span {
+  color: var(--accent);
+}
+
+/* Nav de secciones: links sobrios (no rojos — el rojo es señal/CTA); la
+   sección activa se marca con acento inferior + texto a tope. */
+.site-header-nav {
+  flex: 1 1 auto;
+  min-width: 0; /* Absorbe la presión; nunca empuja la sesión a otra línea. */
+}
+
+.site-header-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.site-header-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px; /* T-16: target táctil ≥ 44 px. */
+  padding: 0.35rem 0.7rem;
+  border-radius: 6px;
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.site-header-links a:hover {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+}
+
+.site-header-links a[aria-current="page"] {
+  color: var(--fg);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+/* Zona de sesión: anónima (CTAs) o logueada (usuario + cerrar).
+   flex: 0 0 auto — mantiene su tamaño intrínseco; la presión recae en la
+   nav (anti-CLS, T-26). */
+.site-header-session {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+}
+
+.site-header-session .button,
+.site-header-session .button-secondary {
+  margin-top: 0;
+  min-height: 44px;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.9rem;
+}
+
+.site-header-user {
+  max-width: 10rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.site-header-logout-error {
+  font-size: 0.85rem;
+}
+
+/* Hamburguesa: solo móvil; target ≥ 44 px (T-16). */
+.site-header-menu-button {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+@media (max-width: 768px) {
+  /* En móvil la barra vuelve a envolver: el menú abierto apila nav +
+     sesión a todo lo ancho (cambio de layout iniciado por el usuario,
+     no asíncrono — sin riesgo de CLS). */
+  .site-header-bar {
+    flex-wrap: wrap;
+  }
+
+  .site-header-menu-button {
+    display: inline-flex;
+    margin-left: auto;
+  }
+
+  /* Cerrado: solo brand + hamburguesa. Abierto: nav + sesión debajo,
+     apiladas a todo lo ancho. */
+  .site-header-nav,
+  .site-header-session {
+    display: none;
+  }
+
+  .site-header-open .site-header-nav,
+  .site-header-open .site-header-session {
+    display: block;
+    width: 100%;
+  }
+
+  .site-header-open .site-header-session {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0.5rem 0 0.75rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .site-header-open .site-header-session .button,
+  .site-header-open .site-header-session .button-secondary {
+    width: 100%;
+  }
+
+  .site-header-links {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  .site-header-links li {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .site-header-links a {
+    min-height: 44px;
+    padding: 0.6rem 0.25rem;
+    border-radius: 0;
+  }
+}
+
+/* ── Skip-link (a11y, WCAG 2.4.1) ─────────────────────────────────────
+   Primer elemento enfocable del documento (layout.tsx): oculto hasta que
+   recibe foco (teclado / lector de pantalla); salta la cabecera global
+   (brand + 6–7 links + sesión) y va directo al contenido. */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 1rem;
+  z-index: 100;
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 0 0 8px 8px;
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  top: 0;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

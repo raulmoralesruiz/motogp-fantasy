@@ -87,7 +87,7 @@ describe("JoinLeaguePage (US-25)", () => {
     expect(
       screen.getByText(/Para unirte a una liga necesitas una cuenta/),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Inicia sesión" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Iniciar sesión" })).toHaveAttribute(
       "href",
       "/login",
     );

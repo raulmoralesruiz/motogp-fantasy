@@ -1,12 +1,11 @@
 "use client";
 
-import { getQueryKey } from "@trpc/react-query";
-import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { Alert, Button } from "@/shared/components";
+import { Alert } from "@/shared/components";
 import { trpc } from "@/trpc/client";
+import { friendlyMessage, isUnauthorized } from "@/trpc/errors";
 
 /** Fecha legible en español (domingo 1 de junio de 2026). */
 function formatDate(date: Date): string {
@@ -31,61 +30,8 @@ function formatCountdown(ms: number): string {
   return `${minutes} min`;
 }
 
-/**
- * Email enmascarado (F3 P3-2): primera letra + dominio, sin el resto de la
- * parte local. Es el email del propio usuario, pero se minimiza la PII visible
- * (AGENTS.md §8, GDPR).
- */
-function maskEmail(email: string): string {
-  const [local, domain] = email.split("@");
-  if (!local || !domain) return email;
-  return `${local.slice(0, 1)}***@${domain}`;
-}
-
-/** Etiquetas legibles de rol (F3 P3-2): `global_admin` → "Administrador global". */
-const ROLE_LABELS: Record<string, string> = {
-  global_admin: "Administrador global",
-  user: "Usuario",
-};
-
-/**
- * F3 P3-1: `auth.me` falla con UNAUTHORIZED cuando no hay sesión (estado
- * normal de una home pública, NO un fallo), pero también puede fallar por un
- * error real (500, red). Solo el UNAUTHORIZED significa "sin sesión"; el resto
- * es un fallo que hay que mostrar, no enmascarar como "no has iniciado sesión".
- */
-function isUnauthorized(error: unknown): boolean {
-  return (error as { data?: { code?: string } } | null)?.data?.code === "UNAUTHORIZED";
-}
-
-/** Códigos de error de tRPC (no son mensajes legibles para el usuario). */
-const TRPC_CODES = new Set([
-  "PARSE_ERROR",
-  "BAD_REQUEST",
-  "UNAUTHORIZED",
-  "UNPROCESSABLE_CONTENT",
-  "NOT_FOUND",
-  "PRECONDITION_FAILED",
-  "METHOD_NOT_SUPPORTED",
-  "PAYLOAD_TOO_LARGE",
-  "UNEXPECTED_ERROR",
-  "INTERNAL_SERVER_ERROR",
-]);
-
-/**
- * Mensaje amigable para errores de red/servicio (F3 P3): los códigos de tRPC
- * ("INTERNAL_SERVER_ERROR", "fetch failed"…) no son legibles para el usuario →
- * frase neutra. Los mensajes de la app (en español) se muestran tal cual.
- */
-function friendlyMessage(error: unknown): string {
-  const raw = error instanceof Error ? error.message : "";
-  const code = (error as { data?: { code?: string } } | null)?.data?.code;
-  if (!raw || TRPC_CODES.has(raw) || (code !== undefined && TRPC_CODES.has(code))) {
-    return "el servidor no pudo responder";
-  }
-  if (raw === "fetch failed") return "no hay conexión con el servidor";
-  return raw;
-}
+// `isUnauthorized`/`friendlyMessage` (F3 P3-1/P3) viven en `@/trpc/errors`
+// (T-26: centralizados; el header global es su 4.º usuario).
 
 /**
  * Cuenta atrás a una fecha objetivo (US-15): la fecha la aporta el servidor
@@ -340,7 +286,6 @@ function AnonymousLanding() {
 }
 
 export default function HomePage() {
-  const queryClient = useQueryClient();
   // F3 P2: sin sesión `auth.me` lanza UNAUTHORIZED (estado normal de una home
   // pública); no tiene sentido reintentarlo (antes: 4×401 por visita anónima).
   const me = trpc.auth.me.useQuery(undefined, {
@@ -360,20 +305,6 @@ export default function HomePage() {
     refetchInterval: 60_000,
     enabled: isAdmin,
   });
-  const [logoutError, setLogoutError] = useState<string | null>(null);
-  const logout = trpc.auth.logout.useMutation({
-    onSuccess: () => {
-      // Al cerrar sesión se limpia el caché cliente de `me` (staleTime de
-      // TanStack) para que la UI no siga mostrando la sesión anterior.
-      queryClient.removeQueries({ queryKey: getQueryKey(trpc.auth.me) });
-      setLogoutError(null);
-    },
-    // F3 P2: si el logout falla (red/500) la sesión sigue viva; se avisa y el
-    // botón queda reintentable (antes: silencio, la sesión persistía sin feedback).
-    // F3 P2: mensaje amigable (no el crudo de tRPC/red), coherente con el resto.
-    onError: (error) => setLogoutError(friendlyMessage(error)),
-  });
-
   return (
     <main>
       {meData ? (
@@ -397,14 +328,16 @@ export default function HomePage() {
             gastaste, sin penalizaciones.
           </p>
           {/* F3 P2: dos CTAs de conversión (crear cuenta / iniciar sesión);
-              el directorio de ligas ya vive en la nav de «Secciones» — no
-              duplicarlo en la primera impresión. */}
+              la navegación a secciones vive en la cabecera global (T-26) —
+              no duplicarla en la primera impresión. */}
           <div className="cta-row">
             <Link className="button" href="/registro">
               Crear cuenta
             </Link>
+            {/* Infinitivo (estándar de etiqueta UI): igual que la cabecera
+                global (T-26) y la página de login — una acción, una forma. */}
             <Link className="button-secondary" href="/login">
-              Inicia sesión
+              Iniciar sesión
             </Link>
           </div>
         </>
@@ -416,114 +349,9 @@ export default function HomePage() {
 
       {loggedIn && <DashboardSection />}
 
-      {/* F3 P1: navegación cross-page siempre visible (antes solo en la rama
-          logueada, bajo el dashboard). Anónimos ven la única sección pública
-          (directorio de ligas); logueados, todas. */}
-      <h2>Secciones</h2>
-      {me.isPending ? (
-        <p className="muted pending">Consultando…</p>
-      ) : loggedIn ? (
-        // F3 P3: landmark de navegación (a11y).
-        <nav aria-label="Secciones" className="sections-nav">
-          <ul className="status">
-            <li>
-              <Link href="/lineups">Lineups</Link>
-            </li>
-            <li>
-              <Link href="/mercado">Mercado</Link>
-            </li>
-            <li>
-              <Link href="/puntuacion">Mi puntuación</Link>
-            </li>
-            <li>
-              <Link href="/resultados">Resultados</Link>
-            </li>
-            <li>
-              <Link href="/ligas">Ligas</Link>
-            </li>
-            <li>
-              <Link href="/perfil">Perfil</Link>
-            </li>
-          </ul>
-        </nav>
-      ) : (
-        <div>
-          <nav aria-label="Secciones" className="sections-nav">
-            <ul className="status">
-              <li>
-                <Link href="/ligas">Ligas públicas</Link> — directorio abierto
-              </li>
-            </ul>
-          </nav>
-          <p className="muted">
-            El resto de secciones (lineups, mercado, puntuación…) requieren una cuenta.
-          </p>
-        </div>
-      )}
-
-      {/* F3 P2: la sección «Sesión» solo se muestra si hay algo que decir:
-          sesión activa o fallo real. El anónimo no la necesita — la
-          conversión vive en la CTA row (no duplicar). */}
-      {!anonymous && (
-        <>
-          <h2>Sesión</h2>
-          {me.isPending ? (
-            <p className="muted pending">Consultando…</p>
-          ) : me.isError ? (
-            // F3 P3-1: fallo real (500, red) → no se enmascara como "sin sesión".
-            // (Aquí no puede ser UNAUTHORIZED: ese caso es `anonymous`, oculto.)
-            // F3 P2: «reintentar» re-ejecuta la consulta, no navega a /login.
-            <Alert variant="error">
-              No se pudo verificar la sesión: {friendlyMessage(me.error)}.{" "}
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() =>
-                  queryClient.invalidateQueries({
-                    queryKey: getQueryKey(trpc.auth.me),
-                  })
-                }
-              >
-                Reintentar
-              </Button>
-            </Alert>
-          ) : (
-            <div>
-              <p>
-                Sesión activa: <strong>{me.data.username}</strong> (
-                {maskEmail(me.data.email)})
-                {me.data.roles.filter((r) => r !== "user").length > 0 && (
-                  <span className="muted">
-                    {" "}
-                    — roles:{" "}
-                    {me.data.roles
-                      .filter((r) => r !== "user")
-                      .map((r) => ROLE_LABELS[r] ?? r)
-                      .join(", ")}
-                  </span>
-                )}
-              </p>
-              {me.data.roles.includes("global_admin") && (
-                <p>
-                  <Link href="/admin">Panel de administración</Link>
-                </p>
-              )}
-              {logoutError && (
-                <Alert variant="error">No se pudo cerrar sesión: {logoutError}</Alert>
-              )}
-              {/* F3 P3: acción neutra — un solo relleno primario por región. */}
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => logout.mutate()}
-                disabled={logout.isPending}
-              >
-                {logout.isPending ? "Cerrando sesión…" : "Cerrar sesión"}
-              </Button>
-            </div>
-          )}
-        </>
-      )}
+      {/* T-26: la navegación cross-page («Secciones») y la sesión
+          (username, logout, reintentar) viven en la cabecera global —
+          una sola vez, en todas las páginas. */}
 
       {/* F3 P2: el estado operativo (BD/Redis/versión) es información de
           administración — solo lo ve un global_admin (antes: todo logueado). */}

@@ -248,7 +248,7 @@ export default function LigasPage() {
     return (
       <Alert variant="info">
         Para ver tus ligas o crear una necesitas una cuenta.{" "}
-        <Link href="/login">Inicia sesión</Link> o{" "}
+        <Link href="/login">Iniciar sesión</Link> o{" "}
         <Link href="/registro">crea una cuenta</Link>.
       </Alert>
     );

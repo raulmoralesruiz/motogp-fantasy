@@ -18,7 +18,9 @@ export default function RegisterPage() {
             no un «ligas de fantasy» genérico. */}
         Monta tu lineup de 2 oro + 2 plata + 1 constructor + 1 equipo y
         compite cada GP en tus ligas. ¿Ya tienes cuenta?{" "}
-        <a href="/login">Inicia sesión</a>
+        {/* Infinitivo (estándar de etiqueta UI): igual que la cabecera
+            global (T-26) y la página de login — una acción, una forma. */}
+        <a href="/login">Iniciar sesión</a>
       </p>
       <RegisterForm />
     </main>

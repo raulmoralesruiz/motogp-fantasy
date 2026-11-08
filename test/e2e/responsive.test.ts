@@ -316,6 +316,102 @@ test.describe("mercado — T-16", () => {
   });
 });
 
+// ─────────────────────────── cabecera global (T-26) ───────────────────────────
+
+/**
+ * Verifica que los controles interactivos visibles de la cabecera global
+ * (T-26) tienen touch target ≥ 44px en móvil. Se abre el menú hamburguesa
+ * antes de medir para que nav + sesión estén visibles (cerrados, quedan
+ * `display:none` y no cuentan).
+ */
+async function assertHeaderTouchTargets(page: Page): Promise<void> {
+  const burger = page.getByRole("button", { name: /Abrir menú/i });
+  if (await burger.isVisible()) {
+    await burger.click();
+  }
+  const violations = await page.evaluate(() => {
+    const header = document.querySelector("header");
+    if (!header) return ["<header> no encontrado"];
+    const interactive = header.querySelectorAll("button, a");
+    const bad: Array<{
+      tag: string;
+      class: string;
+      width: number;
+      height: number;
+    }> = [];
+    interactive.forEach((el) => {
+      const rect = el.getBoundingClientRect();
+      // Solo elementos renderizados (los `display:none` devuelven 0×0).
+      if (rect.width === 0 && rect.height === 0) return;
+      if (rect.width < 44 || rect.height < 44) {
+        bad.push({
+          tag: el.tagName,
+          class: el.className,
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        });
+      }
+    });
+    return bad;
+  });
+  expect(violations).toEqual([]);
+}
+
+test.describe("cabecera global — T-26 (móvil)", () => {
+  test("cabecera no se desborda en 375px", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.goto("/");
+    await assertNoHorizontalOverflow(page);
+  });
+
+  test("cabecera no se desborda en 390px", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    await assertNoHorizontalOverflow(page);
+  });
+
+  test("cabecera no se desborda en 430px", async ({ page }) => {
+    await page.setViewportSize({ width: 430, height: 932 });
+    await page.goto("/");
+    await assertNoHorizontalOverflow(page);
+  });
+
+  test("hamburguesa abre el menú de secciones en 375px", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.goto("/");
+    const burger = page.getByRole("button", { name: /Abrir menú/i });
+    await expect(burger).toBeVisible();
+    await burger.click();
+    await expect(page.getByRole("button", { name: /Cerrar menú/i })).toBeVisible();
+    // La nav de secciones queda accesible al abrir el menú.
+    await expect(page.getByRole("navigation", { name: /Secciones/i })).toBeVisible();
+  });
+
+  test("controles de la cabecera son touch targets ≥ 44px en 375px", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.goto("/");
+    await assertHeaderTouchTargets(page);
+  });
+
+  test("controles de la cabecera son touch targets ≥ 44px en 390px", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    await assertHeaderTouchTargets(page);
+  });
+
+  test("controles de la cabecera son touch targets ≥ 44px en 430px", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 430, height: 932 });
+    await page.goto("/");
+    await assertHeaderTouchTargets(page);
+  });
+});
+
 // ─────────────────────────── login / registro ───────────────────────────
 
 test.describe("auth — T-16", () => {

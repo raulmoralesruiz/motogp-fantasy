@@ -81,7 +81,7 @@ describe("PerfilPage", () => {
       error: clientError("UNAUTHORIZED", { code: "UNAUTHORIZED" }),
     });
     renderPerfil(<PerfilPage />);
-    expect(screen.getByText("Inicia sesión")).toBeInTheDocument();
+    expect(screen.getByText("Iniciar sesión")).toBeInTheDocument();
   });
 
   it("fallo real (500/red): muestra el error y ofrece reintentar, no el login", async () => {
@@ -99,7 +99,7 @@ describe("PerfilPage", () => {
     });
     renderPerfil(<PerfilPage />);
 
-    expect(screen.queryByText("Inicia sesión")).toBeNull();
+    expect(screen.queryByText("Iniciar sesión")).toBeNull();
     expect(
       screen.getByText(/No se pudieron cargar tus datos/),
     ).toBeInTheDocument();

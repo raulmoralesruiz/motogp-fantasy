@@ -1,5 +1,6 @@
 export { Alert } from "./alert";
 export { Button } from "./button";
+export { Header } from "./header";
 export { ConfirmDialog, type ConfirmRequest } from "./confirm-dialog";
 export { Field } from "./field";
 export { RowAction } from "./row-action";

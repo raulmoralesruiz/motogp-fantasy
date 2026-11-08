@@ -30,7 +30,7 @@ describe("RegisterPage", () => {
   it("muestra el formulario y el enlace a login", () => {
     render(<RegisterPage />);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/Crea tu/);
-    expect(screen.getByRole("link", { name: "Inicia sesión" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Iniciar sesión" })).toHaveAttribute(
       "href",
       "/login",
     );

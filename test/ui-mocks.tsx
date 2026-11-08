@@ -20,7 +20,7 @@
  * `refresh` tras interacciones y se fija `navigation.searchParams` para
  * probar rutas con query string (p. ej. `/reestablecer-contrasena?token=…`).
  */
-import type { ReactNode } from "react";
+import type { AnchorHTMLAttributes } from "react";
 import { useSyncExternalStore } from "react";
 import { vi } from "vitest";
 
@@ -45,6 +45,26 @@ function publishSearchParams(params: URLSearchParams): void {
   searchParamsListeners.forEach((listener) => listener());
 }
 
+/**
+ * Store reactivo del pathname (T-26): imita la reactividad de `usePathname`
+ * del router real — una «navegación» (p. ej. fijar `navigation.pathname`)
+ * repinta el componente en vez de exigir un render nuevo.
+ */
+let pathnameValue = "/";
+const pathnameListeners = new Set<() => void>();
+
+function subscribeToPathname(listener: () => void): () => void {
+  pathnameListeners.add(listener);
+  return () => {
+    pathnameListeners.delete(listener);
+  };
+}
+
+function publishPathname(value: string): void {
+  pathnameValue = value;
+  pathnameListeners.forEach((listener) => listener());
+}
+
 /** Estado de navegación controlable (router + query string + params). */
 export const navigation = {
   push: vi.fn(),
@@ -59,6 +79,13 @@ export const navigation = {
   },
   /** Params de ruta (US-24: `/ligas/[id]`); se fija por test. */
   params: {} as Record<string, string>,
+  /** Pathname actual (T-26: el header resalta la sección activa); se fija por test. */
+  get pathname() {
+    return pathnameValue;
+  },
+  set pathname(value: string) {
+    publishPathname(value);
+  },
 };
 
 /** Restaura el estado de navegación (llamar en `beforeEach`). */
@@ -69,6 +96,7 @@ export function resetNavigationMocks(): void {
   navigation.back.mockReset();
   navigation.searchParams = new URLSearchParams();
   navigation.params = {};
+  navigation.pathname = "/";
 }
 
 /** Mock de `next/navigation`: `useRouter`/`useSearchParams`/`useParams` con estado controlable. */
@@ -76,13 +104,18 @@ export const navigationMock = {
   useRouter: () => navigation,
   useSearchParams: () =>
     useSyncExternalStore(subscribeToSearchParams, () => searchParamsValue),
-  usePathname: () => "/",
+  usePathname: () =>
+    useSyncExternalStore(subscribeToPathname, () => pathnameValue),
   useParams: () => navigation.params,
 };
 
-/** Mock de `next/link`: renderiza un ancla plana (sin contexto del app router). */
+/**
+ * Mock de `next/link`: renderiza un ancla plana (sin contexto del app
+ * router). Propaga el resto de props (`aria-current`, `className`, …) para
+ * que los tests puedan asertar sobre ellas (T-26: sección activa).
+ */
 export const linkMock = {
-  default: ({ href, children }: { href: string; children: ReactNode }) => (
-    <a href={href}>{children}</a>
+  default: ({ children, ...rest }: AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a {...rest}>{children}</a>
   ),
 };

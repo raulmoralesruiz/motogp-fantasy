@@ -16,6 +16,7 @@ import {
   type ConfirmRequest,
 } from "@/shared/components";
 import { trpc } from "@/trpc/client";
+import { isUnauthorized } from "@/trpc/errors";
 
 /**
  * Detalle de una liga (US-24, leagues.md §8/§9; US-25, leagues.md §6;
@@ -90,14 +91,6 @@ function formatDate(value: Date): string {
   });
 }
 
-/**
- * F3 P3: `auth.me` falla con UNAUTHORIZED cuando no hay sesión, pero también
- * puede fallar por un error real (500, red). Solo el UNAUTHORIZED significa
- * "sin cuenta"; el resto es un fallo que no debe leerse como "inicia sesión".
- */
-function isUnauthorized(error: unknown): boolean {
-  return (error as { data?: { code?: string } } | null)?.data?.code === "UNAUTHORIZED";
-}
 
 export default function LeagueDetailPage() {
   const params = useParams<{ id: string }>();
@@ -512,7 +505,7 @@ export default function LeagueDetailPage() {
           ) : me.isError && isUnauthorized(me.error) ? (
             <Alert variant="info">
               Para unirte a la liga necesitas una cuenta.{" "}
-              <Link href="/login">Inicia sesión</Link> o{" "}
+              <Link href="/login">Iniciar sesión</Link> o{" "}
               <Link href="/registro">crea una cuenta</Link>.
             </Alert>
           ) : me.isError ? (

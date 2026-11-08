@@ -439,7 +439,7 @@ describe("LeagueDetailPage (US-24)", () => {
       expect(
         screen.getByText(/Para unirte a la liga necesitas una cuenta/),
       ).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "Inicia sesión" })).toHaveAttribute(
+      expect(screen.getByRole("link", { name: "Iniciar sesión" })).toHaveAttribute(
         "href",
         "/login",
       );

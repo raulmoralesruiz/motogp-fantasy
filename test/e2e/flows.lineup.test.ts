@@ -58,7 +58,8 @@ test.describe("flujo E2E — registro → lineup (T-11)", () => {
     const email = `e2e-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}@ficticio.test`;
     const username = `e2e_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
-    // 1) Registro por UI → redirige al home con sesión activa.
+    // 1) Registro por UI → redirige al home con sesión activa
+    // (T-26: la sesión vive en la cabecera global — «Cerrar sesión» visible).
     await page.goto("/registro");
     await page.getByLabel("Email").fill(email);
     await page.getByLabel("Nombre de usuario").fill(username);
@@ -66,7 +67,7 @@ test.describe("flujo E2E — registro → lineup (T-11)", () => {
     await page.locator("#termsAccepted").check();
     await page.getByRole("button", { name: /Crear cuenta/i }).click();
     await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByText(/Sesión activa/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /Cerrar sesión/i })).toBeVisible();
 
     // 2) Builder de lineup: temporada → GP.
     await page.goto("/lineups");

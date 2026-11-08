@@ -1,3 +1,5 @@
+"use client";
+
 import { type ButtonHTMLAttributes, type Ref, useId } from "react";
 
 /** Motivo de bloqueo escrito junto a un control deshabilitado. */

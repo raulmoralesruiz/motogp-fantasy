@@ -1,20 +1,22 @@
 // @vitest-environment jsdom
 /**
  * Tests de la home (`app/page.tsx`):
- * - T-24, fase C: estado del sistema (health) y sesión (me/logout).
+ * - T-24, fase C: estado del sistema (health).
  * - US-15: dashboard (próximo GP con cuenta atrás a lockout, presupuesto,
  *   coste del lineup, posición en cada liga y avisos).
+ * - T-26: la nav «Secciones» y la sesión (me/logout) viven en la cabecera
+ *   global (`Header`) — sus tests están en
+ *   `app/shared/components/__tests__/header.test.tsx`.
  *
  * Todo sobre el `trpc` mockeado.
  */
-import { getQueryKey } from "@trpc/react-query";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { asMockFn, mockResult, resetTrpcMocks, trpc } from "../../test/trpc-mock";
+import { mockResult, resetTrpcMocks, trpc } from "../../test/trpc-mock";
 import { resetNavigationMocks } from "../../test/ui-mocks";
-import { act, render, screen, userEvent, within } from "../../test/rtl";
+import { render, screen, within } from "../../test/rtl";
 
 import HomePage from "../page";
 
@@ -24,20 +26,11 @@ vi.mock("next/navigation", () =>
 );
 vi.mock("next/link", () => import("../../test/ui-mocks").then((m) => m.linkMock));
 
-let lastQueryClient: QueryClient | null = null;
-
 function renderHome(ui: ReactElement) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  lastQueryClient = queryClient;
   return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
-}
-
-/** QueryClient de la última `renderHome` (para espiar `invalidateQueries`). */
-function lastClient(): QueryClient {
-  if (!lastQueryClient) throw new Error("renderHome no se ha llamado");
-  return lastQueryClient;
 }
 
 const healthOk = {
@@ -73,12 +66,18 @@ describe("HomePage", () => {
     resetNavigationMocks();
   });
 
-  it("muestra las secciones y la sesión pendientes", () => {
+  it("T-26: la home ya no lleva nav ni sección de sesión (viven en la cabecera global)", () => {
     renderHome(<HomePage />);
-    // F3 P1: con `me` pendiente no se sabe si hay sesión → «Estado del
-    // sistema» (solo logueado) aún no se muestra: 2 secciones pendientes
-    // (Secciones + Sesión).
-    expect(screen.getAllByText("Consultando…")).toHaveLength(2);
+    // La nav «Secciones» y la zona de sesión (username, logout) se movieron
+    // a `Header` (una sola vez, en todas las páginas) — la home no las
+    // duplica.
+    expect(
+      screen.queryByRole("navigation", { name: "Secciones" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Sesión")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Cerrar sesión" }),
+    ).not.toBeInTheDocument();
   });
 
   it("pinta la CTA de conversión en el primer paint, sin esperar a la sesión (F3 P1)", () => {
@@ -89,7 +88,7 @@ describe("HomePage", () => {
       "href",
       "/registro",
     );
-    expect(screen.getByRole("link", { name: "Inicia sesión" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Iniciar sesión" })).toHaveAttribute(
       "href",
       "/login",
     );
@@ -192,7 +191,7 @@ describe("HomePage", () => {
       "href",
       "/registro",
     );
-    expect(screen.getByRole("link", { name: "Inicia sesión" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Iniciar sesión" })).toHaveAttribute(
       "href",
       "/login",
     );
@@ -201,7 +200,7 @@ describe("HomePage", () => {
     expect(screen.queryByText("Sesión")).not.toBeInTheDocument();
   });
 
-  it("anónimo: CTA de arranque «Crear cuenta» + «Inicia sesión» (F3 P1)", () => {
+  it("anónimo: CTA de arranque «Crear cuenta» + «Iniciar sesión» (F3 P1)", () => {
     mockResult(trpc.health.check.useQuery, {
       data: healthOk,
       isPending: false,
@@ -220,7 +219,7 @@ describe("HomePage", () => {
       "href",
       "/registro",
     );
-    expect(screen.getByRole("link", { name: "Inicia sesión" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Iniciar sesión" })).toHaveAttribute(
       "href",
       "/login",
     );
@@ -230,7 +229,7 @@ describe("HomePage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("anónimo: enlace a la única sección pública, /ligas (F3 P1)", () => {
+  it("anónimo: la home no ofrece enlaces a secciones (viven en la cabecera, T-26)", () => {
     mockResult(trpc.health.check.useQuery, {
       data: healthOk,
       isPending: false,
@@ -243,14 +242,11 @@ describe("HomePage", () => {
       error: unauthorizedError,
     });
     renderHome(<HomePage />);
-    // F3 P1: la home anónima ya no es un callejón sin salida.
-    expect(screen.getByRole("link", { name: "Ligas públicas" })).toHaveAttribute(
-      "href",
-      "/ligas",
-    );
-    expect(screen.getByText(/requieren una cuenta/)).toBeInTheDocument();
-    // Las secciones privadas no se ofrecen al anónimo.
+    // T-26: el acceso a las secciones (públicas y privadas) vive en la
+    // cabecera global — la home no duplica enlaces de sección.
+    expect(screen.queryByRole("link", { name: "Ligas públicas" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Lineups" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/requieren una cuenta/)).not.toBeInTheDocument();
   });
 
   it("anónimo: vende el producto (valor + cómo funciona), no su estado (F3 P1)", () => {
@@ -282,190 +278,6 @@ describe("HomePage", () => {
     expect(screen.queryByText("Tu temporada")).not.toBeInTheDocument();
   });
 
-  it("logueado: secciones con las 6 páginas (F3 P1)", () => {
-    mockResult(trpc.health.check.useQuery, {
-      data: healthOk,
-      isPending: false,
-      isError: false,
-    });
-    mockResult(trpc.auth.me.useQuery, {
-      data: { username: "piloto1", email: "piloto@liga.com", roles: [] },
-      isPending: false,
-      isError: false,
-    });
-    renderHome(<HomePage />);
-    // F3 P1: la navegación cross-page es una sección propia, no un residuo
-    // de la rama «Sesión».
-    for (const [name, href] of [
-      ["Lineups", "/lineups"],
-      ["Mercado", "/mercado"],
-      ["Mi puntuación", "/puntuacion"],
-      ["Resultados", "/resultados"],
-      ["Ligas", "/ligas"],
-      ["Perfil", "/perfil"],
-    ] as const) {
-      expect(screen.getByRole("link", { name })).toHaveAttribute("href", href);
-    }
-    // F3 P3: landmark de navegación (a11y).
-    expect(screen.getByRole("navigation", { name: "Secciones" })).toBeInTheDocument();
-  });
-
-  it("no lista el rol genérico «user» (F3 P3)", () => {
-    mockResult(trpc.health.check.useQuery, {
-      data: healthOk,
-      isPending: false,
-      isError: false,
-    });
-    mockResult(trpc.auth.me.useQuery, {
-      data: {
-        username: "piloto1",
-        email: "piloto@liga.com",
-        roles: ["user"],
-      },
-      isPending: false,
-      isError: false,
-    });
-    renderHome(<HomePage />);
-    // F3 P3: «user» no aporta información → no se lista.
-    expect(screen.queryByText(/roles:/)).not.toBeInTheDocument();
-  });
-
-  it("distingue un fallo real de la sesión del estado «sin sesión» (F3 P3-1)", async () => {
-    mockResult(trpc.health.check.useQuery, {
-      data: healthOk,
-      isPending: false,
-      isError: false,
-    });
-    // Fallo real (500/red): NO es UNAUTHORIZED → no se enmascara como "sin sesión".
-    mockResult(trpc.auth.me.useQuery, {
-      data: undefined,
-      isPending: false,
-      isError: true,
-      error: new Error("timeout de red"),
-    });
-    renderHome(<HomePage />);
-    expect(
-      screen.getByText(/No se pudo verificar la sesión: timeout de red/),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/No has iniciado sesión/)).not.toBeInTheDocument();
-    // F3 P2: «Reintentar» re-ejecuta la consulta de `auth.me` (no navega a /login).
-    const invalidate = vi.spyOn(lastClient(), "invalidateQueries");
-    const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Reintentar" }));
-    expect(invalidate).toHaveBeenCalledWith({
-      queryKey: getQueryKey(trpc.auth.me),
-    });
-  });
-
-  it("muestra la sesión activa de un usuario sin roles", () => {
-    mockResult(trpc.health.check.useQuery, {
-      data: healthOk,
-      isPending: false,
-      isError: false,
-    });
-    mockResult(trpc.auth.me.useQuery, {
-      data: { username: "piloto1", email: "piloto@liga.com", roles: [] },
-      isPending: false,
-      isError: false,
-    });
-    renderHome(<HomePage />);
-    // F3 P3-2: el email se enmascara (primera letra + dominio).
-    expect(screen.getByText(/p\*\*\*@liga\.com/)).toBeInTheDocument();
-    expect(screen.queryByText("piloto@liga.com")).not.toBeInTheDocument();
-    expect(screen.getByText("piloto1")).toBeInTheDocument();
-    expect(screen.queryByText(/roles:/)).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: "Panel de administración" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("muestra roles y el enlace al panel para global_admin", () => {
-    mockResult(trpc.health.check.useQuery, {
-      data: healthOk,
-      isPending: false,
-      isError: false,
-    });
-    mockResult(trpc.auth.me.useQuery, {
-      data: { username: "admin1", email: "admin@liga.com", roles: ["global_admin"] },
-      isPending: false,
-      isError: false,
-    });
-    renderHome(<HomePage />);
-    // F3 P3-2: el rol se muestra con etiqueta legible, no el slug crudo.
-    expect(screen.getByText(/roles: Administrador global/)).toBeInTheDocument();
-    expect(screen.queryByText("global_admin")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Panel de administración" })).toHaveAttribute(
-      "href",
-      "/admin",
-    );
-  });
-
-  it("cierra la sesión al confirmarse", async () => {
-    const mutate = vi.fn();
-    mockResult(trpc.health.check.useQuery, {
-      data: healthOk,
-      isPending: false,
-      isError: false,
-    });
-    mockResult(trpc.auth.me.useQuery, {
-      data: { username: "piloto1", email: "piloto@liga.com", roles: [] },
-      isPending: false,
-      isError: false,
-    });
-    mockResult(trpc.auth.logout.useMutation, {
-      mutate,
-      isPending: false,
-      isError: false,
-    });
-    renderHome(<HomePage />);
-
-    const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Cerrar sesión" }));
-    expect(mutate).toHaveBeenCalledTimes(1);
-
-    const options = asMockFn(trpc.auth.logout.useMutation).mock.calls[0]?.[0] as {
-      onSuccess?: () => void;
-    };
-    // `onSuccess` limpia el caché de `me` (TanStack) sin lanzar.
-    await act(async () => {
-      expect(() => options.onSuccess?.()).not.toThrow();
-    });
-  });
-
-  it("avisa si el logout falla (F3 P2)", async () => {
-    const mutate = vi.fn();
-    mockResult(trpc.health.check.useQuery, {
-      data: healthOk,
-      isPending: false,
-      isError: false,
-    });
-    mockResult(trpc.auth.me.useQuery, {
-      data: { username: "piloto1", email: "piloto@liga.com", roles: [] },
-      isPending: false,
-      isError: false,
-    });
-    mockResult(trpc.auth.logout.useMutation, {
-      mutate,
-      isPending: false,
-      isError: false,
-    });
-    renderHome(<HomePage />);
-
-    const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Cerrar sesión" }));
-    expect(mutate).toHaveBeenCalledTimes(1);
-
-    const options = asMockFn(trpc.auth.logout.useMutation).mock.calls[0]?.[0] as {
-      onError?: (error: Error) => void;
-    };
-    await act(async () => {
-      options.onError?.(new Error("fallo de red"));
-    });
-    // F3 P2: la sesión sigue viva → se avisa en lugar de callar.
-    expect(
-      screen.getByText("No se pudo cerrar sesión: fallo de red"),
-    ).toBeInTheDocument();
-  });
 });
 
 // ── Dashboard (US-15) ────────────────────────────────────────────────────────
