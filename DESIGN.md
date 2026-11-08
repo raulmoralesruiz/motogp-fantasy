@@ -158,7 +158,7 @@ Paleta de un solo acento: una voz roja de escasez deliberada sobre una familia d
 - **Verde de bandera** (#3fb950): confirmaciones de éxito y deltas positivos (tendencia «Sube», ▲). Nunca decorativo.
 - **Rojo de bandera** (#f85149): errores, deltas negativos (▼) y estados cerrados (lockout). Más claro y menos saturado que el rojo de salida para que «estado» nunca se confunda con «acción».
 - **Ámbar de aviso** (#d29922): alertas de advertencia (lockout próximo, condiciones que exigen atención).
-- **Azul informativo** (#58a6ff): alertas informativas (puntuación provisional, resultados actualizados).
+- **Azul informativo** (#58a6ff): alertas informativas (puntuación provisional, estado provisional del GP, resultados actualizados).
 
 ### Neutral
 - **Azul noche de boxes** (#0b0f14): lienzo de la aplicación; el fondo de todas las páginas.
@@ -249,11 +249,14 @@ El sistema es plano y quieto en reposo; el movimiento existe solo para **confirm
 |---|---|---|
 | `--motion-fast` | `120ms` | Feedback inmediato de control (hover de botones, enlaces, inputs, pestañas de fila). |
 | `--motion-base` | `200ms` | Cambio de estado de rutina (pestaña del mercado que cambia de activo a inactivo). |
+| `--motion-focal` | `400ms` | El único beat de la app: la llegada del estado definitivo del GP en `/resultados` (animate A2). |
 | `--ease-out` | `cubic-bezier(0.16, 1, 0.3, 1)` | Easing de referencia: rápido al inicio, asentamiento suave. |
 
 **Material permitido:** solo `background-color`, `border-color` y `color` — el compositor los interpolan sin mover layout. **Nunca** `width`/`height`/`top`/`left`/`margin`/`transform` en una transición de control: el sistema no anima geometría.
 
 **Cobertura (animate A1):** botones primario/secundario, CTA de tarjeta, acciones fantasma de fila, enlaces de cabecera y de navegación ancla, inputs/selects (fast); pestañas del mercado (base). Todo el feedback de hover/focus de los controles de la app pasa por estos dos tiempos.
+
+**Momento focal (animate A2):** el único beat de la app — el estado definitivo del GP en `/resultados` «llega»: un asentar de `--motion-focal` (400 ms, `--ease-out`) que asienta el chip de `.gp-state--definitive` de un tinte fuerte (borde 90% / fondo 22%) al tinte de reposo 40/10. Solo `border-color`/`background-color` (sin geometría). Corre una vez por nodo: al primer render del estado definitivo (la llegada del estado al usuario) y de nuevo si el GP pasa de provisional a definitivo con la página abierta; no se repite al cambiar de GP (mismo nodo, clase estable) y no es bucle: confirma la llegada del estado, no lo decora. El chip provisional queda quieto (en curso) y en **azul informativo** — semántica documentada para «puntuación provisional»; el ámbar es aviso/excepcional (p. ej. GP cancelado).
 
 ### Named Rules
 **La Regla del Movimiento con Propósito.** Toda transición confirma una acción o hace legible un cambio de estado; si no cumple una de las dos, no existe. El movimiento es señal, no adorno.
@@ -312,6 +315,8 @@ El título de cada página marca una palabra en rojo de salida, y el estado se n
 **F3 cerrada (2026-11-07):** las 10 páginas restantes llevan el sistema — `/mercado`, `/lineups`, `/resultados`, `/puntuacion`, `/ligas`, `/ligas/[id]`, `/`, `/perfil`, auth y `/unirse`; 10/10 con 0 P0/P1 y detector limpio. Barrido P2/P3 de cierre (S1 `/lineups`, S2 `/resultados`, S3 cross) cerrado el 2026-11-08: detector global `[]` sobre las 12 superficies.
 
 **animate A1 cerrada (2026-11-08):** fundación de motion + feedback de control — tokens `--motion-fast`/`--motion-base`/`--ease-out`, transiciones (solo color/borde/fondo) en todos los controles, guard de reduced-motion completo y sección «Motion» en esta página. Ver sección «Motion».
+
+**animate A2 cerrada (2026-11-08):** el momento focal — el estado del GP en `/resultados` se hace legible de un vistazo (chip `.gp-state`: definitivo en ok, provisional en azul informativo, Tinte 10/40, radio 6 px, Subhead 0.9 rem) y el definitivo confirma su llegada con un solo beat de `--motion-focal` (400 ms, solo borde/fondo, sin geometría) dentro del guard de reduced-motion. Ver sección «Motion».
 
 ## Do's and Don'ts
 
