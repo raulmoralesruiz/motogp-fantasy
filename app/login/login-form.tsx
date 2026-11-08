@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import { Alert, Button, Field } from "@/shared/components";
@@ -33,8 +33,24 @@ function maskEmail(email: string): string {
  * - P2: salida «¿Perdiste el dispositivo?» — sin callejón silencioso.
  * - P3: email enmascarado: se ve para qué cuenta es el código.
  */
+/**
+ * Destino tras el login: `?next=<ruta>` si es una ruta relativa válida
+ * (F4 P3: `/unirse` conserva la puerta de entrada tras el login — el
+ * usuario invitado no vuelve a la home a re-encontrarla), si no, la home.
+ * Solo se acepta `next` que empiece por `/` simple: ni URLs absolutas ni
+ * protocol-relative (`//…`) — sin `next`, el cliente no puede salir del
+ * sitio.
+ */
+function redirectTarget(searchParams: URLSearchParams): string {
+  const next = searchParams.get("next");
+  return next !== null && next.startsWith("/") && !next.startsWith("//")
+    ? next
+    : "/";
+}
+
 export default function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   // Reto TOTP del paso 2 (null = paso 1).
   const [challenge, setChallenge] = useState<string | null>(null);
   // Email del paso 1: para indicar de qué cuenta es el código (F3 P3).
@@ -66,13 +82,13 @@ export default function LoginForm() {
       if (data?.totpRequired && data.totpToken) {
         setChallenge(data.totpToken);
       } else {
-        router.push("/");
+        router.push(redirectTarget(searchParams));
       }
     },
   });
 
   const verifyTotp = trpc.auth.verifyTotp.useMutation({
-    onSuccess: () => router.push("/"),
+    onSuccess: () => router.push(redirectTarget(searchParams)),
   });
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {

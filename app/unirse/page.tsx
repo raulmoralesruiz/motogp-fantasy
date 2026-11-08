@@ -10,7 +10,7 @@ export default function JoinLeagueRoute() {
   return (
     <main>
       <h1>
-        <span>Unirse a una liga</span>
+        Unirse a una <span>liga</span>
       </h1>
       <JoinLeaguePage />
     </main>

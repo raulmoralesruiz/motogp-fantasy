@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 /**
  * Tests de `app/login/login-form.tsx` (T-24, fase C): envío de credenciales,
- * redirección, errores de validación Zod por campo y errores generales.
+ * redirección (incl. `?next=` relativo, F4 P3), errores de validación Zod
+ * por campo y errores generales.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -51,6 +52,48 @@ describe("LoginForm", () => {
   });
 
   it("redirige al inicio tras el login correcto", async () => {
+    const mutate = vi.fn();
+    mockResult(trpc.auth.login.useMutation, {
+      mutate,
+      isPending: false,
+      isError: false,
+    });
+    render(<LoginForm />);
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Email"), "piloto@liga.com");
+    await user.type(screen.getByLabelText("Contraseña"), "clave-secreta-1");
+    await user.click(screen.getByRole("button", { name: "Iniciar sesión" }));
+
+    await act(async () => {
+      loginOptions().onSuccess?.();
+    });
+    expect(navigation.push).toHaveBeenCalledWith("/");
+  });
+
+  it("redirige a `next` si es una ruta relativa válida (conserva la puerta de entrada)", async () => {
+    navigation.searchParams = new URLSearchParams("next=/unirse");
+    const mutate = vi.fn();
+    mockResult(trpc.auth.login.useMutation, {
+      mutate,
+      isPending: false,
+      isError: false,
+    });
+    render(<LoginForm />);
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Email"), "piloto@liga.com");
+    await user.type(screen.getByLabelText("Contraseña"), "clave-secreta-1");
+    await user.click(screen.getByRole("button", { name: "Iniciar sesión" }));
+
+    await act(async () => {
+      loginOptions().onSuccess?.();
+    });
+    expect(navigation.push).toHaveBeenCalledWith("/unirse");
+  });
+
+  it("descarta `next` no relativo (open-redirect) y redirige a la home", async () => {
+    navigation.searchParams = new URLSearchParams("next=//evil.com");
     const mutate = vi.fn();
     mockResult(trpc.auth.login.useMutation, {
       mutate,
