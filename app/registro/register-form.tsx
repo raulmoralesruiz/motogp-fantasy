@@ -86,7 +86,19 @@ export default function RegisterForm() {
         error={fieldError("password")}
       />
       <div className="field check">
-        <input id="termsAccepted" name="termsAccepted" type="checkbox" required />
+        {/* Barrido P3 (auth): el checkbox cablea `aria-invalid`/`aria-describedby`
+            igual que `Field` — los lectores de pantalla anuncian el error
+            «debes aceptar los términos» (antes: el error no estaba asociado). */}
+        <input
+          id="termsAccepted"
+          name="termsAccepted"
+          type="checkbox"
+          required
+          aria-invalid={fieldError("termsAccepted") ? true : undefined}
+          aria-describedby={
+            fieldError("termsAccepted") ? "termsAccepted-error" : undefined
+          }
+        />
         {/* F3 P1: el consentimiento debe ser INFORMADO — la etiqueta enlaza
             a los documentos reales (antes: texto sin enlaces a páginas que
             no existían; ahora /terminos y /privacidad). */}
@@ -97,7 +109,7 @@ export default function RegisterForm() {
       </div>
       {fieldError("termsAccepted") && (
         // F3 P3: anunciado a lectores de pantalla (igual que el error de Field).
-        <p className="field-error" role="alert">
+        <p className="field-error" role="alert" id="termsAccepted-error">
           {fieldError("termsAccepted")}
         </p>
       )}

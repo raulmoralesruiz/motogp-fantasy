@@ -68,6 +68,9 @@ describe("RegisterForm", () => {
     expect(mutate).toHaveBeenCalledWith(
       expect.objectContaining({ termsAccepted: false }),
     );
+    // Barrido P3 (auth): sin error, el checkbox NO expone `aria-invalid`
+    // (solo se cablea al aparecer el error, igual que `Field`).
+    expect(screen.getByRole("checkbox")).not.toHaveAttribute("aria-invalid");
   });
 
   it("muestra el éxito y la salida al dashboard tras el registro (F3 P2)", async () => {
@@ -158,6 +161,12 @@ describe("RegisterForm", () => {
     render(<RegisterForm />);
     // F3 P3: el rechazo de los términos se anuncia a lectores de pantalla.
     expect(screen.getByRole("alert")).toHaveTextContent("Debes aceptar los términos");
+    // Barrido P3 (auth): el checkbox cablea `aria-invalid`/`aria-describedby`
+    // igual que `Field` — el error queda asociado al control.
+    const checkbox = screen.getByRole("checkbox");
+    expect(checkbox).toHaveAttribute("aria-invalid", "true");
+    expect(checkbox).toHaveAttribute("aria-describedby", "termsAccepted-error");
+    expect(screen.getByRole("alert")).toHaveAttribute("id", "termsAccepted-error");
   });
 
   it("muestra el error general cuando no hay issues de campo", () => {

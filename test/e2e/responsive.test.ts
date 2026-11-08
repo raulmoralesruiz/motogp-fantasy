@@ -44,6 +44,10 @@ async function assertNoHorizontalOverflow(
  * Verifica que los controles de la app (dentro de `<main>`) tienen touch
  * target ≥ 44px (T-16). Se limita a `<main>` para no contar el widget de
  * devtools de Next.js (solo aparece en dev y queda fuera de la app).
+ *
+ * Barrido P3 (auth): los checkbox/radio quedan fuera de la enumeración — su
+ * target táctil es la etiqueta envolvente (`.form .check` / `.check-cell`,
+ * 44 px en CSS), no el `<input>` (20 px), que es solo el indicador visual.
  */
 async function assertTouchTargets(page: Page) {
   const violations: Array<{
@@ -53,7 +57,9 @@ async function assertTouchTargets(page: Page) {
     height: number;
   }> = await page.evaluate(() => {
     const root = document.querySelector("main") ?? document;
-    const interactive = root.querySelectorAll("button, select, input");
+    const interactive = root.querySelectorAll(
+      'button, select, input:not([type="checkbox"]):not([type="radio"])',
+    );
     const bad: Array<{
       tag: string;
       class: string;
@@ -449,5 +455,44 @@ test.describe("auth — T-16", () => {
     await page.setViewportSize({ width: 430, height: 932 });
     await page.goto("/registro");
     await assertNoHorizontalOverflow(page);
+  });
+
+  // Barrido P2 (auth): gate de regresión de la Regla de los 44 en login/registro
+  // (antes solo corría en el builder; un cambio de CSS futuro podría romperla
+  // en auth sin que el gate lo detectara).
+  test("login: todos los controles son touch targets ≥ 44px en 375px", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.goto("/login");
+    await assertTouchTargets(page);
+  });
+
+  test("login: todos los controles son touch targets ≥ 44px en 390px", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/login");
+    await assertTouchTargets(page);
+  });
+
+  test("login: todos los controles son touch targets ≥ 44px en 430px", async ({ page }) => {
+    await page.setViewportSize({ width: 430, height: 932 });
+    await page.goto("/login");
+    await assertTouchTargets(page);
+  });
+
+  test("registro: todos los controles son touch targets ≥ 44px en 375px", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.goto("/registro");
+    await assertTouchTargets(page);
+  });
+
+  test("registro: todos los controles son touch targets ≥ 44px en 390px", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/registro");
+    await assertTouchTargets(page);
+  });
+
+  test("registro: todos los controles son touch targets ≥ 44px en 430px", async ({ page }) => {
+    await page.setViewportSize({ width: 430, height: 932 });
+    await page.goto("/registro");
+    await assertTouchTargets(page);
   });
 });

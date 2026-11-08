@@ -187,14 +187,14 @@ describe("HomePage", () => {
     });
     renderHome(<HomePage />);
     // F3 P2: la conversión (crear cuenta / iniciar sesión) vive en la CTA row.
-    expect(screen.getByRole("link", { name: "Crear cuenta" })).toHaveAttribute(
-      "href",
-      "/registro",
-    );
-    expect(screen.getByRole("link", { name: "Iniciar sesión" })).toHaveAttribute(
-      "href",
-      "/login",
-    );
+    // Barrido P2 /: ahora hay también una CTA de cierre al final de la landing —
+    // la del hero es la primera.
+    expect(
+      screen.getAllByRole("link", { name: "Crear cuenta" })[0],
+    ).toHaveAttribute("href", "/registro");
+    expect(
+      screen.getAllByRole("link", { name: "Iniciar sesión" })[0],
+    ).toHaveAttribute("href", "/login");
     // F3 P2: la sección «Sesión» no se muestra a un anónimo (no duplica la CTA).
     expect(screen.queryByText(/No has iniciado sesión/)).not.toBeInTheDocument();
     expect(screen.queryByText("Sesión")).not.toBeInTheDocument();
@@ -215,14 +215,14 @@ describe("HomePage", () => {
     renderHome(<HomePage />);
     // F3 P1: la conversión principal es visible bajo el tagline, no enterrada
     // en «Sesión».
-    expect(screen.getByRole("link", { name: "Crear cuenta" })).toHaveAttribute(
-      "href",
-      "/registro",
-    );
-    expect(screen.getByRole("link", { name: "Iniciar sesión" })).toHaveAttribute(
-      "href",
-      "/login",
-    );
+    // Barrido P2 /: ahora hay también una CTA de cierre al final de la landing —
+    // la del hero es la primera.
+    expect(
+      screen.getAllByRole("link", { name: "Crear cuenta" })[0],
+    ).toHaveAttribute("href", "/registro");
+    expect(
+      screen.getAllByRole("link", { name: "Iniciar sesión" })[0],
+    ).toHaveAttribute("href", "/login");
     // F3 P2: dos CTAs de conversión; el directorio de ligas vive en la nav.
     expect(
       screen.queryByRole("link", { name: "Ver ligas públicas" }),
@@ -244,7 +244,8 @@ describe("HomePage", () => {
     renderHome(<HomePage />);
     // T-26: el acceso a las secciones (públicas y privadas) vive en la
     // cabecera global — la home no duplica enlaces de sección.
-    expect(screen.queryByRole("link", { name: "Ligas públicas" })).not.toBeInTheDocument();
+    // Barrido P3 /: la etiqueta unificada es «Ligas» (nav + /ligas).
+    expect(screen.queryByRole("link", { name: "Ligas" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Lineups" })).not.toBeInTheDocument();
     expect(screen.queryByText(/requieren una cuenta/)).not.toBeInTheDocument();
   });
@@ -276,6 +277,31 @@ describe("HomePage", () => {
     ).toBeInTheDocument();
     // …y no muestra el dashboard de sesión.
     expect(screen.queryByText("Tu temporada")).not.toBeInTheDocument();
+  });
+
+  it("anónimo: la landing termina en la CTA de cierre (barrido P2 /)", () => {
+    mockResult(trpc.health.check.useQuery, {
+      data: healthOk,
+      isPending: false,
+      isError: false,
+    });
+    mockResult(trpc.auth.me.useQuery, {
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: unauthorizedError,
+    });
+    renderHome(<HomePage />);
+    // Barrido P2 /: en móvil la CTA del hero puede quedar fuera de viewport al
+    // terminar la lectura — la landing cierra en la acción de conversión.
+    // Dos CTAs de cierre (mismo par y misma copy que el hero).
+    const crear = screen.getAllByRole("link", { name: "Crear cuenta" });
+    const login = screen.getAllByRole("link", { name: "Iniciar sesión" });
+    expect(crear.length).toBe(2);
+    expect(login.length).toBe(2);
+    // …y apuntan a los destinos de conversión.
+    expect(crear[1]).toHaveAttribute("href", "/registro");
+    expect(login[1]).toHaveAttribute("href", "/login");
   });
 
 });
@@ -596,8 +622,9 @@ describe("Dashboard (US-15)", () => {
     const cardEl = card("Mis ligas");
     expect(cardEl.getByText("Aún no formas parte de ninguna liga.")).toBeInTheDocument();
     // F3 P2: el empty state ofrece cómo empezar (antes: callejón sin salida).
-    // F3 P3: etiqueta unificada («Ligas públicas»).
-    expect(cardEl.getByRole("link", { name: "Ligas públicas" })).toHaveAttribute(
+    // Barrido P3 /: etiqueta unificada con la nav global y el título de /ligas
+    // («Ligas»; antes «Ligas públicas», que no coincidía con la nav).
+    expect(cardEl.getByRole("link", { name: "Ligas" })).toHaveAttribute(
       "href",
       "/ligas",
     );

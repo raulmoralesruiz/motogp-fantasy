@@ -196,10 +196,11 @@ function DashboardSection() {
           <h3>Mis ligas</h3>
           {d.leagues.length === 0 ? (
             // F3 P2: empty state con salida (antes: sin ningún enlace).
-            // F3 P3: misma etiqueta que la CTA y la nav («Ligas públicas»).
+            // Barrido P3 /: misma etiqueta que la nav global y el título de
+            // /ligas («Ligas»); una URL, una etiqueta (antes «Ligas públicas»).
             <p className="muted">
               Aún no formas parte de ninguna liga.{" "}
-              <Link href="/ligas">Ligas públicas</Link>
+              <Link href="/ligas">Ligas</Link>
             </p>
           ) : (
             <ul className="status">
@@ -281,6 +282,18 @@ function AnonymousLanding() {
           <strong>Gana GP a GP</strong> — puntúa carrera a carrera y escala en tus ligas.
         </li>
       </ol>
+
+      {/* Barrido P2 /: CTA de cierre — en móvil la CTA del hero puede quedar
+          fuera de viewport al terminar la lectura; la landing termina en la
+          acción de conversión (mismo par de botones y misma copy que el hero). */}
+      <div className="cta-row">
+        <Link className="button" href="/registro">
+          Crear cuenta
+        </Link>
+        <Link className="button-secondary" href="/login">
+          Iniciar sesión
+        </Link>
+      </div>
     </div>
   );
 }

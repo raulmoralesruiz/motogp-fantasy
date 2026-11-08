@@ -135,7 +135,9 @@ export default function GpActions({ gp, onChanged }: GpActionsProps) {
       {gp.circuit.location ? `, ${gp.circuit.location}` : ""} · {formatDate(gp.date)} ·
       estado: {GP_STATUS_LABELS[gp.status]}
       {gp.lockoutAt ? ` · lockout: ${formatDateTime(gp.lockoutAt)}` : ""}
-      <ul>
+      {/* Barrido P3 /admin: `ul.status` como el resto del panel (antes:
+          `<ul>` desnudo, sin la piel de lista del sistema). */}
+      <ul className="status">
         {gp.events.map((event) => (
           <li key={event.id}>
             {EVENT_LABELS[event.type]}
