@@ -22,6 +22,44 @@
   --bad: #f85149;
   --warning: #d29922;
   --info: #58a6ff;
+  /* Motion (animate A1): duraciones + easing de referencia. fast = feedback
+     inmediato de control; base = cambio de estado de rutina (p. ej. pestaña). */
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Motion (animate A1): feedback de control + legibilidad de estado.
+   Solo color/borde/fondo (sin animar propiedades que muevan layout).
+   Duraciones/easing desde tokens; el guard de prefers-reduced-motion
+   (más abajo) los neutraliza — CADA transición nueva entra también ahí.
+   inputs/selects: base para un estado visible de foco/error (unidad
+   posterior); hoy su foco usa `outline` (instantáneo, a propósito). */
+.button,
+.button-secondary,
+.anchor-nav a,
+.site-header-links a,
+.row-action,
+.card .cta,
+input[type="email"],
+input[type="text"],
+input[type="password"],
+input[type="date"],
+input[type="datetime-local"],
+input[type="number"],
+select {
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out);
+}
+
+/* Pestaña del mercado: cambio de estado de rutina (más lento que el hover). */
+.tab {
+  transition:
+    background-color var(--motion-base) var(--ease-out),
+    border-color var(--motion-base) var(--ease-out),
+    color var(--motion-base) var(--ease-out);
 }
 
 * {
@@ -353,6 +391,12 @@ h5 {
   border-radius: 6px;
 }
 
+/* CTA de home (animate A1): mismo hover que `.button` — el acento se
+   profundiza, no cambia de color (Regla de la Señal). */
+.card .cta:hover {
+  background: var(--accent-deep);
+}
+
 /* Fila de CTA (home, F3 P1): acciones de arranque lado a lado. */
 .cta-row {
   display: flex;
@@ -389,10 +433,28 @@ h5 {
   }
 }
 
-/* F3 P2: respetar la preferencia de movimiento reducido — sin pulso. */
+/* Respetar la preferencia de movimiento reducido (F3 P2 + animate A1):
+   sin pulso ni transiciones de control — se conserva el feedback de estado
+   (color, opacidad, borde); solo se elimina el movimiento. */
 @media (prefers-reduced-motion: reduce) {
   .pending {
     animation: none;
+  }
+  .button,
+  .button-secondary,
+  .anchor-nav a,
+  .site-header-links a,
+  .row-action,
+  .card .cta,
+  .tab,
+  input[type="email"],
+  input[type="text"],
+  input[type="password"],
+  input[type="date"],
+  input[type="datetime-local"],
+  input[type="number"],
+  select {
+    transition: none;
   }
 }
 
