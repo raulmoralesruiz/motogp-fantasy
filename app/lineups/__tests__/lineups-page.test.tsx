@@ -325,6 +325,35 @@ describe("LineupsPage", () => {
     expect(screen.getByLabelText("Equipo")).toHaveValue("team-a");
   });
 
+  it("barrido P3: el prefill no pisa slots ya elegidos por el usuario (carrera rara)", async () => {
+    mockSeasons();
+    mockGps();
+    mockBuilder(GP1);
+    // `lineups.get` queda pendiente (default del mock): el lineup llega tarde.
+    const { rerender, queryClient } = renderLineups(<LineupsPage />);
+
+    const user = userEvent.setup();
+    await openGp1(user);
+
+    // El fan elige un piloto ANTES de que llegue `lineup.data`.
+    await user.selectOptions(screen.getByLabelText("Piloto oro 1"), "r3");
+
+    // Llega el lineup guardado: el prefill se salta (no pisar la entrada).
+    // `rerender` re-renderiza la raíz: hay que reenvolver el provider.
+    mockLineup(LINEUP_GP1);
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <LineupsPage />
+      </QueryClientProvider>,
+    );
+
+    // La elección del usuario se conserva; el resto NO se rellena a tope
+    // (el prefill no se aplica a medias).
+    expect(screen.getByLabelText("Piloto oro 1")).toHaveValue("r3");
+    expect(screen.getByLabelText("Piloto oro 2")).toHaveValue("");
+    expect(screen.getByLabelText("Constructor")).toHaveValue("");
+  });
+
   it("sin lineup guardado muestra el presupuesto (base + carry) y el coste en vivo", async () => {
     mockSeasons();
     mockGps();
@@ -518,6 +547,105 @@ describe("LineupsPage", () => {
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: getQueryKey(trpc.lineups.builder, { gpId: GP1.id }),
     });
+  });
+
+  it("barrido P3: éxito con 0 cambios restantes sugiere el wildcard (si disponible)", async () => {
+    mockSeasons();
+    mockGps();
+    mockBuilder(GP1);
+    mockLineup(null);
+    mockResult(trpc.lineups.save.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+    });
+    renderLineups(<LineupsPage />);
+
+    const user = userEvent.setup();
+    await openGp1(user);
+    await fillDraft(user);
+    await user.click(screen.getByRole("button", { name: "Guardar lineup" }));
+
+    await act(async () => {
+      mutationOptions(trpc.lineups.save.useMutation).onSuccess?.(
+        {
+          gpId: GP1.id,
+          cost: 80,
+          budget: 100,
+          balance: 20,
+          changesApplied: 2,
+          remainingChanges: 0,
+          firstSave: false,
+        },
+        {
+          gpId: GP1.id,
+          slots: {
+            gold: ["r1", "r2"],
+            silver: ["r3", "r4"],
+            constructorId: "ctor-a",
+            teamId: "team-a",
+          },
+        },
+      );
+    });
+
+    // La salida accionable se nombra en el propio éxito (el error
+    // server-side ya lo hacía; ahora también el camino feliz).
+    expect(
+      screen.getByText(
+        "Lineup guardado para GP de Jerez. Cambios restantes: 0. Si no te quedan cambios, puedes usar tu wildcard de temporada.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("barrido P3: 0 cambios restantes pero wildcard ya usado → no lo sugiere", async () => {
+    mockSeasons();
+    mockGps();
+    // Wildcard gastado: sugerirlo sería prometer un recurso no disponible.
+    mockBuilder(GP1, { wildcardsUsed: 1, wildcardsPerSeason: 1 });
+    mockLineup(null);
+    mockResult(trpc.lineups.save.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+    });
+    renderLineups(<LineupsPage />);
+
+    const user = userEvent.setup();
+    await openGp1(user);
+    await fillDraft(user);
+    await user.click(screen.getByRole("button", { name: "Guardar lineup" }));
+
+    await act(async () => {
+      mutationOptions(trpc.lineups.save.useMutation).onSuccess?.(
+        {
+          gpId: GP1.id,
+          cost: 80,
+          budget: 100,
+          balance: 20,
+          changesApplied: 2,
+          remainingChanges: 0,
+          firstSave: false,
+        },
+        {
+          gpId: GP1.id,
+          slots: {
+            gold: ["r1", "r2"],
+            silver: ["r3", "r4"],
+            constructorId: "ctor-a",
+            teamId: "team-a",
+          },
+        },
+      );
+    });
+
+    // Mensaje base sin la sugerencia (recurso gastado no se promete).
+    expect(
+      screen.getByText("Lineup guardado para GP de Jerez. Cambios restantes: 0."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/puedes usar tu wildcard/),
+    ).not.toBeInTheDocument();
   });
 
   it("guardar: cambia de GP mientras el save vuela → el éxito nombra e invalida el GP de ENVÍO (no el de la pantalla)", async () => {
@@ -956,11 +1084,13 @@ describe("LineupsPage", () => {
   it("muestra un error si el builder del GP falla", async () => {
     mockSeasons();
     mockGps();
+    const refetch = vi.fn();
     mockResult(trpc.lineups.builder.useQuery, {
       data: undefined,
       isPending: false,
       isError: true,
       error: new Error("fallo de red"),
+      refetch,
     });
     renderLineups(<LineupsPage />);
 
@@ -969,6 +1099,9 @@ describe("LineupsPage", () => {
     await user.selectOptions(screen.getByLabelText("GP"), GP1.id);
 
     expect(screen.getByText("No se pudo cargar el mercado del GP.")).toBeInTheDocument();
+    // Barrido P3: el error es accionable — reintentar sin recargar la página.
+    await user.click(screen.getByRole("button", { name: "Reintentar" }));
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 
   it("F3 P2: muestra un aviso si el lineup guardado no se puede cargar", async () => {
@@ -1206,9 +1339,33 @@ describe("LineupsPage", () => {
     expect(screen.getByText("Baja de ctor-x")).toBeInTheDocument();
     expect(screen.getByText("Cambio de team-x")).toBeInTheDocument();
     expect(screen.getByText("Cambio de drv-1")).toBeInTheDocument();
-    // Fecha por entrada (F3 P2-1): la bitácora dice el QUÉ y el CUÁNDO
-    // (patrón /mercado). Las 12 entradas de la fixture caen en el mismo día.
-    expect(screen.getAllByText("· 20/10/2026")).toHaveLength(12);
+    // `.status` (barrido P3): la bitácora usa la lista de estado del sistema.
+    expect(screen.getByText("Cambio de r5").closest("ul")).toHaveClass("status");
+    // Fecha CON HORA por entrada (F3 P2-1 + barrido P3): la bitácora dice el
+    // QUÉ y el CUÁNDO; las 12 entradas caen el mismo día y se distinguen por
+    // la hora (11:00 → 14:00 UTC). Se calcula con la misma llamada de la UI
+    // para no depender del huso del entorno de test.
+    const fechaHora = (iso: string) =>
+      new Date(iso).toLocaleString("es-ES", {
+        dateStyle: "short",
+        timeStyle: "short",
+      });
+    for (const iso of [
+      "2026-10-20T11:00:00Z",
+      "2026-10-20T11:30:00Z",
+      "2026-10-20T12:00:00Z",
+      "2026-10-20T12:30:00Z",
+      "2026-10-20T12:45:00Z",
+      "2026-10-20T13:00:00Z",
+      "2026-10-20T13:15:00Z",
+      "2026-10-20T13:30:00Z",
+      "2026-10-20T13:45:00Z",
+      "2026-10-20T13:50:00Z",
+      "2026-10-20T13:55:00Z",
+      "2026-10-20T14:00:00Z",
+    ]) {
+      expect(screen.getByText(`· ${fechaHora(iso)}`)).toBeInTheDocument();
+    }
   });
 
   it("historial: explica el vocabulario (alta/baja/cambio, reasignación, wildcard)", async () => {
@@ -1251,8 +1408,13 @@ describe("LineupsPage", () => {
     expect(
       screen.getByText(/Wildcard: reset completo del lineup/),
     ).toBeInTheDocument();
-    // La entrada lleva su fecha (F3 P2-1).
-    expect(screen.getByText("· 20/10/2026")).toBeInTheDocument();
+    // La entrada lleva su fecha CON HORA (F3 P2-1 + barrido P3).
+    // Se calcula con la misma llamada de la UI (no depende del huso de test).
+    const fechaHora = new Date("2026-10-20T12:00:00Z").toLocaleString(
+      "es-ES",
+      { dateStyle: "short", timeStyle: "short" },
+    );
+    expect(screen.getByText(`· ${fechaHora}`)).toBeInTheDocument();
   });
 
   it("explica el vocabulario de estado (presupuesto, carry, saldo, cambios)", async () => {
@@ -1400,6 +1562,11 @@ describe("LineupsPage", () => {
         "El lineup de este GP se reemplazará por tu borrador. Es tu único wildcard de la temporada y no consume cambios de este GP.",
       ),
     ).toBeInTheDocument();
+    // `irreversible` (barrido P3): el impacto se muestra como aviso,
+    // mismo tratamiento que /admin (recurso escaso + reescritura).
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "El lineup de este GP se reemplazará por tu borrador.",
+    );
     await user.click(screen.getByRole("button", { name: "Sí, usar wildcard" }));
 
     expect(mutate).toHaveBeenCalledWith({
@@ -1724,6 +1891,36 @@ describe("LineupsPage", () => {
     expect(screen.getByText("Si guardas ahora:")).not.toHaveClass("status-dirty");
   });
 
+  it("barrido P3: borrador nuevo sin guardado → 'Limpiar borrador' vacía sin cambiar de GP", async () => {
+    mockSeasons();
+    mockGps();
+    mockBuilder(GP1);
+    mockLineup(null);
+    renderLineups(<LineupsPage />);
+
+    const user = userEvent.setup();
+    await openGp1(user);
+
+    // Borrador vacío: sin botón (no hay nada que limpiar).
+    expect(
+      screen.queryByRole("button", { name: "Limpiar borrador" }),
+    ).not.toBeInTheDocument();
+
+    // Un slot elegido: aparece la salida para vaciar el borrador NUEVO sin
+    // pasar por "Cambiar de GP" (que exige confirmación).
+    await user.selectOptions(screen.getByLabelText("Piloto oro 1"), "r1");
+    const clear = screen.getByRole("button", { name: "Limpiar borrador" });
+    await user.click(clear);
+
+    // El borrador vuelve a vacío y el botón desaparece.
+    expect(screen.getByLabelText("Piloto oro 1")).toHaveValue("");
+    expect(
+      screen.queryByRole("button", { name: "Limpiar borrador" }),
+    ).not.toBeInTheDocument();
+    // Y el GP no ha cambiado (la salida no es un cambio de GP).
+    expect(screen.getByLabelText("GP")).toHaveValue(GP1.id);
+  });
+
   it("historial: sin cambios, la sección se explica (empty state)", async () => {
     mockSeasons();
     mockGps();
@@ -1790,8 +1987,19 @@ describe("LineupsPage", () => {
     // La razón libre del admin se muestra tal cual.
     expect(screen.getByText("Cambio de Piloto Dos")).toBeInTheDocument();
     expect(screen.getByText(/ajuste manual del admin/)).toBeInTheDocument();
-    // Ambas entradas llevan su fecha (F3 P2-1).
-    expect(screen.getAllByText("· 20/10/2026")).toHaveLength(2);
+    // Ambas entradas llevan su fecha CON HORA (F3 P2-1 + barrido P3).
+    // Se calcula con la misma llamada de la UI (no depende del huso de test).
+    const fechaHora = (iso: string) =>
+      new Date(iso).toLocaleString("es-ES", {
+        dateStyle: "short",
+        timeStyle: "short",
+      });
+    expect(
+      screen.getByText(`· ${fechaHora("2026-10-20T11:00:00Z")}`),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(`· ${fechaHora("2026-10-20T11:30:00Z")}`),
+    ).toBeInTheDocument();
   });
 
   it("precio a un vistazo: cada slot elegido muestra el precio del activo", async () => {

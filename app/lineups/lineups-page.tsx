@@ -237,6 +237,10 @@ export default function LineupsPage() {
   useEffect(() => {
     if (lineup.data && lineup.data.gpId === gpId && prefilledFor.current !== gpId) {
       prefilledFor.current = gpId;
+      // No pisar la entrada del usuario (barrido P3): si el fan ya eligió
+      // algún slot antes de que llegue `lineup.data` (carrera rara), el
+      // prefill se salta — el borrador vacío sigue rellenándose a tope.
+      if (anySlotFilled(draft)) return;
       setDraft({
         gold: [lineup.data.slots.gold[0] ?? "", lineup.data.slots.gold[1] ?? ""],
         silver: [lineup.data.slots.silver[0] ?? "", lineup.data.slots.silver[1] ?? ""],
@@ -244,7 +248,7 @@ export default function LineupsPage() {
         teamId: lineup.data.slots.teamId ?? "",
       });
     }
-  }, [lineup.data, gpId]);
+  }, [lineup.data, gpId, draft]);
 
   const save = trpc.lineups.save.useMutation({
     // `variables.gpId` (F3 P1): el GP de ENVÍO, no el del último render. Si el
@@ -254,8 +258,14 @@ export default function LineupsPage() {
     onSuccess: (result, variables) => {
       const gpName =
         gps.data?.find((g) => g.id === variables.gpId)?.name ?? "el GP";
+      const base = `Lineup guardado para ${gpName}. Cambios restantes: ${result.remainingChanges}.`;
+      // 0 cambios restantes (barrido P3): la salida accionable es el
+      // wildcard (el error server-side ya lo sugiere) — solo si la temporada
+      // aún lo tiene disponible, para no prometer un recurso gastado.
       setSuccess(
-        `Lineup guardado para ${gpName}. Cambios restantes: ${result.remainingChanges}.`,
+        result.remainingChanges === 0 && wildcardAvailable
+          ? `${base} Si no te quedan cambios, puedes usar tu wildcard de temporada.`
+          : base,
       );
       setError(null);
       queryClient.invalidateQueries({
@@ -530,6 +540,9 @@ export default function LineupsPage() {
           : `Son tus ${perSeason} wildcards de la temporada`
       } y no consume cambios de este GP.`,
       confirmLabel: "Sí, usar wildcard",
+      // `irreversible` (barrido P3): el wildcard reescribe el lineup y consume
+      // el recurso escaso de la temporada — mismo tratamiento que /admin.
+      irreversible: true,
       onConfirm: () => {
         wildcard.mutate({
           gpId,
@@ -651,7 +664,18 @@ export default function LineupsPage() {
         <p className="muted">Consultando…</p>
       )}
       {gpId !== "" && builder.isError && (
-        <Alert variant="error">No se pudo cargar el mercado del GP.</Alert>
+        // Error accionable (barrido P3): el fallo nombra el siguiente paso —
+        // reintentar sin recargar la página.
+        <div className="stack">
+          <Alert variant="error">No se pudo cargar el mercado del GP.</Alert>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => builder.refetch()}
+          >
+            Reintentar
+          </Button>
+        </div>
       )}
       {/* F3 P2: un fallo de `lineups.get`/`history` no puede pasar en
           silencio — el fan TIENE lineup en juego y no puede componer sobre
@@ -829,41 +853,60 @@ export default function LineupsPage() {
             </div>
             {error && <Alert variant="error">{error}</Alert>}
             {success && <Alert variant="success">{success}</Alert>}
-            <Button
-              type="submit"
-              disabled={!canSubmit}
-              disabledReason={disabledReason}
-            >
-              {save.isPending ? "Guardando…" : "Guardar lineup"}
-            </Button>
-            {lineup.data && draftDirty && (
+            {/* .form-actions (barrido P3): en móvil la barra de acciones se
+                queda sticky — "Guardar lineup" no cae fuera de pliegue tras
+                los 6 selects. */}
+            <div className="form-actions">
+              <Button
+                type="submit"
+                disabled={!canSubmit}
+                disabledReason={disabledReason}
+              >
+                {save.isPending ? "Guardando…" : "Guardar lineup"}
+              </Button>
+              {lineup.data && draftDirty && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={discardDraft}
+                >
+                  Descartar cambios
+                </Button>
+              )}
+              {/* Borrador NUEVO sin lineup guardado (barrido P3): "Limpiar
+                  borrador" vacía el borrador sin cambiar de GP (que exige
+                  confirmación). Solo cuando sabemos que no hay guardado. */}
+              {lineup.data == null &&
+                !lineup.isPending &&
+                anySlotFilled(draft) && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={discardDraft}
+                  >
+                    Limpiar borrador
+                  </Button>
+                )}
+              {/* Wildcard (US-12): la mutación ya existía en el router pero era
+                  inalcanzable desde la UI — el servidor incluso la sugería en el
+                  error de cambios agotados. Ahora el mensaje es accionable. */}
               <Button
                 type="button"
                 variant="secondary"
-                onClick={discardDraft}
+                disabled={
+                  gpClosed ||
+                  !draftComplete ||
+                  !wildcardAvailable ||
+                  !draftDirty ||
+                  save.isPending ||
+                  wildcard.isPending
+                }
+                disabledReason={wildcardDisabledReason}
+                onClick={handleWildcard}
               >
-                Descartar cambios
+                {wildcard.isPending ? "Aplicando wildcard…" : "Usar wildcard"}
               </Button>
-            )}
-            {/* Wildcard (US-12): la mutación ya existía en el router pero era
-                inalcanzable desde la UI — el servidor incluso la sugería en el
-                error de cambios agotados. Ahora el mensaje es accionable. */}
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={
-                gpClosed ||
-                !draftComplete ||
-                !wildcardAvailable ||
-                !draftDirty ||
-                save.isPending ||
-                wildcard.isPending
-              }
-              disabledReason={wildcardDisabledReason}
-              onClick={handleWildcard}
-            >
-              {wildcard.isPending ? "Aplicando wildcard…" : "Usar wildcard"}
-            </Button>
+            </div>
           </form>
         </div>
       )}
@@ -883,7 +926,10 @@ export default function LineupsPage() {
             los cambios de la temporada (cada una concede 1 cambio gratis).
           </p>
           {history.data.length > 0 ? (
-            <ul>
+            // `.status` (barrido P3): la bitácora usa la lista de estado del
+            // sistema, no viñetas por defecto (consistencia con la lista de
+            // estado de arriba y con /resultados).
+            <ul className="status">
               {history.data.map((change) => {
                 const reason = reasonLabel(change.reason);
                 return (
@@ -900,10 +946,15 @@ export default function LineupsPage() {
                     )}
                     {/* Fecha (F3 P2-1 + P3): el historial es una bitácora —
                         el cuándo va con el qué, en hora local del usuario
-                        (mayoría del sistema: /perfil, /resultados, /admin). */}
+                        (mayoría del sistema: /perfil, /resultados, /admin),
+                        con HORA (barrido P3): dos cambios el mismo día se
+                        distinguen en la bitácora. */}
                     <span className="muted">
                       {" "}
-                      · {change.createdAt.toLocaleDateString("es-ES")}
+                      · {change.createdAt.toLocaleString("es-ES", {
+                        dateStyle: "short",
+                        timeStyle: "short",
+                      })}
                     </span>
                   </li>
                 );
