@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { Alert, ScoreBreakdown, fmt } from "@/shared/components";
+import { defaultGpId } from "@/shared/gp-default";
 import { trpc } from "@/trpc/client";
 
 /**
@@ -57,27 +58,35 @@ export default function PuntuacionPage() {
   const seasons = trpc.seasons.list.useQuery();
   const [seasonId, setSeasonId] = useState("");
   const [gpId, setGpId] = useState("");
+  // Consistencia con /resultados: respetar la deselección explícita del
+  // usuario (sin snap-back) — puede elegir "— Temporada —" / "— GP —".
+  const [seasonCleared, setSeasonCleared] = useState(false);
+  const [gpCleared, setGpCleared] = useState(false);
 
   const gps = trpc.seasons.gps.list.useQuery({ seasonId }, { enabled: seasonId !== "" });
   const score = trpc.results.myScore.useQuery({ gpId }, { enabled: gpId !== "" });
 
   // Temporada por defecto: la más reciente (F3, patrón /mercado: la lista va
-  // en orden ascendente y la temporada activa es la última).
+  // en orden ascendente y la temporada activa es la última). Se salta si el
+  // usuario deseleccionó la temporada a propósito (`seasonCleared`) — sin
+  // snap-back.
   useEffect(() => {
-    if (seasonId !== "" || seasons.data === undefined) return;
+    if (seasonId !== "" || seasons.data === undefined || seasonCleared) return;
     const last = seasons.data[seasons.data.length - 1];
     if (last) setSeasonId(last.id);
-  }, [seasons.data, seasonId]);
+  }, [seasons.data, seasonId, seasonCleared]);
 
-  // GP por defecto: el primer GP programado por ronda (F3, patrón /mercado):
-  // la página abre donde el fan va a mirar, no en "— Temporada —".
+  // GP por defecto (S2 P3 #2): la página es de LECTURA — abre en el último GP
+  // con resultados (el que interesa al fan), no en el próximo programado.
+  // Si la temporada no tiene GPs finalizados, cae al primer programado.
+  // Se salta si el usuario deseleccionó el GP a propósito (`gpCleared`) o la
+  // temporada (`seasonCleared`: sin temporada no hay GP) — sin snap-back.
   useEffect(() => {
-    if (gpId !== "" || gps.data === undefined) return;
-    const next = [...gps.data]
-      .sort((a, b) => a.round - b.round)
-      .find((g) => g.status === "scheduled");
-    if (next) setGpId(next.id);
-  }, [gps.data, gpId]);
+    if (gpId !== "" || gps.data === undefined || gpCleared || seasonCleared)
+      return;
+    const target = defaultGpId(gps.data);
+    if (target) setGpId(target);
+  }, [gps.data, gpId, gpCleared, seasonCleared]);
 
   if (seasons.isPending) {
     return <p className="muted">Consultando…</p>;
@@ -99,6 +108,10 @@ export default function PuntuacionPage() {
             onChange={(e) => {
               setSeasonId(e.target.value);
               setGpId("");
+              // Al cambiar de temporada se re-activa la auto-selección del GP;
+              // la deselección de temporada se respeta.
+              setGpCleared(false);
+              setSeasonCleared(e.target.value === "");
             }}
           >
             <option value="">— Temporada —</option>
@@ -112,7 +125,14 @@ export default function PuntuacionPage() {
         {seasonId !== "" && (
           <div className="field">
             <label htmlFor="gp">GP</label>
-            <select id="gp" value={gpId} onChange={(e) => setGpId(e.target.value)}>
+            <select
+              id="gp"
+              value={gpId}
+              onChange={(e) => {
+                setGpId(e.target.value);
+                setGpCleared(e.target.value === "");
+              }}
+            >
               <option value="">— GP —</option>
               {gps.data?.map((g) => (
                 <option key={g.id} value={g.id}>

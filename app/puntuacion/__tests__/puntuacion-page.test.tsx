@@ -21,7 +21,9 @@ vi.mock("@/trpc/client", () => import("../../../test/trpc-mock"));
 import { trpc } from "@/trpc/client";
 
 const SEASON_ID = "season-2099";
-const GP1 = { id: "gp-1", name: "GP de Jerez", round: 1 };
+// `status` presente (el payload real sí lo lleva): GP1 es un GP finalizado,
+// la señal de "último GP con datos" que la auto-selección de lectura elige.
+const GP1 = { id: "gp-1", name: "GP de Jerez", round: 1, status: "finished" };
 
 /** Desglose de 170.5 (scoring.md §5): oro {A,C}, plata {E,H}, ctor/equipo X. */
 const SCORE = {
@@ -153,14 +155,34 @@ describe("PuntuacionPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("muestra la selección de temporada y GP y pide un GP si no se elige", async () => {
+  it("con GP finalizado abre en él por defecto (S2 P3 #2)", () => {
     mockSeasons();
-    mockGps();
+    mockGps(); // GP1 es finished → la auto-selección de lectura lo elige.
+    renderPuntuacion(<PuntuacionPage />);
+
+    // Temporada por defecto: la más reciente.
+    expect(screen.getByLabelText("Temporada")).toHaveValue(SEASON_ID);
+    // GP por defecto: el último con resultados (GP1, finished) — la página
+    // es de lectura, no abre en "— GP —".
+    expect(screen.getByLabelText("GP")).toHaveValue(GP1.id);
+  });
+
+  it("sin GPs finalizados ni programados no preselecciona ningún GP (S2 P3 #2)", async () => {
+    mockSeasons();
+    // Todos cancelados → ni finalizados ni programados → sin pre-selección.
+    mockResult(trpc.seasons.gps.list.useQuery, {
+      data: [
+        { id: "gp-1", name: "GP de Jerez", round: 1, status: "cancelled" },
+      ],
+      isPending: false,
+      isError: false,
+    });
     renderPuntuacion(<PuntuacionPage />);
 
     const user = userEvent.setup();
     await user.selectOptions(screen.getByLabelText("Temporada"), SEASON_ID);
 
+    expect(screen.getByLabelText("GP")).toHaveValue("");
     expect(
       screen.getByText("Selecciona un GP para ver tu puntuación."),
     ).toBeInTheDocument();

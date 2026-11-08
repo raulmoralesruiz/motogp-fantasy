@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { Alert, ScoreBreakdown, fmt } from "@/shared/components";
+import { defaultGpId } from "@/shared/gp-default";
 import { trpc } from "@/trpc/client";
 
 /** Descripción legible de un valor de resultado (posición + estado). */
@@ -93,18 +94,17 @@ export default function ResultadosPage() {
     if (last) setSeasonId(last.id);
   }, [seasons.data, seasonId, seasonCleared]);
 
-  // GP por defecto: el primer GP programado por ronda (F3, patrón /mercado):
-  // la página abre donde el fan va a mirar, no en "— Temporada —".
+  // GP por defecto (S2 P3 #2): la página es de LECTURA — abre en el último GP
+  // con resultados (el que interesa al fan), no en el próximo programado.
+  // Si la temporada no tiene GPs finalizados, cae al primer programado.
   // Barrido P3: se salta si el usuario deseleccionó el GP a propósito
   // (`gpCleared`) o la temporada (`seasonCleared`: sin temporada no hay GP) —
   // sin snap-back.
   useEffect(() => {
     if (gpId !== "" || gps.data === undefined || gpCleared || seasonCleared)
       return;
-    const next = [...gps.data]
-      .sort((a, b) => a.round - b.round)
-      .find((g) => g.status === "scheduled");
-    if (next) setGpId(next.id);
+    const target = defaultGpId(gps.data);
+    if (target) setGpId(target);
   }, [gps.data, gpId, gpCleared, seasonCleared]);
 
   if (seasons.isPending) {

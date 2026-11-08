@@ -244,23 +244,24 @@ describe("ResultadosPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("elige la temporada más reciente y el primer GP programado por defecto", () => {
+  it("elige la temporada más reciente y el último GP finalizado por defecto (S2 P3 #2)", () => {
     mockSeasons();
     mockGps();
     renderResultados(<ResultadosPage />);
 
     // Temporada por defecto: la más reciente (orden ascendente → última).
     expect(screen.getByLabelText("Temporada")).toHaveValue(SEASON_ID);
-    // GP por defecto: el primero programado por ronda.
-    expect(screen.getByLabelText("GP")).toHaveValue(GP1.id);
+    // GP por defecto: el último con resultados (GP2, finished), no el
+    // programado (GP1) — la página es de lectura.
+    expect(screen.getByLabelText("GP")).toHaveValue(GP2.id);
     expect(screen.getByRole("option", { name: "J2 · GP de Le Mans" })).toBeInTheDocument();
   });
 
-  it("sin GP programado no preselecciona ningún GP", () => {
+  it("sin GPs finalizados ni programados no preselecciona ningún GP", () => {
     mockSeasons();
     mockGps([
-      { id: "gp-1", name: "GP de Jerez", round: 1, status: "finished" },
-      { id: "gp-2", name: "GP de Le Mans", round: 2, status: "finished" },
+      { id: "gp-1", name: "GP de Jerez", round: 1, status: "cancelled" },
+      { id: "gp-2", name: "GP de Le Mans", round: 2, status: "cancelled" },
     ]);
     renderResultados(<ResultadosPage />);
 
@@ -269,6 +270,19 @@ describe("ResultadosPage", () => {
     expect(
       screen.getByText("Selecciona un GP para ver tus resultados."),
     ).toBeInTheDocument();
+  });
+
+  it("con varios finalizados abre en el de mayor ronda (S2 P3 #2)", () => {
+    mockSeasons();
+    mockGps([
+      { id: "gp-1", name: "GP de Jerez", round: 1, status: "finished" },
+      { id: "gp-2", name: "GP de Le Mans", round: 2, status: "finished" },
+      { id: "gp-3", name: "GP de Mugello", round: 3, status: "scheduled" },
+    ]);
+    renderResultados(<ResultadosPage />);
+
+    // El último finalizado (gp-2), no el programado (gp-3).
+    expect(screen.getByLabelText("GP")).toHaveValue("gp-2");
   });
 
   it("muestra estado, posición + delta, recálculo con histórico y desglose", async () => {
@@ -672,9 +686,9 @@ describe("ResultadosPage", () => {
     renderResultados(<ResultadosPage />);
 
     const user = userEvent.setup();
-    // La auto-selección elige la última temporada y el GP programado (GP1).
+    // La auto-selección elige la última temporada y el último GP finalizado (GP2).
     const gpSelect = await screen.findByLabelText("GP");
-    expect(gpSelect).toHaveValue(GP1.id);
+    expect(gpSelect).toHaveValue(GP2.id);
 
     // El usuario deselecciona el GP a propósito ("— GP —").
     await user.selectOptions(gpSelect, "");
