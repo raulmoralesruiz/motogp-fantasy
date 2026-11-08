@@ -7,15 +7,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { clientError } from "../../../test/errors";
 import { asMockFn, mockResult, resetTrpcMocks } from "../../../test/trpc-mock";
-import { navigation, resetNavigationMocks } from "../../../test/ui-mocks";
 import { act, render, screen, userEvent } from "../../../test/rtl";
 
 import RegisterForm from "../register-form";
 
 vi.mock("@/trpc/client", () => import("../../../test/trpc-mock"));
-vi.mock("next/navigation", () =>
-  import("../../../test/ui-mocks").then((m) => m.navigationMock),
-);
 
 import { trpc } from "@/trpc/client";
 
@@ -26,7 +22,6 @@ function registerOptions(): { onSuccess?: () => void } {
 describe("RegisterForm", () => {
   beforeEach(() => {
     resetTrpcMocks();
-    resetNavigationMocks();
   });
 
   it("envía los datos con los términos aceptados", async () => {
@@ -75,7 +70,7 @@ describe("RegisterForm", () => {
     );
   });
 
-  it("redirige al inicio tras el registro correcto", async () => {
+  it("muestra el éxito y la salida al dashboard tras el registro (F3 P2)", async () => {
     const mutate = vi.fn();
     mockResult(trpc.auth.register.useMutation, {
       mutate,
@@ -96,7 +91,36 @@ describe("RegisterForm", () => {
     await act(async () => {
       registerOptions().onSuccess?.();
     });
-    expect(navigation.push).toHaveBeenCalledWith("/");
+    // F3 P2: confirmación explícita + acción en bloque (no un salto silencioso).
+    expect(screen.getByRole("status")).toHaveTextContent(/Cuenta creada/);
+    // F3 R5 P1: el pico del onboarding empuja al objetivo #1 del producto
+    // (activación: primer lineup tras el registro — PRODUCT.md), no a un
+    // dashboard neutro.
+    const cta = screen.getByRole("link", { name: "Monta tu primer lineup" });
+    expect(cta).toHaveAttribute("href", "/lineups");
+    expect(cta).toHaveClass("button");
+    // El dashboard queda como salida secundaria.
+    const dashboard = screen.getByRole("link", { name: "Ir a mi dashboard" });
+    expect(dashboard).toHaveAttribute("href", "/");
+    expect(dashboard).toHaveClass("button-secondary");
+  });
+
+  it("enlaza los términos y la privacidad a sus páginas (F3 P1)", () => {
+    render(<RegisterForm />);
+    expect(screen.getByRole("link", { name: "términos" })).toHaveAttribute(
+      "href",
+      "/terminos",
+    );
+    expect(
+      screen.getByRole("link", { name: "política de privacidad" }),
+    ).toHaveAttribute("href", "/privacidad");
+  });
+
+  it("muestra las reglas del nombre de usuario antes del primer error (F3 P3)", () => {
+    render(<RegisterForm />);
+    expect(
+      screen.getByText("3–20 caracteres: letras, números y guiones bajos."),
+    ).toBeInTheDocument();
   });
 
   it("muestra el error de validación Zod por campo", () => {
@@ -132,7 +156,8 @@ describe("RegisterForm", () => {
       error,
     });
     render(<RegisterForm />);
-    expect(screen.getByText("Debes aceptar los términos")).toBeInTheDocument();
+    // F3 P3: el rechazo de los términos se anuncia a lectores de pantalla.
+    expect(screen.getByRole("alert")).toHaveTextContent("Debes aceptar los términos");
   });
 
   it("muestra el error general cuando no hay issues de campo", () => {

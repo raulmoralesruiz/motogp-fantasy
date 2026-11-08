@@ -16,9 +16,6 @@ export default function LoginPage() {
         ¿Aún no tienes cuenta? <a href="/registro">Regístrate</a>
       </p>
       <LoginForm />
-      <p className="muted">
-        <a href="/recuperar-contrasena">¿Olvidaste tu contraseña?</a>
-      </p>
     </main>
   );
 }

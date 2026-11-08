@@ -40,4 +40,14 @@ describe("RegisterPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Crear cuenta" })).toBeInTheDocument();
   });
+
+  it("explica al first-timer qué va a hacer aquí (F3 P2)", () => {
+    render(<RegisterPage />);
+    // La composición real del lineup (invariante 1) y el objetivo (compite
+    // en ligas), no un «ligas de fantasy» genérico.
+    expect(
+      screen.getByText(/Monta tu lineup de 2 oro \+ 2 plata \+ 1 constructor \+ 1 equipo/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/compite cada GP en tus ligas/)).toBeInTheDocument();
+  });
 });

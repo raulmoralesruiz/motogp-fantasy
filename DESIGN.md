@@ -266,7 +266,7 @@ Chips redondeados (6 px) en fila flexible. Inactivo: pantalla de telemetría + f
 - **Error / Disabled:** el error es por campo y en línea; el error global va en caja tintada 10/40 (ver Colors).
 
 ### Alerts
-Cuatro variantes con la misma anatomía (padding 0.6 rem 0.8 rem, radio 6 px, texto 0.9 rem): error (caja tintada de rojo de bandera), advertencia (ámbar de aviso), información (azul informativo) y éxito — esta última **sin caja**: solo texto verde de bandera. Las cajas siguen la Regla del Tinte 10/40.
+Cuatro variantes con la misma anatomía (padding 0.6 rem 0.8 rem, radio 6 px, texto 0.9 rem): error (caja tintada de rojo de bandera), advertencia (ámbar de aviso), información (azul informativo) y éxito (caja tintada de verde de bandera). Las cajas siguen la Regla del Tinte 10/40.
 
 ### Confirmación con impacto
 Para acciones irreversibles o que reescriben datos: un diálogo plano (superficie de pantalla de telemetría, filete de 1 px, radio 8 px, máx. 26 rem) sobre el lienzo atenuado. El título nombra la acción; el impacto escrito va como texto (o en aviso tintado 10/40 si es irreversible); dos controles y solo dos: «Sí, …» (relleno rojo de salida — la acción se nombra en el botón, nunca «Aceptar») y «No, volver» (secondary). El foco abre en la opción segura; Esc y el clic fuera descartan. Sustituye a cualquier diálogo nativo.

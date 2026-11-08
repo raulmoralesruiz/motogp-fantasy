@@ -56,6 +56,48 @@ describe("ResetPasswordForm", () => {
     expect(screen.getByText("Las contraseñas no coinciden")).toBeInTheDocument();
   });
 
+  it("muestra la política de contraseña antes del primer error (F3 P2)", () => {
+    navigation.searchParams = new URLSearchParams({ token: "tok-123" });
+    mockResult(trpc.auth.resetPassword.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+    });
+    render(<ResetPasswordForm />);
+    expect(screen.getByLabelText("Nueva contraseña")).toHaveAttribute(
+      "placeholder",
+      "Mínimo 8 caracteres",
+    );
+    expect(screen.getByLabelText("Repite la contraseña")).toHaveAttribute(
+      "placeholder",
+      "La misma que arriba",
+    );
+  });
+
+  it("corregir el campo limpia el error de coincidencia (F3 P3)", async () => {
+    navigation.searchParams = new URLSearchParams({ token: "tok-123" });
+    const mutate = vi.fn();
+    mockResult(trpc.auth.resetPassword.useMutation, {
+      mutate,
+      isPending: false,
+      isError: false,
+    });
+    render(<ResetPasswordForm />);
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Nueva contraseña"), "nueva-clave-1");
+    await user.type(screen.getByLabelText("Repite la contraseña"), "otra-clave-2");
+    await user.click(screen.getByRole("button", { name: "Restablecer contraseña" }));
+    expect(screen.getByText("Las contraseñas no coinciden")).toBeInTheDocument();
+
+    // Corregir el campo de repetición disipa el error sin reenviar.
+    await user.type(screen.getByLabelText("Repite la contraseña"), "nueva-clave-1");
+    expect(
+      screen.queryByText("Las contraseñas no coinciden"),
+    ).not.toBeInTheDocument();
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
   it("envía token y contraseña cuando coinciden", async () => {
     navigation.searchParams = new URLSearchParams({ token: "tok-123" });
     const mutate = vi.fn();
@@ -96,10 +138,11 @@ describe("ResetPasswordForm", () => {
       resetOptions().onSuccess?.();
     });
     expect(screen.getByRole("status")).toHaveTextContent(/Contraseña restablecida/);
-    expect(screen.getByRole("link", { name: "Ir a iniciar sesión" })).toHaveAttribute(
-      "href",
-      "/login",
-    );
+    const cta = screen.getByRole("link", { name: "Ir a iniciar sesión" });
+    expect(cta).toHaveAttribute("href", "/login");
+    // F3 P2: la salida es la acción principal — botón en bloque, no un
+    // enlace en línea débil.
+    expect(cta).toHaveClass("button");
   });
 
   it("muestra el error de validación Zod por campo", () => {

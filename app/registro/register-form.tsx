@@ -1,16 +1,19 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { type FormEvent } from "react";
+import Link from "next/link";
+import { type FormEvent, useState } from "react";
 
 import { Alert, Button, Field } from "@/shared/components";
 import { trpc } from "@/trpc/client";
 import { zodIssues } from "@/trpc/errors";
 
 export default function RegisterForm() {
-  const router = useRouter();
+  const [done, setDone] = useState(false);
   const register = trpc.auth.register.useMutation({
-    onSuccess: () => router.push("/"),
+    // F3 P2: el éxito del momento de mayor stakes es visible — mismo
+    // patrón que las páginas hermanas (recuperar/reestablecer):
+    // confirmación explícita + acción en bloque, no un salto silencioso.
+    onSuccess: () => setDone(true),
   });
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -22,6 +25,27 @@ export default function RegisterForm() {
       password: String(data.get("password") ?? ""),
       termsAccepted: data.get("termsAccepted") === "on",
     });
+  }
+
+  if (done) {
+    return (
+      <div className="form">
+        <Alert variant="success">
+          Cuenta creada. Ahora monta tu primer lineup: 2 oro + 2 plata + 1
+          constructor + 1 equipo.
+        </Alert>
+        {/* F3 R5 P1: el pico del onboarding empuja al objetivo #1 del producto
+            (activación >60%: primer lineup tras el registro — PRODUCT.md). La
+            intro ya primó la composición; la salida la convierte en acción.
+            El dashboard queda como salida secundaria. */}
+        <Link className="button" href="/lineups">
+          Monta tu primer lineup
+        </Link>
+        <Link className="button-secondary" href="/">
+          Ir a mi dashboard
+        </Link>
+      </div>
+    );
   }
 
   const issues = register.isError ? zodIssues(register.error) : [];
@@ -49,6 +73,9 @@ export default function RegisterForm() {
         required
         error={fieldError("username")}
       />
+      {/* F3 P3: las reglas visibles ANTES del primer error (auth.ts: 3–20,
+          letras/números/guiones bajos) — evita el round-trip de validación. */}
+      <p className="muted">3–20 caracteres: letras, números y guiones bajos.</p>
       <Field
         label="Contraseña"
         name="password"
@@ -60,12 +87,19 @@ export default function RegisterForm() {
       />
       <div className="field check">
         <input id="termsAccepted" name="termsAccepted" type="checkbox" required />
+        {/* F3 P1: el consentimiento debe ser INFORMADO — la etiqueta enlaza
+            a los documentos reales (antes: texto sin enlaces a páginas que
+            no existían; ahora /terminos y /privacidad). */}
         <label htmlFor="termsAccepted">
-          Acepto los términos y la política de privacidad
+          Acepto los <a href="/terminos">términos</a> y la{" "}
+          <a href="/privacidad">política de privacidad</a>
         </label>
       </div>
       {fieldError("termsAccepted") && (
-        <p className="field-error">{fieldError("termsAccepted")}</p>
+        // F3 P3: anunciado a lectores de pantalla (igual que el error de Field).
+        <p className="field-error" role="alert">
+          {fieldError("termsAccepted")}
+        </p>
       )}
       {generalError && <Alert variant="error">{generalError}</Alert>}
       <Button type="submit" disabled={register.isPending}>

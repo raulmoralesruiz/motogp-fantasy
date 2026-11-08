@@ -64,6 +64,30 @@ describe("ResetRequestForm", () => {
     expect(screen.getByRole("status")).toHaveTextContent(/Si el email está registrado/);
   });
 
+  it("el éxito ofrece la salida a login en bloque (F3 P3)", async () => {
+    mockResult(trpc.auth.requestReset.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+    });
+    render(<ResetRequestForm />);
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Email"), "piloto@liga.com");
+    await user.click(
+      screen.getByRole("button", { name: "Enviar enlace de recuperación" }),
+    );
+
+    await act(async () => {
+      requestResetOptions().onSuccess?.();
+    });
+    const cta = screen.getByRole("link", { name: "Ir a iniciar sesión" });
+    expect(cta).toHaveAttribute("href", "/login");
+    // F3 P2: la salida es la acción principal — botón en bloque, no un
+    // enlace en línea débil.
+    expect(cta).toHaveClass("button");
+  });
+
   it("muestra el error de validación Zod por campo", () => {
     const error = clientError("Invalid input", {
       zod: {

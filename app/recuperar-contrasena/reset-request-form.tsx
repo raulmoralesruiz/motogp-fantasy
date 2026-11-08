@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { type FormEvent, useState } from "react";
 
 import { Alert, Button, Field } from "@/shared/components";
@@ -25,6 +26,11 @@ export default function ResetRequestForm() {
           Si el email está registrado, recibirás un enlace de recuperación en los próximos
           minutos. Revisa también la carpeta de spam.
         </Alert>
+        {/* F3 P2: la salida es la acción principal del momento — botón en
+            bloque (mismo patrón que los CTA de la home), no un enlace en línea. */}
+        <Link className="button" href="/login">
+          Ir a iniciar sesión
+        </Link>
       </div>
     );
   }

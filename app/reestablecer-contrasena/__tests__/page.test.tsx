@@ -38,6 +38,10 @@ describe("ResetPasswordPage", () => {
     expect(
       screen.getByRole("button", { name: "Restablecer contraseña" }),
     ).toBeInTheDocument();
+    // F3 R4 P2: intro line + salida al login (consistencia con los demás
+    // formularios de autenticación, que sí la tienen).
+    expect(screen.getByText(/Establece una nueva contraseña/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Volver a iniciar sesión" })).toHaveAttribute("href", "/login");
   });
 
   it("muestra el aviso cuando el enlace no tiene token", () => {

@@ -1,9 +1,11 @@
-import { type InputHTMLAttributes, useId } from "react";
+import { type InputHTMLAttributes, type Ref, useId } from "react";
 
 interface FieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "name"> {
   label: string;
   name: string;
   error?: string | null;
+  /** Ref al `<input>` subyacente (React 19: ref-as-prop; fluye vía `...inputProps`). */
+  ref?: Ref<HTMLInputElement>;
 }
 
 /**

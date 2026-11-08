@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
@@ -31,7 +32,11 @@ export default function ResetPasswordForm() {
         <Alert variant="success">
           Contraseña restablecida. Ya puedes iniciar sesión con tu nueva contraseña.
         </Alert>
-        <a href="/login">Ir a iniciar sesión</a>
+        {/* F3 P2: la salida es la acción principal del momento — botón en
+            bloque (mismo patrón que los CTA de la home), no un enlace en línea. */}
+        <Link className="button" href="/login">
+          Ir a iniciar sesión
+        </Link>
       </div>
     );
   }
@@ -63,8 +68,12 @@ export default function ResetPasswordForm() {
         name="password"
         type="password"
         autoComplete="new-password"
+        // F3 P2: la política visible ANTES del primer error (igual que registro).
+        placeholder="Mínimo 8 caracteres"
         required
         minLength={8}
+        // F3 P3: corregir el campo limpia el mismatch (sin esperar al envío).
+        onChange={() => setMismatch(false)}
         error={fieldError("password")}
       />
       <Field
@@ -72,7 +81,9 @@ export default function ResetPasswordForm() {
         name="confirm"
         type="password"
         autoComplete="new-password"
+        placeholder="La misma que arriba"
         required
+        onChange={() => setMismatch(false)}
         error={mismatch ? "Las contraseñas no coinciden" : null}
       />
       {generalError && <Alert variant="error">{generalError}</Alert>}
