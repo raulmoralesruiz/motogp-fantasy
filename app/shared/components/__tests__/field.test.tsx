@@ -36,8 +36,21 @@ describe("Field", () => {
     expect(document.querySelector(".field-error")).not.toBeNull();
   });
 
-  it("no muestra error si no hay", () => {
+  it("asocia el error al input (aria-invalid + aria-describedby) y lo anuncia (role=alert)", () => {
+    render(<Field label="Email" name="email" error="Obligatorio" />);
+    const input = screen.getByLabelText("Email");
+    const error = screen.getByText("Obligatorio");
+    // F3 P2: el error es visible para lectores de pantalla y enlazado al campo.
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAttribute("aria-describedby", error.id);
+    expect(error).toHaveAttribute("role", "alert");
+  });
+
+  it("no muestra error ni atributos de error si no hay", () => {
     render(<Field label="Email" name="email" />);
     expect(document.querySelector(".field-error")).toBeNull();
+    const input = screen.getByLabelText("Email");
+    expect(input).not.toHaveAttribute("aria-invalid");
+    expect(input).not.toHaveAttribute("aria-describedby");
   });
 });

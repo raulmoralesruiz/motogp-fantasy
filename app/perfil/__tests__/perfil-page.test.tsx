@@ -73,15 +73,40 @@ describe("PerfilPage", () => {
     expect(screen.getAllByText("Consultando…").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("sin sesión: enlaza al login", () => {
+  it("sin sesión (UNAUTHORIZED): enlaza al login", () => {
     mockResult(trpc.profile.me.useQuery, {
       data: undefined,
       isPending: false,
       isError: true,
-      error: new Error("sin sesión"),
+      error: clientError("UNAUTHORIZED", { code: "UNAUTHORIZED" }),
     });
     renderPerfil(<PerfilPage />);
     expect(screen.getByText("Inicia sesión")).toBeInTheDocument();
+  });
+
+  it("fallo real (500/red): muestra el error y ofrece reintentar, no el login", async () => {
+    // F3 P2: un fallo del servidor NO se enmascara como "sin sesión" — el
+    // usuario puede estar logueado (mismo criterio que la home, F3 P3-1).
+    const refetch = vi.fn();
+    mockResult(trpc.profile.me.useQuery, {
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: clientError("INTERNAL_SERVER_ERROR", {
+        code: "INTERNAL_SERVER_ERROR",
+      }),
+      refetch,
+    });
+    renderPerfil(<PerfilPage />);
+
+    expect(screen.queryByText("Inicia sesión")).toBeNull();
+    expect(
+      screen.getByText(/No se pudieron cargar tus datos/),
+    ).toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Reintentar" }));
+    expect(refetch).toHaveBeenCalled();
   });
 
   it("muestra los datos de la cuenta", () => {
@@ -243,6 +268,32 @@ describe("PerfilPage", () => {
       ).toBeInTheDocument();
     });
 
+    it("carga: si no se pueden cargar los ajustes, anuncia el error y ofrece reintentar", async () => {
+      mockMe();
+      const refetch = vi.fn();
+      mockResult(trpc.notifications.settings.useQuery, {
+        data: undefined,
+        isPending: false,
+        isError: true,
+        error: clientError("Fallo interno.", { code: "INTERNAL_SERVER_ERROR" }),
+        refetch,
+      });
+      renderPerfil(<PerfilPage />);
+
+      // F3 P2: NO se muestra el formulario con un valor por defecto
+      // adivinado (el usuario podría guardar y volcar su preferencia real).
+      expect(
+        screen.queryByLabelText("Recibir notificaciones por email"),
+      ).toBeNull();
+      expect(
+        screen.getByText(/No se pudieron cargar tus ajustes de notificación/),
+      ).toBeInTheDocument();
+
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: "Reintentar" }));
+      expect(refetch).toHaveBeenCalled();
+    });
+
     it("guardar: tras el éxito invalida la consulta de ajustes", async () => {
       mockMe();
       mockSettings(false);
@@ -316,7 +367,7 @@ describe("PerfilPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("delete: el botón está deshabilitado hasta marcar la confirmación", async () => {
+  it("delete: el botón está deshabilitado (con motivo) hasta marcar la confirmación", async () => {
     mockMe();
     mockResult(trpc.profile.delete.useMutation, {
       mutate: vi.fn(),
@@ -326,10 +377,35 @@ describe("PerfilPage", () => {
     renderPerfil(<PerfilPage />);
 
     const button = screen.getByRole("button", { name: "Eliminar mi cuenta" });
-    expect(button).toBeDisabled();
+    // F3 P3: `aria-disabled` + motivo escrito (convención del sistema de
+    // diseño), no un `disabled` nativo sin explicación.
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.getByText("Marca la casilla para habilitar la eliminación"),
+    ).toBeInTheDocument();
     const user = userEvent.setup();
     await user.click(screen.getByLabelText(/Entiendo que esta acción es irreversible/));
     expect(button).toBeEnabled();
+    expect(button).not.toHaveAttribute("aria-disabled");
+  });
+
+  it("delete: sin marcar la confirmación, el clic no dispara la eliminación", async () => {
+    mockMe();
+    const mutate = vi.fn();
+    mockResult(trpc.profile.delete.useMutation, {
+      mutate,
+      isPending: false,
+      isError: false,
+    });
+    renderPerfil(<PerfilPage />);
+
+    // `aria-disabled` no frena el clic a nivel DOM: lo frena la guarda de
+    // `RowAction` (no debe enviar un payload que el servidor aceptaría).
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Contraseña (confirmación)"), "clave-secreta-1");
+    await user.click(screen.getByRole("button", { name: "Eliminar mi cuenta" }));
+
+    expect(mutate).not.toHaveBeenCalled();
   });
 
   it("delete: envía la contraseña al confirmar", async () => {
@@ -387,5 +463,33 @@ describe("PerfilPage", () => {
       mutationOptions(trpc.profile.delete.useMutation).onSuccess?.();
     });
     expect(navigation.push).toHaveBeenCalledWith("/");
+  });
+
+  it("delete: el botón de eliminación usa el tratamiento destructivo (row-action)", () => {
+    mockMe();
+    mockResult(trpc.profile.delete.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+    });
+    renderPerfil(<PerfilPage />);
+    // F3 P1: la única acción irreversible se distingue del relleno rojo
+    // rutinario (Guardar/Exportar) con el filete rojo de `RowAction`.
+    const button = screen.getByRole("button", { name: "Eliminar mi cuenta" });
+    expect(button).toHaveClass("row-action");
+  });
+
+  it("delete: el aviso de impacto es un warning (no un error)", () => {
+    mockMe();
+    mockResult(trpc.profile.delete.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+    });
+    renderPerfil(<PerfilPage />);
+    // F3 P2: el impacto esperado (no un fallo) se anuncia como warning;
+    // el rojo queda reservado para los errores reales (rate limit, etc.).
+    const warning = screen.getByText(/Al eliminar tu cuenta se anonimizan/);
+    expect(warning).toHaveClass("alert-warning");
   });
 });

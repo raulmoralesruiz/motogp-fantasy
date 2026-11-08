@@ -24,11 +24,25 @@ export function Field({
 }: FieldProps) {
   const generatedId = useId();
   const inputId = id ?? generatedId;
+  const errorId = `${inputId}-error`;
   return (
     <div className="field">
       <label htmlFor={inputId}>{label}</label>
-      <input id={inputId} name={name} type={type} {...inputProps} />
-      {error ? <p className="field-error">{error}</p> : null}
+      <input
+        id={inputId}
+        name={name}
+        type={type}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? errorId : undefined}
+        {...inputProps}
+      />
+      {error ? (
+        // F3 P2: el error se asocia al input (`aria-describedby`) y se
+        // anuncia a lectores de pantalla (`role="alert"` al aparecer).
+        <p className="field-error" id={errorId} role="alert">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

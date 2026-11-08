@@ -77,6 +77,10 @@ function defaultMutationResult(): Record<string, unknown> {
     isSuccess: false,
     error: undefined,
     data: undefined,
+    // TanStack expone `reset()` en el resultado de `useMutation`; algunos
+    // componentes lo llaman en `onSuccess` de otra mutación (p. ej.
+    // `totp-section` resetea `confirm` al re-matricular/desactivar, F3 P2).
+    reset: vi.fn(),
   };
 }
 

@@ -63,6 +63,7 @@ describe("TotpSection (D-07, ADR-0039)", () => {
       mutate: confirm,
       isPending: false,
       isError: false,
+      reset: vi.fn(),
     });
     renderTotp({ enabled: false, enrolled: false });
 
@@ -91,10 +92,212 @@ describe("TotpSection (D-07, ADR-0039)", () => {
     expect(confirm).toHaveBeenCalledWith({ code: "123456" });
   });
 
-  it("pendiente (matriculado sin confirmar): solo pide el código", () => {
+  it("pendiente (matriculado sin confirmar): pide el código y ofrece generar uno nuevo", () => {
     renderTotp({ enabled: false, enrolled: true });
     expect(screen.getByLabelText("Código de la app de autenticación")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Activar dos pasos" })).toBeNull();
+    // F3 P1: escape del estado PENDIENTE — no es un callejón sin salida.
+    expect(
+      screen.getByRole("button", { name: "Generar nuevo código" }),
+    ).toBeInTheDocument();
+  });
+
+  it("pendiente: generar un código nuevo re-matricula (re-autenticación con contraseña)", async () => {
+    const enroll = vi.fn();
+    mockResult(trpc.auth.totp.enroll.useMutation, {
+      mutate: enroll,
+      isPending: false,
+      isError: false,
+    });
+    mockResult(trpc.auth.totp.confirm.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+    });
+    renderTotp({ enabled: false, enrolled: true });
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Contraseña (verificación)"), "clave-123");
+    await user.click(screen.getByRole("button", { name: "Generar nuevo código" }));
+    expect(enroll).toHaveBeenCalledWith({ password: "clave-123" });
+  });
+
+  it("pendiente: tras generar un código nuevo se muestra el QR (no es un no-op)", async () => {
+    mockResult(trpc.auth.totp.enroll.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+      onSuccess: vi.fn(),
+    });
+    mockResult(trpc.auth.totp.confirm.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+      reset: vi.fn(),
+    });
+    renderTotp({ enabled: false, enrolled: true });
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Contraseña (verificación)"), "clave-123");
+    await user.click(screen.getByRole("button", { name: "Generar nuevo código" }));
+
+    // Simula el éxito del servidor: el onSuccess del componente monta el QR.
+    const enrollOptions = (
+      trpc.auth.totp.enroll.useMutation as unknown as {
+        mock: { calls: unknown[][] };
+      }
+    ).mock.calls[0]?.[0] as { onSuccess?: (d: unknown) => void };
+    await act(async () => {
+      enrollOptions?.onSuccess?.({
+        secret: "NEWSECRETNEWSECRETNEWSECRETNEWSECRET",
+        qrDataUrl: "data:image/svg+xml;utf8,new-qr",
+      });
+    });
+
+    // F3 P1 (regresión): en el estado PENDIENTE el QR nuevo debe ser
+    // visible — la rama `qr` se evalúa antes que `enrolled`; si no, el
+    // escape sería un no-op silencioso (y invalidaría el código anterior).
+    expect(screen.getByRole("img")).toHaveAttribute(
+      "src",
+      "data:image/svg+xml;utf8,new-qr",
+    );
+    expect(screen.getByText("NEWSECRETNEWSECRETNEWSECRETNEWSECRET")).toBeInTheDocument();
+  });
+
+  it("qr: cancelar limpia el QR, resetea la confirmación y sincroniza profile.me", async () => {
+    const confirmReset = vi.fn();
+    mockResult(trpc.auth.totp.enroll.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+      onSuccess: vi.fn(),
+    });
+    mockResult(trpc.auth.totp.confirm.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+      reset: confirmReset,
+    });
+    const { queryClient } = renderTotp({ enabled: false, enrolled: false });
+    const spy = vi.spyOn(queryClient, "invalidateQueries");
+
+    // Monta el QR (flujo de matriculación desde el estado desactivado).
+    const enrollOptions = (
+      trpc.auth.totp.enroll.useMutation as unknown as {
+        mock: { calls: unknown[][] };
+      }
+    ).mock.calls[0]?.[0] as { onSuccess?: (d: unknown) => void };
+    await act(async () => {
+      enrollOptions?.onSuccess?.({
+        secret: "SECRETOSECRETOSECRETOSECRETO",
+        qrDataUrl: "data:image/svg+xml;utf8,qr",
+      });
+    });
+    expect(screen.getByRole("img")).toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(screen.queryByRole("img")).toBeNull();
+    // F3 P3: al cancelar se resetea la confirmación (un error previo no debe
+    // reaparecer en el estado PENDIENTE) y se sincroniza `me` (el servidor ya
+    // puede tener el secreto pendiente; la sección debe mostrar el estado real).
+    expect(confirmReset).toHaveBeenCalled();
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it("pendiente: con la confirmación ya exitosa muestra el estado ACTIVO (sin parpadeo PENDIENTE)", () => {
+    mockResult(trpc.auth.totp.enroll.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+    });
+    // `confirm.isSuccess` = true: el servidor ya confirmó, pero la prop
+    // `enabled` (de `profile.me`) aún no ha llegado (refetch en curso).
+    mockResult(trpc.auth.totp.confirm.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+    });
+    renderTotp({ enabled: false, enrolled: true });
+
+    // F3 P3: la sección no parpadea "PENDIENTE": muestra el estado de éxito
+    // hasta que `profile.me` vuelque a `enabled`.
+    expect(screen.getByRole("status").textContent).toContain("ACTIVA");
+    expect(screen.queryByText(/PENDIENTE/)).not.toBeInTheDocument();
+  });
+
+  it("P2: al re-matricular se resetea la confirmación previa (sin flag stale)", async () => {
+    const confirmReset = vi.fn();
+    // Confirmación previa exitosa: el flag `isSuccess` persiste en la
+    // mutación hasta un `reset()` (TanStack). Si no se resetea, la rama de
+    // éxito se dispararía con 2FA pendiente (callejón sin salida).
+    mockResult(trpc.auth.totp.confirm.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      reset: confirmReset,
+    });
+    mockResult(trpc.auth.totp.enroll.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+    });
+    renderTotp({ enabled: false, enrolled: true });
+
+    // Con el flag stale, la rama de éxito se dispara (por eso hay que
+    // resetearlo antes de que el usuario re-matricule).
+    expect(screen.getByRole("status").textContent).toContain("ACTIVA");
+
+    // Re-matricula: el éxito previo debe borrarse y el QR nuevo mostrarse.
+    const enrollOptions = (
+      trpc.auth.totp.enroll.useMutation as unknown as {
+        mock: { calls: unknown[][] };
+      }
+    ).mock.calls[0]?.[0] as { onSuccess?: (d: unknown) => void };
+    await act(async () => {
+      enrollOptions?.onSuccess?.({
+        secret: "SECRETOSECRETOSECRETOSECRETO",
+        qrDataUrl: "data:image/svg+xml;utf8,qr",
+      });
+    });
+
+    expect(confirmReset).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("img")).toHaveAttribute(
+      "src",
+      "data:image/svg+xml;utf8,qr",
+    );
+  });
+
+  it("P2: al desactivar se resetea la confirmación previa (sin flag stale)", async () => {
+    const confirmReset = vi.fn();
+    mockResult(trpc.auth.totp.confirm.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+      isSuccess: true,
+      reset: confirmReset,
+    });
+    mockResult(trpc.auth.totp.disable.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+    });
+    renderTotp({ enabled: true, enrolled: true });
+
+    // Desactiva: el éxito de la confirmación previa deja de ser relevante.
+    const options = (
+      trpc.auth.totp.disable.useMutation as unknown as {
+        mock: { calls: unknown[][] };
+      }
+    ).mock.calls[0]?.[0] as { onSuccess?: () => void };
+    await act(async () => {
+      options?.onSuccess?.();
+    });
+
+    expect(confirmReset).toHaveBeenCalledTimes(1);
   });
 
   it("activo: confirma el estado y envía la contraseña al desactivar", async () => {

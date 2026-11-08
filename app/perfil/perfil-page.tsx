@@ -5,11 +5,22 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
-import { Alert, Button, Field } from "@/shared/components";
+import { Alert, Button, Field, RowAction } from "@/shared/components";
 import { trpc } from "@/trpc/client";
 import { zodIssues } from "@/trpc/errors";
 
 import { TotpSection } from "./totp-section";
+
+/**
+ * F3 P2: `profile.me` falla con UNAUTHORIZED cuando no hay sesión (estado
+ * normal), pero también puede fallar por un error real (500, red). Solo el
+ * UNAUTHORIZED significa "sin sesión"; el resto es un fallo que hay que
+ * mostrar, no enmascarar como "no has iniciado sesión" (mismo criterio que
+ * la home, F3 P3-1).
+ */
+function isUnauthorized(error: unknown): boolean {
+  return (error as { data?: { code?: string } } | null)?.data?.code === "UNAUTHORIZED";
+}
 
 /** Descarga un objeto como archivo JSON en el navegador (US-03). */
 function downloadJson(data: unknown, filename: string) {
@@ -29,7 +40,10 @@ export default function PerfilPage() {
   const queryClient = useQueryClient();
   const me = trpc.profile.me.useQuery();
   const settings = trpc.notifications.settings.useQuery();
-  const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [exportMessage, setExportMessage] = useState<{
+    kind: "success" | "error";
+    text: string;
+  } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const update = trpc.profile.update.useMutation({
@@ -60,13 +74,28 @@ export default function PerfilPage() {
   });
 
   if (me.isPending) {
-    return <p className="muted">Consultando…</p>;
+    return <p className="pending">Consultando…</p>;
   }
   if (me.isError || !me.data) {
+    if (isUnauthorized(me.error)) {
+      return (
+        <p className="muted">
+          No has iniciado sesión. <a href="/login">Inicia sesión</a>
+        </p>
+      );
+    }
+    // F3 P2: fallo real (500, red): el usuario puede estar logueado — se
+    // muestra el error y se ofrece reintentar, no el camino de login.
     return (
-      <p className="muted">
-        No has iniciado sesión. <a href="/login">Inicia sesión</a>
-      </p>
+      <>
+        <Alert variant="error">
+          No se pudieron cargar tus datos:{" "}
+          {me.error instanceof Error ? me.error.message : "Error desconocido."}
+        </Alert>
+        <Button type="button" onClick={() => me.refetch()}>
+          Reintentar
+        </Button>
+      </>
     );
   }
   // Captura tras la guarda: el narrowing de `me.data` no atraviesa closures.
@@ -91,16 +120,28 @@ export default function PerfilPage() {
     try {
       const result = await exportQuery.refetch();
       downloadJson(result.data, `fantasy-motogp-datos-${meData.username}.json`);
-      setExportMessage("Datos exportados. Revisa la carpeta de descargas.");
+      setExportMessage({
+        kind: "success",
+        text: "Datos exportados. Revisa la carpeta de descargas.",
+      });
     } catch (error) {
-      setExportMessage(
-        error instanceof Error ? `No se pudo exportar: ${error.message}` : "No se pudo exportar.",
-      );
+      setExportMessage({
+        kind: "error",
+        text:
+          error instanceof Error
+            ? `No se pudo exportar: ${error.message}`
+            : "No se pudo exportar.",
+      });
     }
   }
 
   function onDelete(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // Puerta doble: el botón (`aria-disabled` + guarda de `RowAction`) y
+    // esta — el submit del formulario (p. ej. por Enter en la contraseña)
+    // no lo frena el estado del botón, así que el handler revalida la
+    // confirmación antes de enviar.
+    if (!confirmDelete) return;
     const data = new FormData(event.currentTarget);
     deleteAccount.mutate({ password: String(data.get("password") ?? "") });
   }
@@ -165,15 +206,29 @@ export default function PerfilPage() {
         se aplique un recálculo.
       </p>
       {settings.isPending ? (
-        <p className="muted">Consultando…</p>
+        <p className="pending">Consultando…</p>
+      ) : settings.isError ? (
+        // F3 P2: si no se pueden cargar los ajustes, NO se muestra el
+        // formulario con un valor por defecto adivinado (el usuario podría
+        // guardar y volcar su preferencia real): se anuncia el fallo y se
+        // ofrece reintentar.
+        <>
+          <Alert variant="error">
+            No se pudieron cargar tus ajustes de notificación:{" "}
+            {settings.error.message}
+          </Alert>
+          <Button type="button" onClick={() => settings.refetch()}>
+            Reintentar
+          </Button>
+        </>
       ) : (
         <form className="form" onSubmit={onSettings} noValidate>
-          <label className="muted">
+          <label className="check">
             <input
               type="checkbox"
               name="emailEnabled"
               defaultChecked={settings.data?.emailEnabled ?? true}
-            />{" "}
+            />
             Recibir notificaciones por email
           </label>
           {settingsGeneralError && (
@@ -199,13 +254,17 @@ export default function PerfilPage() {
       <Button type="button" onClick={onExport} disabled={exportQuery.isFetching}>
         {exportQuery.isFetching ? "Preparando exportación…" : "Exportar mis datos (JSON)"}
       </Button>
-      {exportMessage && <p className="muted">{exportMessage}</p>}
+      {exportMessage && (
+        <Alert variant={exportMessage.kind === "success" ? "success" : "error"}>
+          {exportMessage.text}
+        </Alert>
+      )}
 
       <h2>Eliminar mi cuenta</h2>
-      <Alert variant="error">
+      <Alert variant="warning">
         Al eliminar tu cuenta se anonimizan tus datos personales, quedas deslogueado y
         sales de todas las ligas. Tu histórico de juego se conserva sin identidad para
-        mantener los rankings (ADR-0016). Esta acción es irreversible.
+        mantener los rankings. Esta acción es irreversible.
       </Alert>
       <form className="form" onSubmit={onDelete} noValidate>
         <Field
@@ -216,22 +275,33 @@ export default function PerfilPage() {
           required
           error={deleteFieldError("password")}
         />
-        <label className="muted">
+        <label className="check">
           <input
             type="checkbox"
             checked={confirmDelete}
             onChange={(e) => setConfirmDelete(e.target.checked)}
-          />{" "}
+          />
           Entiendo que esta acción es irreversible y que mi email quedará libre para
           re-registrarse como cuenta nueva.
         </label>
         {deleteGeneralError && <Alert variant="error">{deleteGeneralError}</Alert>}
-        <Button
+        {/* F3 P1: la única acción irreversible usa el tratamiento destructivo
+            (filete rojo, `RowAction`) — distinto del relleno rojo de las
+            acciones rutinarias (Guardar/Exportar). F3 P3: con motivo de
+            bloqueo (`aria-disabled` + explicación, convención del sistema de
+            diseño); `RowAction` intercepta el clic mientras no se confirma.
+            Transitorio (`isPending`) → `disabled` nativo, sin motivo. */}
+        <RowAction
           type="submit"
           disabled={deleteAccount.isPending || !confirmDelete}
+          disabledReason={
+            deleteAccount.isPending
+              ? undefined
+              : "Marca la casilla para habilitar la eliminación"
+          }
         >
           {deleteAccount.isPending ? "Eliminando cuenta…" : "Eliminar mi cuenta"}
-        </Button>
+        </RowAction>
       </form>
     </div>
   );
