@@ -234,14 +234,17 @@ describe("PuntuacionPage", () => {
     const user = userEvent.setup();
     await openGp1(user);
 
-    // Total con la etiqueta provisional (sin versión de resultados).
+    // Total: solo la versión de reglas (sin duplicar "provisional", que vive
+    // en el aviso del desglose — barrido P3 /resultados). Sin versión de
+    // resultados (provisional).
     expect(screen.getByText("170,5 puntos")).toBeInTheDocument();
-    expect(screen.getByText(/provisional · reglas scoring-v1/)).toBeInTheDocument();
+    expect(screen.getByText(/reglas scoring-v1/)).toBeInTheDocument();
     expect(screen.queryByText(/resultados rv-1/)).not.toBeInTheDocument();
 
-    // Aviso provisional con los eventos incluidos.
+    // Aviso provisional con los eventos incluidos (mayúsculas unificadas,
+    // barrido P3 /resultados).
     expect(screen.getByText("Puntuación provisional")).toBeInTheDocument();
-    expect(screen.getByText(/Q2, sprint/)).toBeInTheDocument();
+    expect(screen.getByText(/Q2, Sprint/)).toBeInTheDocument();
   });
 
   it("estado legítimo «sin resultados» (PRECONDITION_FAILED): neutro (info), no rojo (F3 P1)", async () => {

@@ -73,6 +73,11 @@ export default function ResultadosPage() {
   const seasons = trpc.seasons.list.useQuery();
   const [seasonId, setSeasonId] = useState("");
   const [gpId, setGpId] = useState("");
+  // Barrido P3: respetar la deselección explícita del usuario (sin snap-back).
+  // La auto-selección elige la última temporada / el GP próximo al cargar; si
+  // el usuario elige "— Temporada —" / "— GP —" a propósito, se respeta.
+  const [seasonCleared, setSeasonCleared] = useState(false);
+  const [gpCleared, setGpCleared] = useState(false);
 
   const gps = trpc.seasons.gps.list.useQuery({ seasonId }, { enabled: seasonId !== "" });
   const results = trpc.results.myResults.useQuery({ gpId }, { enabled: gpId !== "" });
@@ -80,21 +85,27 @@ export default function ResultadosPage() {
 
   // Temporada por defecto: la más reciente (F3, patrón /mercado: la lista va
   // en orden ascendente y la temporada activa es la última).
+  // Barrido P3: se salta si el usuario deseleccionó la temporada a propósito
+  // (`seasonCleared`) — sin snap-back.
   useEffect(() => {
-    if (seasonId !== "" || seasons.data === undefined) return;
+    if (seasonId !== "" || seasons.data === undefined || seasonCleared) return;
     const last = seasons.data[seasons.data.length - 1];
     if (last) setSeasonId(last.id);
-  }, [seasons.data, seasonId]);
+  }, [seasons.data, seasonId, seasonCleared]);
 
   // GP por defecto: el primer GP programado por ronda (F3, patrón /mercado):
   // la página abre donde el fan va a mirar, no en "— Temporada —".
+  // Barrido P3: se salta si el usuario deseleccionó el GP a propósito
+  // (`gpCleared`) o la temporada (`seasonCleared`: sin temporada no hay GP) —
+  // sin snap-back.
   useEffect(() => {
-    if (gpId !== "" || gps.data === undefined) return;
+    if (gpId !== "" || gps.data === undefined || gpCleared || seasonCleared)
+      return;
     const next = [...gps.data]
       .sort((a, b) => a.round - b.round)
       .find((g) => g.status === "scheduled");
     if (next) setGpId(next.id);
-  }, [gps.data, gpId]);
+  }, [gps.data, gpId, gpCleared, seasonCleared]);
 
   if (seasons.isPending) {
     return <p className="muted">Consultando…</p>;
@@ -120,6 +131,10 @@ export default function ResultadosPage() {
             onChange={(e) => {
               setSeasonId(e.target.value);
               setGpId("");
+              // Barrido P3: al cambiar de temporada se re-activa la
+              // auto-selección del GP; la deselección de temporada se respeta.
+              setGpCleared(false);
+              setSeasonCleared(e.target.value === "");
             }}
           >
             <option value="">— Temporada —</option>
@@ -133,7 +148,15 @@ export default function ResultadosPage() {
         {seasonId !== "" && (
           <div className="field">
             <label htmlFor="gp">GP</label>
-            <select id="gp" value={gpId} onChange={(e) => setGpId(e.target.value)}>
+            <select
+              id="gp"
+              value={gpId}
+              onChange={(e) => {
+                setGpId(e.target.value);
+                // Barrido P3: la deselección explícita del GP se respeta.
+                setGpCleared(e.target.value === "");
+              }}
+            >
               <option value="">— GP —</option>
               {gps.data?.map((g) => (
                 <option key={g.id} value={g.id}>
@@ -144,7 +167,16 @@ export default function ResultadosPage() {
           </div>
         )}
       </div>
-      {gpId === "" && <p className="muted">Selecciona un GP para ver tus resultados.</p>}
+      {/* Barrido P3: la pista es coherente con el selector visible — si no
+          hay temporada seleccionada, se pide la temporada (el selector de GP
+          no está renderizado); si hay temporada, se pide el GP. Sin
+          temporadas no hay pista engañosa. */}
+      {gpId === "" && seasonId === "" && seasons.data.length > 0 && (
+        <p className="muted">Selecciona una temporada para ver tus resultados.</p>
+      )}
+      {gpId === "" && seasonId !== "" && (
+        <p className="muted">Selecciona un GP para ver tus resultados.</p>
+      )}
 
       {gpId !== "" && results.isPending && <p className="muted">Consultando…</p>}
       {gpId !== "" && results.isError && (
@@ -233,7 +265,10 @@ export default function ResultadosPage() {
 
               {data.recalculation.corrections > 0 && (
                 <div>
-                  <h3>Resultados actualizados</h3>
+                  {/* Barrido P3: la capa de ayuda define "Corrección"; el
+                      titular usa el mismo término (antes "Resultados
+                      actualizados", que no coincidía con el vocabulario). */}
+                  <h3>Correcciones</h3>
                   <Alert variant="info">
                     {data.recalculation.corrections}{" "}
                     {data.recalculation.corrections === 1
@@ -274,8 +309,11 @@ export default function ResultadosPage() {
                   <p>
                     Total: <strong>{fmt(score.data.total)} puntos</strong>{" "}
                     {score.data.status === "provisional" ? (
+                      // Barrido P3: la línea se limita a la versión de reglas;
+                      // la explicación de "provisional" vive en el aviso de
+                      // ScoreBreakdown (sin duplicar la señal).
                       <span className="muted">
-                        (provisional · reglas {score.data.rulesVersion})
+                        (reglas {score.data.rulesVersion})
                       </span>
                     ) : (
                       <span className="muted">

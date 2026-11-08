@@ -302,8 +302,10 @@ describe("ResultadosPage", () => {
     expect(screen.getByText(/general: 2 \(240,5 pts\)/)).toBeInTheDocument();
 
     // Recálculo: aviso + histórico anterior → nuevo (motivo + actor).
+    // Barrido P3: el titular usa el término "Correcciones" (coherente con la
+    // capa de ayuda que define "Corrección"; antes "Resultados actualizados").
     expect(
-      screen.getByRole("heading", { level: 3, name: "Resultados actualizados" }),
+      screen.getByRole("heading", { level: 3, name: "Correcciones" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/1 corrección/)).toBeInTheDocument();
     // Piloto A aparece en el histórico y en el desglose (oro).
@@ -502,9 +504,11 @@ describe("ResultadosPage", () => {
     ).toBeInTheDocument();
     // …pero el desglose se muestra como provisional, con los eventos.
     expect(screen.getByText("170,5 puntos")).toBeInTheDocument();
-    expect(screen.getByText(/provisional · reglas scoring-v1/)).toBeInTheDocument();
+    // Barrido P3: la línea de Total se limita a la versión de reglas; la
+    // explicación de "provisional" vive en el aviso del desglose (sin duplicar).
+    expect(screen.getByText(/reglas scoring-v1/)).toBeInTheDocument();
     expect(screen.getByText("Puntuación provisional")).toBeInTheDocument();
-    expect(screen.getByText(/Q2, sprint/)).toBeInTheDocument();
+    expect(screen.getByText(/Q2, Sprint/)).toBeInTheDocument();
   });
 
   it("muestra el error si `myResults` falla", async () => {
@@ -654,5 +658,66 @@ describe("ResultadosPage", () => {
 
     const delta = screen.getByText("▲ +1 vs GP anterior");
     expect(delta).toHaveClass("ok");
+  });
+
+  it("barrido P3: respeta la deselección explícita del GP (sin snap-back)", async () => {
+    mockSeasons();
+    mockGps();
+    renderResultados(<ResultadosPage />);
+
+    const user = userEvent.setup();
+    // La auto-selección elige la última temporada y el GP programado (GP1).
+    const gpSelect = await screen.findByLabelText("GP");
+    expect(gpSelect).toHaveValue(GP1.id);
+
+    // El usuario deselecciona el GP a propósito ("— GP —").
+    await user.selectOptions(gpSelect, "");
+
+    // Se respeta la deselección (no snap-back): el GP queda vacío…
+    expect(screen.getByLabelText("GP")).toHaveValue("");
+    // …y la pista lo indica (el selector de GP está visible).
+    expect(
+      screen.getByText("Selecciona un GP para ver tus resultados."),
+    ).toBeInTheDocument();
+  });
+
+  it("barrido P3: sin temporada seleccionada pide la temporada (no el GP)", async () => {
+    mockSeasons();
+    mockGps();
+    renderResultados(<ResultadosPage />);
+
+    const user = userEvent.setup();
+    // La auto-selección elige la temporada y el GP.
+    await screen.findByLabelText("GP");
+
+    // El usuario deselecciona la TEMPORADA a propósito ("— Temporada —").
+    await user.selectOptions(screen.getByLabelText("Temporada"), "");
+
+    // La pista pide la temporada (el selector de GP no está renderizado).
+    expect(
+      screen.getByText("Selecciona una temporada para ver tus resultados."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Selecciona un GP para ver tus resultados."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("barrido P3: sin temporadas no hay pista engañosa", () => {
+    // Sin temporadas (lista vacía): ni temporada ni GP que elegir.
+    mockResult(trpc.seasons.list.useQuery, {
+      data: [],
+      isPending: false,
+      isError: false,
+    });
+    renderResultados(<ResultadosPage />);
+
+    // No hay pista "Selecciona un GP…" (el selector de GP no está renderizado)…
+    expect(
+      screen.queryByText("Selecciona un GP para ver tus resultados."),
+    ).not.toBeInTheDocument();
+    // …ni la de temporada (no hay temporadas que elegir).
+    expect(
+      screen.queryByText("Selecciona una temporada para ver tus resultados."),
+    ).not.toBeInTheDocument();
   });
 });

@@ -150,7 +150,8 @@ describe("ScoreBreakdown", () => {
     render(<ScoreBreakdown score={SCORE_PROVISIONAL} />);
 
     expect(screen.getByText("Puntuación provisional")).toBeInTheDocument();
-    expect(screen.getByText(/Q2, sprint/)).toBeInTheDocument();
+    // Mayúsculas unificadas con RiderRow (barrido P3 /resultados).
+    expect(screen.getByText(/Q2, Sprint/)).toBeInTheDocument();
     // Sigue mostrando el desglose completo.
     expect(screen.getByText("Piloto A")).toBeInTheDocument();
   });

@@ -134,9 +134,10 @@ export default function PuntuacionPage() {
           <p>
             Total: <strong>{fmt(score.data.total)} puntos</strong>{" "}
             {score.data.status === "provisional" ? (
-              <span className="muted">
-                (provisional · reglas {score.data.rulesVersion})
-              </span>
+              // Barrido P3 /resultados (afecta a ambas páginas, mismo patrón):
+              // la línea se limita a la versión de reglas; la explicación de
+              // "provisional" vive en el aviso de ScoreBreakdown (sin duplicar).
+              <span className="muted">(reglas {score.data.rulesVersion})</span>
             ) : (
               <span className="muted">
                 (definitivo · reglas {score.data.rulesVersion} · resultados{" "}

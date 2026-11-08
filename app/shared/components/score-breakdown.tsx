@@ -23,11 +23,15 @@ export function fmt(value: number): string {
   return new Intl.NumberFormat("es-ES", { maximumFractionDigits: 2 }).format(value);
 }
 
-/** Etiquetas en español de los eventos de un fin de semana (ADR-0031). */
+/**
+ * Etiquetas en español de los eventos de un fin de semana (ADR-0031).
+ * Mayúsculas unificadas con `RiderRow` (Q2/Sprint/Carrera) y `CODE_LABELS`
+ * (barrido P3 /resultados: antes "sprint"/"carrera" en minúsculas).
+ */
 const EVENT_LABELS: Record<string, string> = {
   q2: "Q2",
-  sprint: "sprint",
-  race: "carrera",
+  sprint: "Sprint",
+  race: "Carrera",
 };
 
 /** Lista legible de los eventos incluidos en la puntuación (ADR-0031). */
