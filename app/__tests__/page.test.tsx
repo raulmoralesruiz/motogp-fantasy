@@ -588,8 +588,8 @@ describe("Dashboard (US-15)", () => {
     renderDashboard(dashboardOk);
     const cardEl = card("Mis ligas");
     expect(cardEl.getByText("Liga A")).toBeInTheDocument();
-    expect(cardEl.getByText(/GP: posición 2 \(150.5 pts\)/)).toBeInTheDocument();
-    expect(cardEl.getByText(/General: posición 3 \(800.25 pts\)/)).toBeInTheDocument();
+    expect(cardEl.getByText(/GP: posición 2 \(150,5 pts\)/)).toBeInTheDocument();
+    expect(cardEl.getByText(/General: posición 3 \(800,25 pts\)/)).toBeInTheDocument();
     // F3 P2: el nombre de la liga enlaza a su detalle.
     expect(cardEl.getByRole("link", { name: "Liga A" })).toHaveAttribute(
       "href",

@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { Alert, Button, ConfirmDialog, type ConfirmRequest } from "@/shared/components";
+import { formatNumber } from "@/shared/format";
 import { GP_STATUS_LABELS } from "@/modules/seasons/gp-status";
 import type { AssetType } from "@/shared/validation/market";
 import { trpc } from "@/trpc/client";
@@ -184,7 +185,7 @@ export default function PricesPanel() {
         <Alert variant="success">
           P0 calculado: {p0Heuristic.data.ridersPriced} pilotos,{" "}
           {p0Heuristic.data.teamsPriced} equipos, {p0Heuristic.data.constructorsPriced}{" "}
-          constructores (rango {p0Heuristic.data.minPrice}–{p0Heuristic.data.maxPrice}).
+          constructores (rango {formatNumber(p0Heuristic.data.minPrice)}–{formatNumber(p0Heuristic.data.maxPrice)}).
         </Alert>
       )}
 
@@ -221,7 +222,7 @@ export default function PricesPanel() {
           {assets.data.map((asset) => (
             <li key={asset.assetId}>
               <strong>{asset.name}</strong>
-              {asset.openingPrice !== null ? ` — P0: ${asset.openingPrice}` : " — sin P0"}
+              {asset.openingPrice !== null ? ` — P0: ${formatNumber(asset.openingPrice)}` : " — sin P0"}
             </li>
           ))}
         </ul>
@@ -315,7 +316,7 @@ export default function PricesPanel() {
                   {row.gpRound === null
                     ? "Apertura (P0)"
                     : `Ronda ${row.gpRound} — ${row.gpName}`}
-                  : <strong>{row.price}</strong> (
+                  : <strong>{formatNumber(row.price)}</strong> (
                   {row.reason === "manual" ? "manual" : "fórmula"})
                 </li>
               ))}
@@ -535,7 +536,7 @@ export default function PricesPanel() {
                         <td>R{c.gpRound}</td>
                         <td>{c.assetName}</td>
                         <td>
-                          {c.previousPrice ?? "—"} → {c.newPrice}
+                          {c.previousPrice !== null ? formatNumber(c.previousPrice) : "—"} → {formatNumber(c.newPrice)}
                         </td>
                         <td>{c.reason === "formula" ? "fórmula" : "manual"}</td>
                         <td>{c.rulesVersion ?? "—"}</td>

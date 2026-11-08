@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { Alert } from "@/shared/components";
+import { formatNumber } from "@/shared/format";
 import { trpc } from "@/trpc/client";
 import { friendlyMessage, isUnauthorized } from "@/trpc/errors";
 
@@ -156,23 +157,23 @@ function DashboardSection() {
             <>
               <ul className="status">
                 <li>
-                  Presupuesto: <strong>{d.budget ? d.budget.total : "—"}</strong>{" "}
+                  Presupuesto: <strong>{d.budget ? formatNumber(d.budget.total) : "—"}</strong>{" "}
                   <span className="muted">
-                    (base {d.budget ? d.budget.base : "—"} + carry{" "}
-                    {d.budget ? d.budget.carry : "—"})
+                    (base {d.budget ? formatNumber(d.budget.base) : "—"} + carry{" "}
+                    {d.budget ? formatNumber(d.budget.carry) : "—"})
                   </span>
                 </li>
                 {d.lineup ? (
                   <>
                     <li>
-                      Coste: <strong>{d.lineup.cost}</strong>
+                      Coste: <strong>{formatNumber(d.lineup.cost)}</strong>
                     </li>
                     {/* F3 P3: el saldo solo se colorea cuando es negativo
                         (señal negativa); un saldo positivo es neutro, no un logro. */}
                     <li>
                       Saldo:{" "}
                       <strong className={d.lineup.balance < 0 ? "bad" : undefined}>
-                        {d.lineup.balance}
+                        {formatNumber(d.lineup.balance)}
                       </strong>
                     </li>
                     <li>
@@ -213,13 +214,14 @@ function DashboardSection() {
                     <ul>
                       {league.gpPosition !== null && (
                         <li>
-                          GP: posición {league.gpPosition} ({league.gpPoints} pts)
+                          GP: posición {league.gpPosition} (
+                          {league.gpPoints !== null ? formatNumber(league.gpPoints) : "—"} pts)
                         </li>
                       )}
                       {league.overallPosition !== null && (
                         <li>
                           General: posición {league.overallPosition} (
-                          {league.overallPoints} pts)
+                          {league.overallPoints !== null ? formatNumber(league.overallPoints) : "—"} pts)
                         </li>
                       )}
                     </ul>

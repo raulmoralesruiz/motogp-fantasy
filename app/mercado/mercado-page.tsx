@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { Alert, RowAction } from "@/shared/components";
+import { formatNumber } from "@/shared/format";
 import { trpc } from "@/trpc/client";
 
 /** Tipo de activo (misma enumeración que `AssetType` en `shared/validation/market`). */
@@ -21,6 +22,9 @@ interface ChartPoint {
  * Validación local del filtro de precio (el servidor revalida con Zod —
  * AGENTS.md §8). Vacío → sin filtro; valor no vacío inválido → error local
  * y el filtro NO se envía.
+ *
+ * Acepta el separador decimal español: "17,4" → 17.4 (la UI es en español,
+ * AGENTS.md §2; el display usa `formatNumber` con coma).
  */
 function parsePriceFilter(
   value: string,
@@ -30,15 +34,15 @@ function parsePriceFilter(
   error?: string;
 } {
   if (value.trim() === "") return {};
-  const n = Number(value);
+  const n = Number(value.replace(",", "."));
   if (!Number.isFinite(n) || n <= 0) {
-    return { error: `${label}: introduce un número positivo.` };
+    return { error: `${label}: introduce un número válido (usa coma para decimales, p. ej. 17,4).` };
   }
   if (n > 9999.99) {
-    return { error: `${label}: el precio no puede superar 9999.99.` };
+    return { error: `${label}: el precio no puede superar ${formatNumber(9999.99)}.` };
   }
   if (Number(n.toFixed(2)) !== n) {
-    return { error: `${label}: máximo 2 decimales.` };
+    return { error: `${label}: máximo 2 decimales (p. ej. 17,45).` };
   }
   return { number: n };
 }
@@ -49,9 +53,9 @@ const TREND_LABEL: Record<PriceTrend, string> = {
   flat: "Estable",
 };
 
-/** Variación con signo (+2.6 / −1.5), sin ceros finales innecesarios. */
+/** Variación con signo (+2,6 / −1,5), sin ceros finales innecesarios. */
 function formatDelta(delta: number): string {
-  const value = Number(Math.abs(delta).toFixed(2));
+  const value = formatNumber(Math.abs(delta));
   return delta > 0 ? `+${value}` : `−${value}`;
 }
 
@@ -104,8 +108,8 @@ function Sparkline({
       height={height}
       role="img"
       aria-label={`Mini-histórico: ${points
-        .map((p) => `${p.label} ${p.price}`)
-        .join(", ")}`}
+        .map((p) => `${p.label} ${formatNumber(p.price)}`)
+        .join("; ")}`}
     >
       {points.length >= 2 && (
         <polyline
@@ -151,8 +155,8 @@ function PriceChart({ points }: { points: ChartPoint[] }) {
       width="100%"
       role="img"
       aria-label={`Histórico de precios: ${points
-        .map((p) => `${p.label} ${p.price}`)
-        .join(", ")}`}
+        .map((p) => `${p.label} ${formatNumber(p.price)}`)
+        .join("; ")}`}
     >
       {points.length >= 2 && (
         <polyline
@@ -172,7 +176,7 @@ function PriceChart({ points }: { points: ChartPoint[] }) {
             fontSize="12"
             fill="var(--fg)"
           >
-            {p.price}
+            {formatNumber(p.price)}
           </text>
           <text
             x={x(i)}
@@ -502,7 +506,7 @@ export default function MercadoPage() {
                         {a.currentPrice === null ? (
                           <span className="muted">—</span>
                         ) : (
-                          a.currentPrice
+                          formatNumber(a.currentPrice)
                         )}
                         {a.isP0Fallback && <span className="muted"> (P0)</span>}
                       </td>
@@ -552,7 +556,7 @@ export default function MercadoPage() {
                       <strong>
                         {detail.data.asset.currentPrice === null
                           ? "—"
-                          : detail.data.asset.currentPrice}
+                          : formatNumber(detail.data.asset.currentPrice)}
                       </strong>
                       {detail.data.asset.isP0Fallback && (
                         <span className="muted"> (precio de apertura P0)</span>
@@ -609,7 +613,7 @@ export default function MercadoPage() {
                           <tr key={h.id}>
                             <td>{h.gpRound === null ? "P0" : `J${h.gpRound}`}</td>
                             <td>{h.gpName ?? "—"}</td>
-                            <td>{h.price}</td>
+                            <td>{formatNumber(h.price)}</td>
                             <td>{h.reason === "formula" ? "Fórmula" : "Manual"}</td>
                             <td>{h.createdAt.toISOString().slice(0, 10)}</td>
                           </tr>

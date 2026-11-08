@@ -1,4 +1,5 @@
 import type { MyScoreView, RiderScoreView } from "@/modules/results";
+import { formatNumber } from "@/shared/format";
 
 import { Alert } from "./alert";
 
@@ -18,9 +19,12 @@ function codeLabel(code: string): string {
   return CODE_LABELS[code] ?? code;
 }
 
-/** Formatea un número de puntos (sin ceros sobrantes, coma decimal en es). */
+/**
+ * Formatea un número de puntos (sin ceros sobrantes, coma decimal en es).
+ * Delega en `formatNumber` (app/shared/format.ts) — única fuente de formato.
+ */
 export function fmt(value: number): string {
-  return new Intl.NumberFormat("es-ES", { maximumFractionDigits: 2 }).format(value);
+  return formatNumber(value);
 }
 
 /**

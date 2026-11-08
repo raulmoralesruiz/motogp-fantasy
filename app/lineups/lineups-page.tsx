@@ -10,6 +10,7 @@ import {
   ConfirmDialog,
   type ConfirmRequest,
 } from "@/shared/components";
+import { formatNumber } from "@/shared/format";
 import { trpc } from "@/trpc/client";
 
 /** Borrador del lineup (IDs de activos; el servidor recalcula el coste). */
@@ -352,7 +353,7 @@ export default function LineupsPage() {
     if (found === undefined) return null;
     return found.price === null
       ? "Sin precio para este GP."
-      : `Precio: ${found.price}`;
+      : `Precio: ${formatNumber(found.price)}`;
   }
 
   /** Precio del constructor/equipo elegido (misma intención, F3). */
@@ -365,7 +366,7 @@ export default function LineupsPage() {
     if (found === undefined) return null;
     return found.price === null
       ? "Sin precio para este GP."
-      : `Precio: ${found.price}`;
+      : `Precio: ${formatNumber(found.price)}`;
   }
 
   // `now` (tick de 30 s), no `new Date()` del último render: el estado no
@@ -620,7 +621,7 @@ export default function LineupsPage() {
             return (
               <option key={r.riderId} value={r.riderId} disabled={disabled}>
                 {r.name} ({r.teamName})
-                {r.price === null ? " — sin precio" : ` — ${r.price}`}
+                {r.price === null ? " — sin precio" : ` — ${formatNumber(r.price)}`}
                 {alreadyTaken ? " — ya en otro slot" : ""}
               </option>
             );
@@ -810,9 +811,9 @@ export default function LineupsPage() {
               </li>
             )}
             <li>
-              Presupuesto: <strong>{builder.data.budget.total}</strong>{" "}
+              Presupuesto: <strong>{formatNumber(builder.data.budget.total)}</strong>{" "}
               <span className="muted">
-                (base {builder.data.budget.base} + carry {builder.data.budget.carry})
+                (base {formatNumber(builder.data.budget.base)} + carry {formatNumber(builder.data.budget.carry)})
               </span>
             </li>
             {/* Dos sub-bloques en lenguaje de fan (F3 P2): lo que YA está en
@@ -822,7 +823,7 @@ export default function LineupsPage() {
               <li>
                 Tu lineup (en juego):{" "}
                 <strong>
-                  coste {lineup.data.cost} · saldo {lineup.data.balance}
+                  coste {formatNumber(lineup.data.cost)} · saldo {formatNumber(lineup.data.balance)}
                 </strong>{" "}
                 <span className="muted">
                   · cambios restantes {lineup.data.remainingChanges}
@@ -838,17 +839,17 @@ export default function LineupsPage() {
                 señal de "cambios sin guardar" pierde sentido (A P2). */}
             <li className={draftDirty && !gpClosed ? "status-dirty" : undefined}>
               {gpClosed ? "Coste del borrador:" : "Si guardas ahora:"}{" "}
-              <strong>coste {draftCost === null ? "—" : draftCost}</strong>
+              <strong>coste {draftCost === null ? "—" : formatNumber(draftCost)}</strong>
               {draftCost !== null &&
                 (builder.data.budget.total - draftCost < 0 ? (
                   // Sobrecoste: señal semántica (F3 P1-2) — el fan no debe
                   // descubrir al pulsar "Guardar" que el borrador no cabe.
                   <span className="bad">
-                    {`· saldo ${round2(builder.data.budget.total - draftCost)} — excede el presupuesto en ${round2(draftCost - builder.data.budget.total)}`}
+                    {`· saldo ${formatNumber(round2(builder.data.budget.total - draftCost))} — excede el presupuesto en ${formatNumber(round2(draftCost - builder.data.budget.total))}`}
                   </span>
                 ) : (
                   <span className="muted">
-                    · saldo {round2(builder.data.budget.total - draftCost)}
+                    · saldo {formatNumber(round2(builder.data.budget.total - draftCost))}
                   </span>
                 ))}
               {draftDirty && !gpClosed && (
@@ -893,7 +894,7 @@ export default function LineupsPage() {
                 {builder.data.constructors.map((c) => (
                   <option key={c.id} value={c.id} disabled={c.price === null}>
                     {c.name}
-                    {c.price === null ? " — sin precio" : ` — ${c.price}`}
+                    {c.price === null ? " — sin precio" : ` — ${formatNumber(c.price)}`}
                   </option>
                 ))}
               </select>
@@ -914,7 +915,7 @@ export default function LineupsPage() {
                 {builder.data.teams.map((t) => (
                   <option key={t.id} value={t.id} disabled={t.price === null}>
                     {t.name} ({t.constructorName})
-                    {t.price === null ? " — sin precio" : ` — ${t.price}`}
+                    {t.price === null ? " — sin precio" : ` — ${formatNumber(t.price)}`}
                   </option>
                 ))}
               </select>
@@ -1011,7 +1012,7 @@ export default function LineupsPage() {
                     {change.costBefore !== null && change.costAfter !== null && (
                       <span className="muted">
                         {" "}
-                        (coste {change.costBefore} → {change.costAfter})
+                        (coste {formatNumber(change.costBefore)} → {formatNumber(change.costAfter)})
                       </span>
                     )}
                     {reason !== null && (

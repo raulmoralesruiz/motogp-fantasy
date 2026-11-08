@@ -74,6 +74,25 @@ const RIDER_C: MarketAssetView = {
   popularity: 1,
 };
 
+/** Activo con precios decimales (es-ES: se muestran con coma). */
+const RIDER_D: MarketAssetView = {
+  assetId: "r4",
+  name: "Piloto Cuatro",
+  constructorId: "ctor-a",
+  constructorName: "Ctor A",
+  teamId: "team-a",
+  teamName: "Team A",
+  currentPrice: 17.4,
+  isP0Fallback: false,
+  trend: "up",
+  delta: 2.6,
+  miniHistory: [
+    { gpId: null, gpRound: null, gpName: null, price: 14.8 },
+    { gpId: "gp-1", gpRound: 1, gpName: "GP de Qatar", price: 17.4 },
+  ],
+  popularity: 2,
+};
+
 const DETAIL_R1: MarketDetailView = {
   asset: RIDER_A,
   history: [
@@ -314,7 +333,7 @@ describe("MercadoPage (US-14)", () => {
     // Mini-histórico: un sparkline por activo (SVG con aria-label).
     expect(screen.getAllByRole("img")).toHaveLength(3);
     expect(
-      screen.getByRole("img", { name: "Mini-histórico: P0 20, J1 22" }),
+      screen.getByRole("img", { name: "Mini-histórico: P0 20; J1 22" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("img", { name: "Mini-histórico: P0 10" }),
@@ -442,7 +461,9 @@ describe("MercadoPage (US-14)", () => {
     await user.type(screen.getByLabelText("Precio mínimo"), "abc");
 
     expect(
-      screen.getByText("Precio mínimo: introduce un número positivo."),
+      screen.getByText(
+        "Precio mínimo: introduce un número válido (usa coma para decimales, p. ej. 17,4).",
+      ),
     ).toBeInTheDocument();
     expect(lastListInput()).not.toHaveProperty("priceMin");
   });
@@ -457,9 +478,45 @@ describe("MercadoPage (US-14)", () => {
     await user.type(screen.getByLabelText("Precio mínimo"), "10.555");
 
     expect(
-      screen.getByText("Precio mínimo: máximo 2 decimales."),
+      screen.getByText("Precio mínimo: máximo 2 decimales (p. ej. 17,45)."),
     ).toBeInTheDocument();
     expect(lastListInput()).not.toHaveProperty("priceMin");
+  });
+
+  it("precio con coma decimal (es-ES): se acepta y envía como número", async () => {
+    mockSeasons();
+    mockGps();
+    mockMarketList();
+    renderMercado(<MercadoPage />);
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Precio mínimo"), "17,4");
+    await user.type(screen.getByLabelText("Precio máximo"), "29,99");
+
+    expect(lastListInput()).toMatchObject({ priceMin: 17.4, priceMax: 29.99 });
+    // Sin error: el campo NO lleva aria-invalid.
+    expect(screen.getByLabelText("Precio mínimo")).not.toHaveAttribute(
+      "aria-invalid",
+    );
+  });
+
+  it("precios decimales: display con coma (es-ES) en lista, tendencia y sparkline", async () => {
+    mockSeasons();
+    mockGps();
+    mockMarketList([RIDER_D]);
+    renderMercado(<MercadoPage />);
+
+    // Precio actual de la fila: 17,4 (no 17.4).
+    expect(screen.getByText("17,4")).toBeInTheDocument();
+    expect(screen.queryByText("17.4")).not.toBeInTheDocument();
+
+    // Tendencia con Δ: +2,6 (no +2.6).
+    expect(screen.getByText("Sube +2,6")).toBeInTheDocument();
+
+    // Sparkline (aria): valores con coma.
+    expect(
+      screen.getByRole("img", { name: "Mini-histórico: P0 14,8; J1 17,4" }),
+    ).toBeInTheDocument();
   });
 
   it("rango de precio válido: envía priceMin y priceMax", async () => {
@@ -506,7 +563,7 @@ describe("MercadoPage (US-14)", () => {
 
     // Gráfico completo (SVG) con las etiquetas P0 / J1.
     expect(
-      screen.getByRole("img", { name: "Histórico de precios: P0 20, J1 22" }),
+      screen.getByRole("img", { name: "Histórico de precios: P0 20; J1 22" }),
     ).toBeInTheDocument();
 
     // Histórico completo: P0 (manual) + J1 (fórmula).
@@ -675,7 +732,7 @@ describe("MercadoPage (US-14)", () => {
     await user.type(screen.getByLabelText("Precio mínimo"), "10000");
 
     expect(
-      screen.getByText("Precio mínimo: el precio no puede superar 9999.99."),
+      screen.getByText("Precio mínimo: el precio no puede superar 9999,99."),
     ).toBeInTheDocument();
     expect(lastListInput()).not.toHaveProperty("priceMin");
   });
@@ -714,7 +771,9 @@ describe("MercadoPage (US-14)", () => {
     await user.type(screen.getByLabelText("Precio máximo"), "abc");
 
     expect(
-      screen.getByText("Precio máximo: introduce un número positivo."),
+      screen.getByText(
+        "Precio máximo: introduce un número válido (usa coma para decimales, p. ej. 17,4).",
+      ),
     ).toBeInTheDocument();
     const maxInput = screen.getByLabelText("Precio máximo");
     expect(maxInput).toHaveAttribute("aria-invalid", "true");
@@ -840,7 +899,7 @@ describe("MercadoPage (US-14)", () => {
     await user.click(screen.getByRole("button", { name: "Piloto Uno" }));
 
     expect(
-      screen.getByRole("img", { name: "Histórico de precios: P0 20, J1 20" }),
+      screen.getByRole("img", { name: "Histórico de precios: P0 20; J1 20" }),
     ).toBeInTheDocument();
   });
 

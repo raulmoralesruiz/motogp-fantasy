@@ -7,6 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
 import type { LeagueStatus, LeagueType } from "@/modules/leagues";
+import { formatNumber } from "@/shared/format";
 import {
   Alert,
   Button,
@@ -549,7 +550,8 @@ export default function LeagueDetailPage() {
           <ol className="status">
             {ranking.data.entries.map((e) => (
               <li key={e.position}>
-                {e.username} <span className="muted">— {e.points} pts</span>
+                {e.username}{" "}
+                <span className="muted">— {formatNumber(e.points)} pts</span>
               </li>
             ))}
           </ol>

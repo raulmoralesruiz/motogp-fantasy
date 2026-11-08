@@ -241,7 +241,7 @@ describe("LeagueDetailPage (US-24)", () => {
     renderDetail(<LeagueDetailPage />);
 
     // Los puntos son únicos del ranking (los miembros no los muestran).
-    expect(screen.getByText(/170\.5 pts/)).toBeInTheDocument();
+    expect(screen.getByText(/170,5 pts/)).toBeInTheDocument();
     expect(screen.getByText(/120 pts/)).toBeInTheDocument();
   });
 

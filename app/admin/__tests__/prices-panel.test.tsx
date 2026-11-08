@@ -1009,7 +1009,7 @@ describe("PricesPanel · Recalcular temporada (calibración P0, ADR-0032)", () =
     // Fila de corrección: antes → después.
     expect(screen.getByText("21 → 20")).toBeInTheDocument();
     // Fila creada: sin precio previo.
-    expect(screen.getByText("— → 7.83")).toBeInTheDocument();
+    expect(screen.getByText("— → 7,83")).toBeInTheDocument();
     expect(screen.getByText("Ducati Lenovo Team")).toBeInTheDocument();
     expect(screen.getByText("R3")).toBeInTheDocument();
     // Las dos filas: motivo «fórmula» y versión «pricing-v1».
