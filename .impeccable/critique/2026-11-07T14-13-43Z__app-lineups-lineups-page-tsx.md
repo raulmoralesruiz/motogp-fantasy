@@ -77,3 +77,18 @@ Los 8 son de pulido; ninguno rompe flujo, da señal falsa ni pierde trabajo. Se 
 2. ¿Debe un GP `finished` verse cerrado visualmente aunque el servidor aún permita guardar, para evitar guardar en un GP ya disputado?
 3. Dado el compromiso de "el trabajo del fan no se pierde en silencio", ¿el borrador debería persistirse por GP para sobrevivir a una recarga?
 4. Con tres botones apilados de tamaño similar (Guardar/Descartar/Wildcard), ¿deberían subordinarse visualmente los secundarios para que "Guardar" sea el primario inequívoco?
+
+## Barrido P2/P3 — cierre (2026-11-08)
+
+Los 8 P3 de "Issues residuales" se corrigieron en esta pasada (barrido, opción (a) del usuario). Ninguno era P0/P1/P2; todos de pulido. Cierre:
+
+1. **Sticky de acciones (375px)** — el bloque Guardar/Descartar/Limpiar ahora vive en `.form-actions` (nueva clase en `globals.css`), sticky al fondo en ≤768px con fondo propio: "Guardar lineup" no cae fuera de pliegue tras los 6 selects.
+2. **Error de carga + Reintentar** — el error del builder ahora acompaña un botón `Reintentar` que llama a `builder.refetch()` (sin recargar la página).
+3. **Wildcard `irreversible`** — el ConfirmRequest del wildcard pasa `irreversible: true`: el impacto sale como `Alert variant="warning"` (rol `alert`), mismo tratamiento que /admin (recurso escaso + reescritura).
+4. **Historial `.status`** — la bitácora usa `ul.status` (lista de estado del sistema), no viñetas por defecto.
+5. **Fecha con hora** — el historial usa `toLocaleString("es-ES", {dateStyle:"short", timeStyle:"short"})`: dos cambios el mismo día se distinguen por la hora.
+6. **"Limpiar borrador"** — botón secundario cuando `lineup.data == null && !lineup.isPending && anySlotFilled(draft)`: vacía el borrador nuevo sin pasar por "Cambiar de GP" (que exige confirmación).
+7. **Éxito 0 cambios → wildcard** — el éxito sugiere el wildcard cuando `remainingChanges === 0 && wildcardAvailable` (no promete un recurso ya gastado).
+8. **Prefill no pisa** — el prefill se salta si `anySlotFilled(draft)`: la elección del usuario (carrera rara, prefill tardío) no se sobrescribe.
+
+**Verificación:** typecheck ✓ · lint 0 errores ✓ · unit 903/903 ✓ · UI 701/701 (4 tests nuevos: Reintentar, wildcard `irreversible`, Limpiar borrador, prefill no pisa; 3 tests de fecha actualizados a hora) ✓ · build ✓ · detector `impeccable detect --json app/lineups/lineups-page.tsx app/globals.css` → solo findings preexistentes (L117 side-tab warning; L371/L766 font-size advisory — los antiguos L356/L751 desplazados +15 por el bloque `.form-actions`), 0 findings nuevos.
