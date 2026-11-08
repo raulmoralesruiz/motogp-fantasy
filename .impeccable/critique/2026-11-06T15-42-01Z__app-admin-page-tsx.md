@@ -106,3 +106,11 @@ Los 8 puntos de la crítica anterior están corregidos y verificados en el códi
 2. **¿Cuánto vale "Importar los 3 eventos"?** Si el operador repite el mismo ciclo 3 veces por fin de semana, el lote no es un lujo: son 2 confirmaciones y 2 scrolls menos por carrera.
 3. **¿La consola del fin de semana es el futuro del panel?** Si "¿qué hago ahora?" se responde bien en la consola, ¿las otras 8 secciones no deberían empezar a parecerse a ella: estado + motivo + siguiente paso, en vez de CRUD?
 4. **¿El panel envejece bien?** La densidad que hoy ahorra clicks al admin-autor mañana puede ahogar a un segundo operador.
+
+## Barrido P2/P3 — cierre (2026-11-08)
+
+- **P3 «`<ul>` desnudo de eventos del GP»** — CERRADO: `gp-actions.tsx` pasa de `<ul>` a `<ul className="status">` (misma piel de lista que el resto del panel; antes: lista sin la disciplina de `.status`).
+- **P3 «estado "sin transiciones" por ausencia de acciones»** — YA CUBIERTO (el revisor no lo vio): la etiqueta `sin transiciones` ya existe en `results-section.tsx` (añadida en `3779cb6`, anterior a este snapshot) — `!canCancel && !canNeutralize → <span className="muted">sin transiciones</span>`, con test (`results-section.test.tsx:1979`).
+- **P3 «h2 dentro de tarjetas colapsadas» / «UUIDs truncados en afiliaciones»** — ABIERTOS (triage por coste/riesgo): nits de layout y de densidad, no bloqueantes; fuera del alcance de pulido (requieren reestructuración del panel, ver P2 de densidad).
+
+Puertas en verde (2026-11-08): typecheck, lint 0 errores, unit 903/903, UI 705/705, build, detector `impeccable detect --json` → `[]` sobre `app/admin/gp-actions.tsx`.

@@ -39,3 +39,12 @@ Method: dual-agent (A: design director · B: detector)
 5. **P3 — las páginas legales reutilizan `<section className="form">` para layout** — nit de consistencia menor, no funcional. (R6.)
 
 **Veredicto:** CERRADO — 0 P0/P1 (R6 38/40); 1 P2 + 4 P3 documentados como trade-offs aceptados.
+
+## Barrido P2/P3 — cierre (2026-11-08)
+
+- **P2 #1 «sin gate de regresión de 44 px en las páginas de auth»** — CERRADO: `assertTouchTargets` se extiende al describe de auth en `test/e2e/responsive.test.ts` (login + registro, 375/390/430 px; antes solo corría en el builder). Un cambio de CSS futuro que rompa la Regla de los 44 en auth ahora se detecta.
+- **P3 #2 «la aserción del gate contradice el patrón del checkbox»** — CERRADO (opción «documentar»): el helper `assertTouchTargets` excluye `input[type="checkbox"]`/`[type="radio"]` — su target táctil es la etiqueta envolvente (`.form .check`/`.check-cell`, 44 px en CSS), no el `<input>` (20 px, solo el indicador visual). El checkbox de términos queda cubierto por `.form .check` (44 px).
+- **P3 #3 «el checkbox de términos carece de `aria-invalid`/`aria-describedby`»** — CERRADO: `register-form.tsx` cablea ambos igual que `Field` (`aria-invalid` + `aria-describedby="termsAccepted-error"`; el error lleva `id="termsAccepted-error"`). Los lectores de pantalla anuncian el error «debes aceptar los términos». Tests: aserción de estado de error (ARIA presente) + estado limpio (ARIA ausente) en `register-form.test.tsx`.
+- **P3 #4 «copy «opuesto a la automatización»» / P3 #5 «páginas legales reutilizan `<section className="form">`»** — ABIERTOS (triage por coste/riesgo): nit de copy y de layout, no bloqueantes; fuera del alcance de pulido.
+
+Puertas en verde (2026-11-08): typecheck, lint 0 errores, unit 903/903, UI 705/705, build, detector `impeccable detect --json` → `[]` sobre `app/registro/register-form.tsx`.
