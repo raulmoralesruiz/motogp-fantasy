@@ -15,7 +15,7 @@
  *   presupuesto, saldo, cambios restantes).
  * - Posición en cada liga activa (por GP y general; nulls si US-21 aún no
  *   calcula); membresías `left` excluidas.
- * - Avisos: lockout (warning si futuro / error si pasado) y recálculo
+ * - Avisos: lockout (warning si futuro o pasado — el cierre es un estado esperado, no un fallo) y recálculo
  *   (nº de correcciones + última fecha; solo GPs con lineup del usuario).
  * - RBAC: 401 sin sesión.
  *
@@ -27,25 +27,18 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import {
-  CapturingEmailSender,
-  createPrisma,
-  integrationDbUrl,
-} from "./helpers";
+import { CapturingEmailSender, createPrisma, integrationDbUrl } from "./helpers";
 
 // Antes de importar los módulos de la app (sus singletons leen env al cargar).
 process.env.DATABASE_URL = integrationDbUrl();
 process.env.REDIS_URL ??= "redis://localhost:6379/0"; // dummy: lazyConnect, no se conecta
 
 const { createAuthRouter } = await import("../../app/server/routers/auth");
-const { createDashboardRouter } = await import(
-  "../../app/server/routers/dashboard"
-);
+const { createDashboardRouter } = await import("../../app/server/routers/dashboard");
 const { createContext } = await import("../../app/server/trpc");
-const { InMemoryRateLimitStore, InMemoryTotpChallengeStore } = await import("../../app/modules/identity");
-const { PROVISIONAL_SEASON_RULES } = await import(
-  "../../app/shared/config/season-rules"
-);
+const { InMemoryRateLimitStore, InMemoryTotpChallengeStore } =
+  await import("../../app/modules/identity");
+const { PROVISIONAL_SEASON_RULES } = await import("../../app/shared/config/season-rules");
 
 const suffix = randomUUID().slice(0, 8);
 const email = (name: string) => `${name}-${suffix}@test.local`;
@@ -249,11 +242,36 @@ describe("US-15 · Dashboard (PostgreSQL real)", () => {
     });
     await prisma.lineupSlot.createMany({
       data: [
-        { lineupId: lineup.id, slotType: "gold", assetType: "rider", assetId: riderIds[0] ?? "" },
-        { lineupId: lineup.id, slotType: "gold", assetType: "rider", assetId: riderIds[1] ?? "" },
-        { lineupId: lineup.id, slotType: "silver", assetType: "rider", assetId: riderIds[2] ?? "" },
-        { lineupId: lineup.id, slotType: "silver", assetType: "rider", assetId: riderIds[3] ?? "" },
-        { lineupId: lineup.id, slotType: "constructor", assetType: "constructor", assetId: ctorId },
+        {
+          lineupId: lineup.id,
+          slotType: "gold",
+          assetType: "rider",
+          assetId: riderIds[0] ?? "",
+        },
+        {
+          lineupId: lineup.id,
+          slotType: "gold",
+          assetType: "rider",
+          assetId: riderIds[1] ?? "",
+        },
+        {
+          lineupId: lineup.id,
+          slotType: "silver",
+          assetType: "rider",
+          assetId: riderIds[2] ?? "",
+        },
+        {
+          lineupId: lineup.id,
+          slotType: "silver",
+          assetType: "rider",
+          assetId: riderIds[3] ?? "",
+        },
+        {
+          lineupId: lineup.id,
+          slotType: "constructor",
+          assetType: "constructor",
+          assetId: ctorId,
+        },
         { lineupId: lineup.id, slotType: "team", assetType: "team", assetId: teamId },
       ],
     });
@@ -565,7 +583,7 @@ describe("US-15 · Dashboard (PostgreSQL real)", () => {
     expect(lockout?.at?.toISOString()).toBe(lockoutAt.toISOString());
   });
 
-  it("lockout pasado: aviso error y cerrado = true", async () => {
+  it("lockout pasado: aviso warning y cerrado = true", async () => {
     const lockoutAt = new Date(Date.now() - 3600 * 1000);
     await prisma.gp.update({
       where: { id: gpA2Id },
@@ -575,10 +593,11 @@ describe("US-15 · Dashboard (PostgreSQL real)", () => {
     const { dashboard } = await callerFor(USER_IP, userToken);
     const view = await dashboard.get();
     expect(view.nextGp?.closed).toBe(true);
+    // F3 P2: el cierre es un estado esperado, no un fallo → warning, no error.
     const lockout = view.notices.find((n) => n.kind === "lockout");
     expect(lockout).toMatchObject({
       kind: "lockout",
-      severity: "error",
+      severity: "warning",
       gpId: gpA2Id,
     });
   });

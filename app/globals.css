@@ -83,6 +83,13 @@ h3 {
   color: var(--bad);
 }
 
+/* Señal de atención neutra (F3 P1): el cierre de cambios (lockout) es un
+   estado esperado (ocurre cada GP), no un fallo → ámbar, no rojo. El rojo
+   (`.bad`) se reserva para señal negativa real (saldo negativo, degradación). */
+.warn {
+  color: var(--warning);
+}
+
 /* Lista de estado (utilidad compartida, 22 usos): líneas divisorias sin
    caja interior (P3-2) — el contenedor (card, diálogo, main) ya pone el
    fondo y el borde; aquí solo separa filas, alineado con el contenido. */
@@ -103,9 +110,9 @@ h3 {
 
 /* Fila de estado destacada (borrador con cambios sin guardar, /lineups):
    acento ÁMBAR por la izquierda — señal de ATENCIÓN NEUTRA ("esto cambia al
-   guardar"), no negativa (F3 P2: el rojo se reserva para señal negativa —
-   sobrecoste, lockout, error). Tinte 10% (Regla del Tinte 10/40, como las
-   alertas). */
+   guardar"), no negativa (F3 P2: el rojo se reserva para señal negativa real —
+   sobrecoste, error; el lockout es atención neutra, `.warn`). Tinte 10%
+   (Regla del Tinte 10/40, como las alertas). */
 .status li.status-dirty {
   border-left: 3px solid var(--warning);
   padding-left: 0.75rem;
@@ -311,7 +318,9 @@ h5 {
    Subhead (0.9 rem/600): la escala tipográfica está cerrada (DESIGN.md)
    y el CTA no introduce un nivel propio. */
 .card .cta {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px; /* T-16: target táctil ≥ 44 px (Regla de los 44). */
   margin-top: 0.6rem;
   padding: 0.6rem 1rem;
   font-size: 0.9rem;
@@ -319,6 +328,74 @@ h5 {
   color: var(--on-accent);
   background: var(--accent);
   border-radius: 6px;
+}
+
+/* Fila de CTA (home, F3 P1): acciones de arranque lado a lado. */
+.cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cta-row .button {
+  margin-top: 0;
+}
+
+/* Hero (home, F3 P2): la primera impresión ancla la landing — h1 y tagline
+   un paso por encima de la escala global (solo la home usa estas clases). */
+.hero-title {
+  font-size: 2.5rem;
+  line-height: 1.15;
+}
+
+.hero-tagline {
+  font-size: 1.125rem;
+  max-width: 46rem;
+}
+
+/* Texto pendiente (home, F3 P3): pulso sutil y consistente — la señal de
+   "cargando" sin skeleton (la home no tiene rejilla estable que esquelizar). */
+.pending {
+  animation: pending-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pending-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* F3 P2: respetar la preferencia de movimiento reducido — sin pulso. */
+@media (prefers-reduced-motion: reduce) {
+  .pending {
+    animation: none;
+  }
+}
+
+/* Pasos (landing anónima, home F3 P1): lista ordenada legible, filas
+   separadas como `.status`. */
+.steps {
+  list-style: decimal;
+  padding-left: 1.5rem;
+  margin: 0.5rem 0 1rem;
+}
+
+.steps li {
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.steps li:last-child {
+  border-bottom: none;
+}
+
+/* Navegación de secciones (home, F3 P2): target táctil ≥ 44 px (T-16).
+   Solo afecta a la nav de secciones de la home, no a los 22 usos de `.status`. */
+.sections-nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
 }
 
 /* Panel admin: navegación ancla entre secciones (sticky). */

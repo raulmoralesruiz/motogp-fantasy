@@ -22,6 +22,21 @@ import { GpService } from "@/modules/seasons";
 import { prisma } from "../prisma";
 import { protectedProcedure, router } from "../trpc";
 
+/**
+ * Fecha legible en español para los mensajes del dashboard (F3 P2-3): antes
+ * se embebía `toISOString()` (texto crudo) en el aviso. Misma convención que
+ * el panel admin (`formatDateTime`): es-ES, día/mes/año + hora:minuto.
+ */
+function formatFechaEs(date: Date): string {
+  return date.toLocaleString("es-ES", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export type DashboardNoticeKind = "lockout" | "recalculo";
 export type DashboardNoticeSeverity = "error" | "warning" | "info";
 
@@ -106,9 +121,11 @@ export function createDashboardRouter(deps: DashboardRouterDeps) {
       const notices: DashboardNotice[] = [];
       if (gp) {
         if (closed) {
+          // F3 P2: el cierre es un estado esperado (ocurre cada GP), no un
+          // fallo → warning, no error. El rojo se reserva para fallos reales.
           notices.push({
             kind: "lockout",
-            severity: "error",
+            severity: "warning",
             message: `El GP ${gp.name} está bloqueado (lockout): no se pueden guardar lineups.`,
             gpId: gp.id,
             gpName: gp.name,
@@ -118,7 +135,7 @@ export function createDashboardRouter(deps: DashboardRouterDeps) {
           notices.push({
             kind: "lockout",
             severity: "warning",
-            message: `Cierre de lineups (lockout) del GP ${gp.name} el ${gp.lockoutAt.toISOString()}.`,
+            message: `Cierre de lineups (lockout) del GP ${gp.name} el ${formatFechaEs(gp.lockoutAt)}.`,
             gpId: gp.id,
             gpName: gp.name,
             at: gp.lockoutAt,
@@ -131,7 +148,7 @@ export function createDashboardRouter(deps: DashboardRouterDeps) {
           severity: "info",
           message: `Resultados actualizados en ${recalc.gpName} (${recalc.corrections} ${
             recalc.corrections === 1 ? "corrección" : "correcciones"
-          }, última el ${recalc.lastAt.toISOString()}).`,
+          }, última el ${formatFechaEs(recalc.lastAt)}).`,
           gpId: recalc.gpId,
           gpName: recalc.gpName,
           at: recalc.lastAt,
