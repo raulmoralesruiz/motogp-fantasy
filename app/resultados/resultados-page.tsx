@@ -193,16 +193,21 @@ export default function ResultadosPage() {
           ) : (
             <>
               <h2>Mis resultados — {data.gp.name}</h2>
+              {/* Estado del GP (animate A2): el chip lleva el estado (ok/info),
+                  el texto muted el detalle. El definitivo confirma su llegada
+                  con un beat sutil (globals.css); el provisional queda quieto
+                  (en curso — azul informativo, no aviso). */}
               <p>
                 {data.state.definitive ? (
                   <>
-                    Resultados definitivos{" "}
+                    <span className="gp-state gp-state--definitive">Definitivo</span>{" "}
                     <span className="muted">(versión {data.state.resultsVersion})</span>
                   </>
                 ) : (
-                  <span className="muted">
-                    Aún no hay resultados definitivos en este GP.
-                  </span>
+                  <>
+                    <span className="gp-state gp-state--provisional">Provisional</span>{" "}
+                    <span className="muted">aún sin confirmar</span>
+                  </>
                 )}
               </p>
 

@@ -285,7 +285,11 @@ describe("ResultadosPage", () => {
     expect(
       screen.getByRole("heading", { level: 2, name: "Mis resultados — GP de Le Mans" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Resultados definitivos")).toBeInTheDocument();
+    // Estado del GP (animate A2): chip definitivo (ok) + versión en muted;
+    // los dos estados son mutuamente excluyentes (el chip lleva uno solo).
+    const chipDef = screen.getByText("Definitivo");
+    expect(chipDef).toHaveClass("gp-state", "gp-state--definitive");
+    expect(chipDef).not.toHaveClass("gp-state--provisional");
     expect(screen.getByText("(versión rv-2)")).toBeInTheDocument();
 
     // Capa de ayuda de vocabulario (F3): delta, general, provisional, corrección.
@@ -368,9 +372,12 @@ describe("ResultadosPage", () => {
     const user = userEvent.setup();
     await openGp2(user);
 
-    expect(
-      screen.getByText("Aún no hay resultados definitivos en este GP."),
-    ).toBeInTheDocument();
+    // Estado del GP (animate A2): chip provisional (info, no aviso) + detalle
+    // muted; mutuamente excluyente del definitivo.
+    const chipProv = screen.getByText("Provisional");
+    expect(chipProv).toHaveClass("gp-state", "gp-state--provisional");
+    expect(chipProv).not.toHaveClass("gp-state--definitive");
+    expect(screen.getByText("aún sin confirmar")).toBeInTheDocument();
     expect(
       screen.getByText(/Este GP aún no tiene resultados importados/),
     ).toBeInTheDocument();
@@ -498,10 +505,9 @@ describe("ResultadosPage", () => {
     const user = userEvent.setup();
     await openGp2(user);
 
-    // El GP no es definitivo todavía…
-    expect(
-      screen.getByText("Aún no hay resultados definitivos en este GP."),
-    ).toBeInTheDocument();
+    // El GP no es definitivo todavía… (animate A2: chip provisional, no texto)
+    const chipProv = screen.getByText("Provisional");
+    expect(chipProv).toHaveClass("gp-state", "gp-state--provisional");
     // …pero el desglose se muestra como provisional, con los eventos.
     expect(screen.getByText("170,5 puntos")).toBeInTheDocument();
     // Barrido P3: la línea de Total se limita a la versión de reglas; la

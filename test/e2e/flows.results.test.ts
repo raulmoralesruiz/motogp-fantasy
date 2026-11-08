@@ -75,13 +75,10 @@ test.describe("resultados y ranking tras un GP (T-11)", () => {
 
     await expect(page.getByRole("heading", { name: /Mis resultados —/i })).toBeVisible();
 
-    // Estado del GP: definitivo (si la cadena de admin ya lo marcó) o
-    // provisional — ambas son respuestas válidas del servidor.
+    // Estado del GP (animate A2): chip definitivo (si la cadena de admin ya
+    // lo marcó) o provisional — ambas son respuestas válidas del servidor.
     await expect(
-      page
-        .getByText("Resultados definitivos")
-        .or(page.getByText("Aún no hay resultados definitivos en este GP."))
-        .first(),
+      page.getByText("Definitivo").or(page.getByText("Provisional")).first(),
     ).toBeVisible();
 
     // Posiciones en ligas: con posición, sin posición (sin Score aún) o sin

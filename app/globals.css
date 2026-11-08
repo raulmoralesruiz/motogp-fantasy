@@ -23,9 +23,12 @@
   --warning: #d29922;
   --info: #58a6ff;
   /* Motion (animate A1): duraciones + easing de referencia. fast = feedback
-     inmediato de control; base = cambio de estado de rutina (p. ej. pestaña). */
+     inmediato de control; base = cambio de estado de rutina (p. ej. pestaña).
+     focal (animate A2): el único beat de la app — la llegada del estado
+     definitivo del GP en /resultados. */
   --motion-fast: 120ms;
   --motion-base: 200ms;
+  --motion-focal: 400ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -60,6 +63,53 @@ select {
     background-color var(--motion-base) var(--ease-out),
     border-color var(--motion-base) var(--ease-out),
     color var(--motion-base) var(--ease-out);
+}
+
+/* Estado del GP (animate A2): provisional → definitivo hecho legible de un
+   vistazo — el chip lleva el estado, el texto muted el detalle (versión).
+   Definitivo = ok (cerrado); provisional = info (en curso, semántica
+   documentada: «puntuación provisional» = azul informativo — nunca ámbar,
+   que es aviso/excepcional como el GP cancelado). El chip es inline para
+   convivir con el texto del párrafo que lo acompaña.
+   Dentro del sistema: radio de control (6 px, no píldora), texto Subhead
+   (0.9 rem, escala cerrada) y Tinte 10/40 del color de estado. */
+.gp-state {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.5;
+  border: 1px solid;
+  vertical-align: middle;
+}
+
+.gp-state--provisional {
+  color: var(--info);
+  border-color: color-mix(in srgb, var(--info) 40%, transparent);
+  background: color-mix(in srgb, var(--info) 10%, transparent);
+}
+
+/* Momento focal (animate A2): el estado definitivo "llega" — un solo beat
+   (--motion-focal, ease-out) que asienta de un tinte fuerte al tinte de
+   reposo (40/10). Solo border-color/background-color (sin geometría,
+   sección «Motion»). Corre una vez por nodo: al primer render del estado
+   definitivo (la llegada del estado al usuario) y de nuevo si el GP pasa de
+   provisional a definitivo con la página abierta; no se repite al cambiar
+   de GP (mismo nodo, clase estable). Confirmación, no coreografía de carga. */
+@keyframes gp-state-settle {
+  from {
+    border-color: color-mix(in srgb, var(--ok) 90%, transparent);
+    background: color-mix(in srgb, var(--ok) 22%, transparent);
+  }
+}
+
+.gp-state--definitive {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
+  animation: gp-state-settle var(--motion-focal) var(--ease-out);
 }
 
 * {
@@ -438,6 +488,11 @@ h5 {
    (color, opacidad, borde); solo se elimina el movimiento. */
 @media (prefers-reduced-motion: reduce) {
   .pending {
+    animation: none;
+  }
+  /* A2: sin el asentar del chip definitivo — se conserva el color/etiqueta
+     (la legibilidad del estado definitivo/provisional no depende del beat). */
+  .gp-state--definitive {
     animation: none;
   }
   .button,
