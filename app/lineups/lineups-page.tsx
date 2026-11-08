@@ -370,10 +370,39 @@ export default function LineupsPage() {
 
   // `now` (tick de 30 s), no `new Date()` del último render: el estado no
   // puede quedarse congelado en "abierto" pasado el lockout.
-  const gpClosed = builder.data
-    ? builder.data.gp.status === "locked" ||
-      (builder.data.gp.lockoutAt !== null && now >= builder.data.gp.lockoutAt)
-    : false;
+  //
+  // Hardening: el GP no admite guardados por tres motivos distintos —
+  // `locked` (lockout explícito o por plazo), `finished` (carrera ya
+  // disputada) o `cancelled` (carrera cancelada — 0 puntos). Antes solo se
+  // miraba `locked`/`lockoutAt`: un GP cancelado (o finalizado con el
+  // lockout ya pasado) seguía "guardable" en la UI. La prioridad es la más
+  // terminal primero: un GP cancelado no es "bloqueado por plazo".
+  const gpClosedReason: "locked" | "finished" | "cancelled" | null = builder.data
+    ? builder.data.gp.status === "cancelled"
+      ? "cancelled"
+      : builder.data.gp.status === "finished"
+        ? "finished"
+        : builder.data.gp.status === "locked" ||
+            (builder.data.gp.lockoutAt !== null && now >= builder.data.gp.lockoutAt)
+          ? "locked"
+          : null
+    : null;
+
+  const gpClosed = gpClosedReason !== null;
+
+  /**
+   * Motivo escrito del cierre del GP (nunca un control bloqueado sin
+   * explicación). Nombra el estado real — finalizado, cancelado o lockout —
+   * no todo "bloqueado". `null` si el GP sigue abierto.
+   */
+  const gpClosedLabel =
+    gpClosedReason === "cancelled"
+      ? "El GP está cancelado."
+      : gpClosedReason === "finished"
+        ? "El GP está finalizado."
+        : gpClosedReason === "locked"
+          ? "El GP está bloqueado (lockout)."
+          : null;
 
   /**
    * Plazo de cierre (F3 P2): el deadline es el dato más importante de la
@@ -401,9 +430,10 @@ export default function LineupsPage() {
    * bloqueado sin explicación). Sin motivo (guardando) el bloqueo es
    * transitorio y se queda `disabled` nativo.
    */
-  // Se dice QUÉ falta exactamente, no la fórmula entera (F3).
-  const disabledReason = gpClosed
-    ? "El GP está bloqueado (lockout)."
+  // Se dice QUÉ falta exactamente, no la fórmula entera (F3). El motivo del
+  // GP nombra el estado real (harden): finalizado, cancelado o lockout.
+  const disabledReason = gpClosedLabel
+    ? gpClosedLabel
     : !draftComplete
       ? `Composición incompleta: faltan ${missingSlots(draft).join(", ")}.`
       : undefined;
@@ -558,8 +588,8 @@ export default function LineupsPage() {
   }
 
   /** Motivo de bloqueo del botón de wildcard (nunca un control sin explicación). */
-  const wildcardDisabledReason = gpClosed
-    ? "El GP está bloqueado (lockout)."
+  const wildcardDisabledReason = gpClosedLabel
+    ? gpClosedLabel
     : !draftComplete
       ? `Composición incompleta: faltan ${missingSlots(draft).join(", ")}.`
       : !wildcardAvailable
@@ -677,27 +707,65 @@ export default function LineupsPage() {
           </Button>
         </div>
       )}
-      {/* F3 P2: un fallo de `lineups.get`/`history` no puede pasar en
-          silencio — el fan TIENE lineup en juego y no puede componer sobre
-          el vacío creyendo que no hay nada. */}
-      {gpId !== "" && lineup.isError && (
-        <Alert variant="warning">
-          No se pudo cargar tu lineup guardado; el borrador parte de vacío.
-        </Alert>
-      )}
-      {gpId !== "" && history.isError && (
-        <Alert variant="warning">
-          No se pudo cargar el historial de cambios de este GP.
-        </Alert>
-      )}
-
-      {gpId !== "" && builder.data && (
-        <div>
-          {gpClosed && (
+      {/* Hardening: cada estado terminal del GP nombra su motivo real —
+          cancelado (0 puntos), finalizado (ya no se modifica) o lockout —
+          con la variante de color que le corresponde (no todo "error").
+          Se lee ANTES de los fallos de carga: es el dato más relevante para
+          decidir (A P2-2: no enterrar el estado bajo dos avisos ámbar). */}
+      {gpId !== "" && gpClosedReason !== null && (
+        <>
+          {gpClosedReason === "cancelled" && (
+            <Alert variant="warning">
+              GP cancelado: tu lineup no puntuará (0 puntos).
+            </Alert>
+          )}
+          {gpClosedReason === "finished" && (
+            <Alert variant="info">
+              GP finalizado: ya no se puede guardar ni modificar.
+            </Alert>
+          )}
+          {gpClosedReason === "locked" && (
             <Alert variant="error">
               El GP está bloqueado (lockout): no se pueden guardar lineups.
             </Alert>
           )}
+        </>
+      )}
+      {/* F3 P2: un fallo de `lineups.get`/`history` no puede pasar en
+          silencio — el fan TIENE lineup en juego y no puede componer sobre
+          el vacío creyendo que no hay nada. Hardening: error accionable —
+          reintentar sin recargar (mismo patrón que `builder.isError`). */}
+      {gpId !== "" && lineup.isError && (
+        <div className="stack">
+          <Alert variant="warning">
+            No se pudo cargar tu lineup guardado; el borrador parte de vacío.
+          </Alert>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => lineup.refetch()}
+          >
+            Reintentar
+          </Button>
+        </div>
+      )}
+      {gpId !== "" && history.isError && (
+        <div className="stack">
+          <Alert variant="warning">
+            No se pudo cargar el historial de cambios de este GP.
+          </Alert>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => history.refetch()}
+          >
+            Reintentar
+          </Button>
+        </div>
+      )}
+
+      {gpId !== "" && builder.data && (
+        <div>
           {/* F3 P2: el deadline se lee ANTES de que el lockout lo oculte —
               en una cabina operativa el plazo de cierre es el dato central. */}
           {!gpClosed &&
@@ -727,8 +795,10 @@ export default function LineupsPage() {
           </p>
           <ul className="status">
             {/* F3 P2: el plazo de cierre se lee siempre (no solo al bloquear)
-                — el deadline es el dato más importante de la ventana. */}
-            {lockoutAt !== null && (
+                — el deadline es el dato más importante de la ventana.
+                Hardening (A P3-7): un GP cancelado no tiene ventana de
+                cambios que cerrar — la fila se oculta solo en ese estado. */}
+            {lockoutAt !== null && gpClosedReason !== "cancelled" && (
               <li>
                 Cierre de cambios:{" "}
                 <strong>
@@ -762,9 +832,12 @@ export default function LineupsPage() {
             {/* Coste en vivo SIEMPRE (F3): también al editar un lineup
                 guardado — la restricción central no pierde su lectura justo
                 cuando más se necesita. Destacada (status-dirty) si el
-                borrador tiene cambios sin guardar. */}
-            <li className={draftDirty ? "status-dirty" : undefined}>
-              Si guardas ahora:{" "}
+                borrador tiene cambios sin guardar. Hardening (A P1): en un GP
+                cerrado la fila nombra el coste del borrador (dato de
+                referencia), no "Si guardas ahora" — guardar es imposible y la
+                señal de "cambios sin guardar" pierde sentido (A P2). */}
+            <li className={draftDirty && !gpClosed ? "status-dirty" : undefined}>
+              {gpClosed ? "Coste del borrador:" : "Si guardas ahora:"}{" "}
               <strong>coste {draftCost === null ? "—" : draftCost}</strong>
               {draftCost !== null &&
                 (builder.data.budget.total - draftCost < 0 ? (
@@ -778,7 +851,7 @@ export default function LineupsPage() {
                     · saldo {round2(builder.data.budget.total - draftCost)}
                   </span>
                 ))}
-              {draftDirty && (
+              {draftDirty && !gpClosed && (
                 <span className="muted">· cambios sin guardar</span>
               )}
             </li>

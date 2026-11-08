@@ -798,6 +798,220 @@ describe("LineupsPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("harden: GP finalizado — alerta de estado y guardado deshabilitado", async () => {
+    mockSeasons();
+    mockGps();
+    mockBuilder(GP1, { status: "finished" });
+    mockLineup(null);
+    renderLineups(<LineupsPage />);
+
+    const user = userEvent.setup();
+    await openGp1(user);
+
+    expect(
+      screen.getByText("GP finalizado: ya no se puede guardar ni modificar."),
+    ).toBeInTheDocument();
+
+    // Con la composición completa, el bloqueo sigue por estado y el motivo
+    // escrito nombra el estado real (no "bloqueado por lockout").
+    await fillDraft(user);
+    const button = screen.getByRole("button", { name: "Guardar lineup" });
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    const saveReason = button.getAttribute("aria-describedby");
+    expect(saveReason).not.toBeNull();
+    expect(document.getElementById(saveReason!)).toHaveTextContent(
+      "El GP está finalizado.",
+    );
+  });
+
+  it("harden: GP cancelado — alerta de 0 puntos y guardado deshabilitado", async () => {
+    mockSeasons();
+    mockGps();
+    mockBuilder(GP1, { status: "cancelled" });
+    mockLineup(null);
+    renderLineups(<LineupsPage />);
+
+    const user = userEvent.setup();
+    await openGp1(user);
+
+    expect(
+      screen.getByText("GP cancelado: tu lineup no puntuará (0 puntos)."),
+    ).toBeInTheDocument();
+
+    await fillDraft(user);
+    const button = screen.getByRole("button", { name: "Guardar lineup" });
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    const saveReason = button.getAttribute("aria-describedby");
+    expect(saveReason).not.toBeNull();
+    expect(document.getElementById(saveReason!)).toHaveTextContent(
+      "El GP está cancelado.",
+    );
+  });
+
+  it("harden: GP cancelado no se confunde con lockout (prioridad de estado)", async () => {
+    // Un GP cancelado con lockoutAt en el pasado sigue nombrando "cancelado"
+    // (la prioridad es la más terminal primero), no "bloqueado por plazo".
+    mockSeasons();
+    mockGps();
+    mockBuilder(GP1, {
+      status: "cancelled",
+      lockoutAt: new Date(Date.now() - 3600_000),
+    });
+    mockLineup(null);
+    renderLineups(<LineupsPage />);
+
+    const user = userEvent.setup();
+    await openGp1(user);
+
+    expect(
+      screen.getByText("GP cancelado: tu lineup no puntuará (0 puntos)."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "El GP está bloqueado (lockout): no se pueden guardar lineups.",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
+  it("harden: GP cerrado — la fila de coste nombra el borrador, no 'Si guardas ahora' (A P1)", async () => {
+    mockSeasons();
+    mockGps();
+    mockBuilder(GP1, { status: "finished" });
+    mockLineup(null);
+    renderLineups(<LineupsPage />);
+
+    const user = userEvent.setup();
+    await openGp1(user);
+
+    // En un GP cerrado la fila no sugiere una acción imposible: nombra el
+    // coste del borrador (dato de referencia) y no "Si guardas ahora".
+    expect(
+      screen.getByText("Coste del borrador:"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Si guardas ahora:"),
+    ).not.toBeInTheDocument();
+    // La señal de "cambios sin guardar" pierde sentido: no se muestra.
+    await fillDraft(user);
+    expect(
+      screen.queryByText("· cambios sin guardar"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("harden: GP cancelado — la fila de plazo de cierre se oculta (A P3-7)", async () => {
+    mockSeasons();
+    mockGps();
+    // Un GP cancelado con lockoutAt fijado: no tiene ventana de cambios que
+    // cerrar, así que la fila "Cierre de cambios" no se muestra.
+    mockBuilder(GP1, {
+      status: "cancelled",
+      lockoutAt: new Date(Date.now() - 3600_000),
+    });
+    mockLineup(null);
+    renderLineups(<LineupsPage />);
+
+    const user = userEvent.setup();
+    await openGp1(user);
+
+    expect(screen.queryByText(/Cierre de cambios:/)).not.toBeInTheDocument();
+    // El estado sí se nombra.
+    expect(
+      screen.getByText("GP cancelado: tu lineup no puntuará (0 puntos)."),
+    ).toBeInTheDocument();
+  });
+
+  it("harden: GP cancelado + fallos de carga — el estado se lee primero (A P2-2)", async () => {
+    mockSeasons();
+    mockGps();
+    mockBuilder(GP1, { status: "cancelled" });
+    mockResult(trpc.lineups.get.useQuery, {
+      data: null,
+      isPending: false,
+      isError: true,
+      error: new Error("fallo de red"),
+      refetch: vi.fn(),
+    });
+    mockResult(trpc.lineups.history.useQuery, {
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: new Error("fallo de red"),
+      refetch: vi.fn(),
+    });
+    renderLineups(<LineupsPage />);
+
+    const user = userEvent.setup();
+    await openGp1(user);
+
+    // El estado del GP (dato más relevante para decidir) se lee ANTES de los
+    // dos fallos de carga — no enterrado bajo ellos.
+    const stateAlert = screen.getByText(
+      "GP cancelado: tu lineup no puntuará (0 puntos).",
+    );
+    const lineupError = screen.getByText(
+      "No se pudo cargar tu lineup guardado; el borrador parte de vacío.",
+    );
+    expect(
+      lineupError.compareDocumentPosition(stateAlert) &
+        Node.DOCUMENT_POSITION_PRECEDING,
+    ).toBe(Node.DOCUMENT_POSITION_PRECEDING);
+  });
+
+  it("harden: fallo de lineup guardado — error accionable con reintentar", async () => {
+    mockSeasons();
+    mockGps();
+    mockBuilder(GP1);
+    const refetch = vi.fn();
+    mockResult(trpc.lineups.get.useQuery, {
+      data: null,
+      isPending: false,
+      isError: true,
+      error: new Error("fallo de red"),
+      refetch,
+    });
+    renderLineups(<LineupsPage />);
+
+    const user = userEvent.setup();
+    await openGp1(user);
+
+    expect(
+      screen.getByText(
+        "No se pudo cargar tu lineup guardado; el borrador parte de vacío.",
+      ),
+    ).toBeInTheDocument();
+
+    const retry = screen.getByRole("button", { name: "Reintentar" });
+    await user.click(retry);
+    expect(refetch).toHaveBeenCalled();
+  });
+
+  it("harden: fallo de historial — error accionable con reintentar", async () => {
+    mockSeasons();
+    mockGps();
+    mockBuilder(GP1);
+    mockLineup(null);
+    const refetch = vi.fn();
+    mockResult(trpc.lineups.history.useQuery, {
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: new Error("fallo de red"),
+      refetch,
+    });
+    renderLineups(<LineupsPage />);
+
+    const user = userEvent.setup();
+    await openGp1(user);
+
+    expect(
+      screen.getByText("No se pudo cargar el historial de cambios de este GP."),
+    ).toBeInTheDocument();
+
+    const retry = screen.getByRole("button", { name: "Reintentar" });
+    await user.click(retry);
+    expect(refetch).toHaveBeenCalled();
+  });
+
   it("lockout próximo: el tick de 30 s re-evalúa el estado sin recargar", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-01T12:00:00Z"));
