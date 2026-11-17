@@ -1,3 +1,4 @@
+export { AssetPicker, type AssetPickerSlot } from "./asset-picker";
 export { Alert } from "./alert";
 export { Button } from "./button";
 export { Header } from "./header";

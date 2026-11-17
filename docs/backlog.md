@@ -333,6 +333,9 @@
   - CA: solo se planifica con peticiones reales de usuarios/organizadores.
 - **US-40 · Notificaciones push (web push)** — Dep: US-36 (2026-11-01).
   - CA: canal push (VAPID + service worker + `push_subscriptions`) sobre los mismos eventos de US-36 (`definitive_published`/`recalculation_applied`), reutilizando `NotificationService` (canal inyectable) y los ajustes de usuario (toggle push); sin proveedor externo.
+- **US-41 · Seleccionador gráfico de activos en el builder de lineups** — Dep: US-09 (2026-11-17).
+  - CA: los 6 `<select>` del builder se sustituyen por tarjetas de slot + rejilla de activos con avatar generativo (dorsal o iniciales, color derivado determinísticamente del nombre — sin imágenes licenciadas); búsqueda, filtro por equipo y orden por precio; asignación por clic con slot activo; estados deshabilitados con motivo ("sin precio para este GP", "ya en otro slot") y acción de quitar; borrador solo IDs y coste/budget server-side sin cambios (invariante 2); lockout/wildcard/historial/`beforeunload` sin regresión; lógica nueva en módulo puro `app/shared/picker.ts` (sin I/O) con tests de unit; tests UI/E2E reescritos (3 viewports T-16, touch targets ≥ 44 px, sin overflow horizontal).
+  - **ADR-0041** (2026-11-17): avatar generativo (dorsal/iniciales + hash de color), un solo componente para los 6 slots, color del equipo por hash como estética no semántica; equipo de colores configurables diferido.
 
 ---
 

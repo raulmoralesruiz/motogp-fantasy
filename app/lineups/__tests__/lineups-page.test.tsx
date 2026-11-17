@@ -197,14 +197,61 @@ function mutationOptions(hook: unknown): {
   };
 }
 
-/** Rellena la composición completa: 2 oro + 2 plata + constructor + equipo. */
+/**
+ * Asigna `assetName` al slot `slotLabel` con el picker gráfico (US-41,
+ * ADR-0041): primero toca el slot (queda activo) y después la tarjeta del
+ * activo en la rejilla. (Los selects de temporada/GP siguen siendo nativos;
+ * solo los 6 slots del builder pasaron a tarjetas.)
+ */
+async function assignSlot(
+  user: ReturnType<typeof userEvent.setup>,
+  slotLabel: string,
+  assetName: string,
+) {
+  await user.click(
+    screen.getByRole("button", { name: new RegExp(`^${slotLabel} `) }),
+  );
+  // La tarjeta expone su nombre accesible "Nombre, Sublínea, Precio",
+  // así que se ancla al inicio (el nombre del activo nunca precede a un
+  // slot; el slot, por su etiqueta, nunca a un activo).
+  await user.click(
+    screen.getByRole("button", {
+      name: new RegExp(`^${assetName}([, ]|$)`),
+    }),
+  );
+}
+
+/**
+ * Rellena la composición completa: 2 oro + 2 plata + constructor + equipo.
+ * Idempotente: un slot ya asignado a ese activo se SALTA (re-tocar su
+ * tarjeta lo vaciaría — semántica de clic del picker, US-41).
+ */
 async function fillDraft(user: ReturnType<typeof userEvent.setup>) {
-  await user.selectOptions(screen.getByLabelText("Piloto oro 1"), "r1");
-  await user.selectOptions(screen.getByLabelText("Piloto oro 2"), "r2");
-  await user.selectOptions(screen.getByLabelText("Piloto plata 1"), "r3");
-  await user.selectOptions(screen.getByLabelText("Piloto plata 2"), "r4");
-  await user.selectOptions(screen.getByLabelText("Constructor"), "ctor-a");
-  await user.selectOptions(screen.getByLabelText("Equipo"), "team-a");
+  const plan: Array<[string, string]> = [
+    ["Piloto oro 1", "Piloto Uno"],
+    ["Piloto oro 2", "Piloto Dos"],
+    ["Piloto plata 1", "Piloto Tres"],
+    ["Piloto plata 2", "Piloto Cuatro"],
+    ["Constructor", "Ctor A"],
+    ["Equipo", "Team A"],
+  ];
+  for (const [slotLabel, assetName] of plan) {
+    if (
+      screen.queryByRole("button", {
+        name: `${slotLabel} ${assetName}`,
+      })
+    ) {
+      continue;
+    }
+    await assignSlot(user, slotLabel, assetName);
+  }
+}
+
+/** Botón de slot del picker: nombre accesible = etiqueta + asignado/"Vacío". */
+function slotButton(slotLabel: string, assignedName: string | null) {
+  return screen.getByRole("button", {
+    name: `${slotLabel} ${assignedName ?? "Vacío"}`,
+  });
 }
 
 /** Navega hasta el builder del GP1 (temporada + GP). */
@@ -316,13 +363,13 @@ describe("LineupsPage", () => {
     expect(screen.getByText("coste 80")).toBeInTheDocument();
     expect(screen.getByText("· saldo 20")).toBeInTheDocument();
 
-    // Prefill desde el lineup guardado.
-    expect(screen.getByLabelText("Piloto oro 1")).toHaveValue("r1");
-    expect(screen.getByLabelText("Piloto oro 2")).toHaveValue("r2");
-    expect(screen.getByLabelText("Piloto plata 1")).toHaveValue("r3");
-    expect(screen.getByLabelText("Piloto plata 2")).toHaveValue("r4");
-    expect(screen.getByLabelText("Constructor")).toHaveValue("ctor-a");
-    expect(screen.getByLabelText("Equipo")).toHaveValue("team-a");
+    // Prefill desde el lineup guardado (los slots muestran su activo).
+    expect(slotButton("Piloto oro 1", "Piloto Uno")).toBeInTheDocument();
+    expect(slotButton("Piloto oro 2", "Piloto Dos")).toBeInTheDocument();
+    expect(slotButton("Piloto plata 1", "Piloto Tres")).toBeInTheDocument();
+    expect(slotButton("Piloto plata 2", "Piloto Cuatro")).toBeInTheDocument();
+    expect(slotButton("Constructor", "Ctor A")).toBeInTheDocument();
+    expect(slotButton("Equipo", "Team A")).toBeInTheDocument();
   });
 
   it("barrido P3: el prefill no pisa slots ya elegidos por el usuario (carrera rara)", async () => {
@@ -336,7 +383,7 @@ describe("LineupsPage", () => {
     await openGp1(user);
 
     // El fan elige un piloto ANTES de que llegue `lineup.data`.
-    await user.selectOptions(screen.getByLabelText("Piloto oro 1"), "r3");
+    await assignSlot(user, "Piloto oro 1", "Piloto Tres");
 
     // Llega el lineup guardado: el prefill se salta (no pisar la entrada).
     // `rerender` re-renderiza la raíz: hay que reenvolver el provider.
@@ -349,9 +396,9 @@ describe("LineupsPage", () => {
 
     // La elección del usuario se conserva; el resto NO se rellena a tope
     // (el prefill no se aplica a medias).
-    expect(screen.getByLabelText("Piloto oro 1")).toHaveValue("r3");
-    expect(screen.getByLabelText("Piloto oro 2")).toHaveValue("");
-    expect(screen.getByLabelText("Constructor")).toHaveValue("");
+    expect(slotButton("Piloto oro 1", "Piloto Tres")).toBeInTheDocument();
+    expect(slotButton("Piloto oro 2", null)).toBeInTheDocument();
+    expect(slotButton("Constructor", null)).toBeInTheDocument();
   });
 
   it("sin lineup guardado muestra el presupuesto (base + carry) y el coste en vivo", async () => {
@@ -403,27 +450,45 @@ describe("LineupsPage", () => {
     const user = userEvent.setup();
     await openGp1(user);
 
-    // Piloto sin precio congelado: deshabilitado y marcado.
-    const gold1 = screen.getByLabelText("Piloto oro 1");
-    expect(
-      within(gold1).getByRole("option", {
-        name: "Piloto Sin Precio (Team A) — sin precio",
-      }),
-    ).toBeDisabled();
+    // US-41: el piloto sin precio es una TARJETA deshabilitada (aria-disabled)
+    // con el motivo de bloqueo ESCRITO (patrón Button.disabledReason), no una
+    // <option> nativa.
+    const sinPrecio = screen.getByRole("button", {
+      name: /Piloto Sin Precio/,
+    });
+    expect(sinPrecio).toHaveAttribute("aria-disabled", "true");
+    const sinPrecioReason = sinPrecio.getAttribute("aria-describedby");
+    expect(sinPrecioReason).not.toBeNull();
+    expect(document.getElementById(sinPrecioReason!)).toHaveTextContent(
+      "Sin precio para este GP",
+    );
 
     // Elegido en oro 1 → deshabilitado en el resto de slots (no en el suyo),
-    // con el motivo de bloqueo escrito en la opción (F3).
-    await user.selectOptions(gold1, "r1");
-    expect(
-      within(screen.getByLabelText("Piloto oro 2")).getByRole("option", {
-        name: "Piloto Uno (Team A) — 10 — ya en otro slot",
-      }),
-    ).toBeDisabled();
-    expect(
-      within(gold1).getByRole("option", {
-        name: "Piloto Uno (Team A) — 10",
-      }),
-    ).not.toBeDisabled();
+    // con el motivo de bloqueo escrito en la tarjeta (F3). La tarjeta empieza
+    // por el nombre del activo; el slot, por su etiqueta (^ ancla).
+    await assignSlot(user, "Piloto oro 1", "Piloto Uno");
+    // Cambia al slot oro 2 para ver la tarjeta de Piloto Uno en ese contexto.
+    await user.click(
+      screen.getByRole("button", { name: new RegExp("^Piloto oro 2 ") }),
+    );
+    const enOtroSlot = screen.getByRole("button", {
+      name: new RegExp("^Piloto Uno([, ]|$)"),
+    });
+    expect(enOtroSlot).toHaveAttribute("aria-disabled", "true");
+    const otroReason = enOtroSlot.getAttribute("aria-describedby");
+    expect(otroReason).not.toBeNull();
+    expect(document.getElementById(otroReason!)).toHaveTextContent(
+      "Ya en otro slot",
+    );
+
+    // En su propio slot (oro 1) NO está deshabilitado (quedó asignado).
+    await user.click(
+      screen.getByRole("button", { name: new RegExp("^Piloto oro 1 ") }),
+    );
+    const enSuSlot = screen.getByRole("button", {
+      name: new RegExp("^Piloto Uno([, ]|$)"),
+    });
+    expect(enSuSlot).not.toHaveAttribute("aria-disabled");
   });
 
   it("guardar: envía solo los IDs de los activos (nunca coste ni presupuesto)", async () => {
@@ -483,7 +548,7 @@ describe("LineupsPage", () => {
       "Composición incompleta: faltan piloto oro 1, piloto oro 2, piloto plata 1, piloto plata 2, constructor, equipo.",
     );
 
-    await user.selectOptions(screen.getByLabelText("Piloto oro 1"), "r1");
+    await assignSlot(user, "Piloto oro 1", "Piloto Uno");
     expect(button).toHaveAttribute("aria-disabled", "true");
 
     await fillDraft(user);
@@ -1066,12 +1131,12 @@ describe("LineupsPage", () => {
 
     const user = userEvent.setup();
     await openGp1(user);
-    expect(screen.getByLabelText("Piloto oro 1")).toHaveValue("r1");
+    expect(slotButton("Piloto oro 1", "Piloto Uno")).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText("GP"), GP2.id);
 
     // GP2 sin lineup: borrador vacío y coste en vivo de nuevo.
-    expect(screen.getByLabelText("Piloto oro 1")).toHaveValue("");
+    expect(slotButton("Piloto oro 1", null)).toBeInTheDocument();
     expect(screen.getByText("Si guardas ahora:")).toBeInTheDocument();
     expect(screen.getByText("coste —")).toBeInTheDocument();
   });
@@ -1086,7 +1151,7 @@ describe("LineupsPage", () => {
     const user = userEvent.setup();
     await openGp1(user);
     // Un cambio de slot (constructor) ensucia el borrador.
-    await user.selectOptions(screen.getByLabelText("Constructor"), "ctor-b");
+    await assignSlot(user, "Constructor", "Ctor B");
     expect(screen.getByText("Si guardas ahora:")).toHaveClass("status-dirty");
 
     // Intentar cambiar de GP: confirmación con impacto escrito (F3 P1-1) —
@@ -1106,7 +1171,7 @@ describe("LineupsPage", () => {
     await user.click(within(dialog).getByRole("button", { name: "No, volver" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByLabelText("GP")).toHaveValue(GP1.id);
-    expect(screen.getByLabelText("Constructor")).toHaveValue("ctor-b");
+    expect(slotButton("Constructor", "Ctor B")).toBeInTheDocument();
     expect(screen.getByText("Si guardas ahora:")).toHaveClass("status-dirty");
   });
 
@@ -1138,10 +1203,10 @@ describe("LineupsPage", () => {
     await user.click(within(dialog).getByRole("button", { name: "No, volver" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByLabelText("GP")).toHaveValue(GP1.id);
-    expect(screen.getByLabelText("Piloto oro 1")).toHaveValue("r1");
-    expect(screen.getByLabelText("Piloto plata 2")).toHaveValue("r4");
-    expect(screen.getByLabelText("Constructor")).toHaveValue("ctor-a");
-    expect(screen.getByLabelText("Equipo")).toHaveValue("team-a");
+    expect(slotButton("Piloto oro 1", "Piloto Uno")).toBeInTheDocument();
+    expect(slotButton("Piloto plata 2", "Piloto Cuatro")).toBeInTheDocument();
+    expect(slotButton("Constructor", "Ctor A")).toBeInTheDocument();
+    expect(slotButton("Equipo", "Team A")).toBeInTheDocument();
   });
 
   it("cambiar de GP con borrador dirty: al confirmar cambia de GP y limpia el borrador", async () => {
@@ -1163,7 +1228,7 @@ describe("LineupsPage", () => {
 
     const user = userEvent.setup();
     await openGp1(user);
-    await user.selectOptions(screen.getByLabelText("Constructor"), "ctor-b");
+    await assignSlot(user, "Constructor", "Ctor B");
 
     await user.selectOptions(screen.getByLabelText("GP"), GP2.id);
     await user.click(screen.getByRole("button", { name: "Sí, cambiar de GP" }));
@@ -1172,8 +1237,8 @@ describe("LineupsPage", () => {
     expect(screen.getByLabelText("GP")).toHaveValue(GP2.id);
     // El trabajo sin guardado se descartó: el borrador de GP2 empieza vacío
     // y sin el destaque dirty.
-    expect(screen.getByLabelText("Piloto oro 1")).toHaveValue("");
-    expect(screen.getByLabelText("Constructor")).toHaveValue("");
+    expect(slotButton("Piloto oro 1", null)).toBeInTheDocument();
+    expect(slotButton("Constructor", null)).toBeInTheDocument();
     expect(screen.getByText("Si guardas ahora:")).not.toHaveClass("status-dirty");
   });
 
@@ -1196,7 +1261,7 @@ describe("LineupsPage", () => {
     // con el lineup guardado.
     expect(screen.getByLabelText("Temporada")).toHaveValue("season-2027");
     expect(screen.getByLabelText("GP")).toHaveValue(GP1.id);
-    await user.selectOptions(screen.getByLabelText("Constructor"), "ctor-b");
+    await assignSlot(user, "Constructor", "Ctor B");
     expect(screen.getByText("Si guardas ahora:")).toHaveClass("status-dirty");
 
     // Intentar cambiar de temporada: confirmación con impacto escrito (F3
@@ -1249,7 +1314,7 @@ describe("LineupsPage", () => {
     expect(beforeUnloadBlocked()).toBe(false);
 
     // Con cambios sin guardar: el navegador puede interceptar la salida.
-    await user.selectOptions(screen.getByLabelText("Constructor"), "ctor-b");
+    await assignSlot(user, "Constructor", "Ctor B");
     expect(beforeUnloadBlocked()).toBe(true);
 
     // Descartados los cambios: el aviso se retira.
@@ -1278,7 +1343,7 @@ describe("LineupsPage", () => {
 
     // Trabajo en curso (slots rellenados, sin lineup guardado): el navegador
     // puede interceptar la salida (F3 P1-1).
-    await user.selectOptions(screen.getByLabelText("Piloto oro 1"), "r1");
+    await assignSlot(user, "Piloto oro 1", "Piloto Uno");
     expect(beforeUnloadBlocked()).toBe(true);
   });
 
@@ -1756,7 +1821,7 @@ describe("LineupsPage", () => {
     // F3 P1: el wildcard solo tiene sentido con un borrador DISTINTO del
     // guardado (con el prefill idéntico sería un no-op y el botón se bloquea).
     // Cambio de equipo dentro de presupuesto para marcar el borrador como sucio.
-    await user.selectOptions(screen.getByLabelText("Equipo"), "team-b");
+    await assignSlot(user, "Equipo", "Team B");
 
     // El estado lo explica ANTES de usarlo (F3: nunca un control sin lectura).
     expect(screen.getByText("disponible")).toBeInTheDocument();
@@ -1843,7 +1908,7 @@ describe("LineupsPage", () => {
     const user = userEvent.setup();
     await openGp1(user);
     // F3 P1: borrador sucio (no-op bloqueado) — cambio de equipo.
-    await user.selectOptions(screen.getByLabelText("Equipo"), "team-b");
+    await assignSlot(user, "Equipo", "Team B");
     await user.click(screen.getByRole("button", { name: "Usar wildcard" }));
 
     // F3 P2-2: "único" solo es verdad con 1 por temporada; con 2, el
@@ -1873,7 +1938,7 @@ describe("LineupsPage", () => {
     const user = userEvent.setup();
     await openGp1(user);
     // F3 P1: borrador sucio (no-op bloqueado) — cambio de equipo.
-    await user.selectOptions(screen.getByLabelText("Equipo"), "team-b");
+    await assignSlot(user, "Equipo", "Team B");
 
     await user.click(screen.getByRole("button", { name: "Usar wildcard" }));
 
@@ -2079,7 +2144,7 @@ describe("LineupsPage", () => {
     ).not.toBeInTheDocument();
 
     // Un cambio de slot (constructor) ensucia el borrador.
-    await user.selectOptions(screen.getByLabelText("Constructor"), "ctor-b");
+    await assignSlot(user, "Constructor", "Ctor B");
     expect(screen.getByRole("button", { name: "Descartar cambios" })).toBeInTheDocument();
     // Destacada (status-dirty) con el marcador de cambios sin guardar.
     expect(screen.getByText("Si guardas ahora:")).toHaveClass("status-dirty");
@@ -2096,7 +2161,7 @@ describe("LineupsPage", () => {
 
     // Vuelve al guardado (ctor-a): el coste vuelve a 80 (saldo 20) y la
     // fila pierde el destaque dirty.
-    expect(screen.getByLabelText("Constructor")).toHaveValue("ctor-a");
+    expect(slotButton("Constructor", "Ctor A")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Descartar cambios" }),
     ).not.toBeInTheDocument();
@@ -2122,12 +2187,12 @@ describe("LineupsPage", () => {
 
     // Un slot elegido: aparece la salida para vaciar el borrador NUEVO sin
     // pasar por "Cambiar de GP" (que exige confirmación).
-    await user.selectOptions(screen.getByLabelText("Piloto oro 1"), "r1");
+    await assignSlot(user, "Piloto oro 1", "Piloto Uno");
     const clear = screen.getByRole("button", { name: "Limpiar borrador" });
     await user.click(clear);
 
     // El borrador vuelve a vacío y el botón desaparece.
-    expect(screen.getByLabelText("Piloto oro 1")).toHaveValue("");
+    expect(slotButton("Piloto oro 1", null)).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Limpiar borrador" }),
     ).not.toBeInTheDocument();
@@ -2216,7 +2281,7 @@ describe("LineupsPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("precio a un vistazo: cada slot elegido muestra el precio del activo", async () => {
+  it("precio a un vistazo: la tarjeta del activo asignado muestra su precio", async () => {
     mockSeasons();
     mockGps();
     mockBuilder(GP1);
@@ -2225,18 +2290,27 @@ describe("LineupsPage", () => {
 
     const user = userEvent.setup();
     await openGp1(user);
-
-    // Borrador vacío: sin líneas de precio (solo el texto de los <option>).
-    expect(screen.queryByText("Precio: 10")).not.toBeInTheDocument();
-
     await fillDraft(user);
 
-    expect(screen.getByText("Precio: 10")).toBeInTheDocument();
-    expect(screen.getByText("Precio: 15")).toBeInTheDocument();
-    expect(screen.getByText("Precio: 20")).toBeInTheDocument();
-    expect(screen.getByText("Precio: 25")).toBeInTheDocument();
-    // Constructor (5) y equipo (5): dos apariciones.
-    expect(screen.getAllByText("Precio: 5")).toHaveLength(2);
+    // US-41: el precio vive en la tarjeta del activo (no en el slot): con el
+    // slot activo, la tarjeta asignada muestra su precio y queda aria-pressed.
+    // El nombre accesible de la tarjeta es "Nombre, Sublínea, Precio".
+    const casos = [
+      ["Piloto oro 1", "Piloto Uno, Team A, 10"],
+      ["Piloto oro 2", "Piloto Dos, Team A, 15"],
+      ["Piloto plata 1", "Piloto Tres, Team B, 20"],
+      ["Piloto plata 2", "Piloto Cuatro, Team B, 25"],
+      ["Constructor", "Ctor A, 5"],
+      ["Equipo", "Team A, Ctor A, 5"],
+    ] as const;
+    for (const [slot, card] of casos) {
+      await user.click(
+        screen.getByRole("button", { name: new RegExp(`^${slot} `) }),
+      );
+      expect(
+        screen.getByRole("button", { name: card }),
+      ).toHaveAttribute("aria-pressed", "true");
+    }
   });
 
   it("precio a un vistazo: slot sin precio lo avisa; activo fuera del mercado, sin inventar", async () => {
@@ -2279,12 +2353,40 @@ describe("LineupsPage", () => {
     const user = userEvent.setup();
     await openGp1(user);
 
-    // rx y ctor-x sin precio: aviso en su slot (2 apariciones).
-    expect(screen.getAllByText("Sin precio para este GP.")).toHaveLength(2);
-    // ghost y team-z no están en el mercado: sin precio inventado.
-    expect(screen.queryByText("Precio: 5")).not.toBeInTheDocument();
-    // Los que sí tienen precio lo muestran.
-    expect(screen.getByText("Precio: 10")).toBeInTheDocument();
-    expect(screen.getByText("Precio: 15")).toBeInTheDocument();
+    // rx sin precio: tarjeta "Sin precio" + motivo de bloqueo ESCRITO
+    // (patrón aria-disabled + aria-describedby de la UI).
+    expect(
+      screen.getByRole("button", {
+        name: "Piloto Sin Precio, Team A, Sin precio",
+      }),
+    ).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByText("Sin precio para este GP")).toBeInTheDocument();
+
+    // ctor-x (constructor) también sin precio: el mismo aviso, en su rejilla.
+    await user.click(
+      screen.getByRole("button", { name: new RegExp("^Constructor ") }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Ctor X, Sin precio" }),
+    ).toHaveAttribute("aria-disabled", "true");
+
+    // ghost (silver 1) y team-z no están en el mercado: el slot no inventa
+    // nombre ni precio (ID sin activo resolvable → "Vacío").
+    expect(slotButton("Piloto plata 1", null)).toBeInTheDocument();
+    expect(slotButton("Equipo", null)).toBeInTheDocument();
+
+    // Los que sí tienen precio lo muestran en su tarjeta.
+    await user.click(
+      screen.getByRole("button", { name: new RegExp("^Piloto oro 2 ") }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Piloto Uno, Team A, 10" }),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: new RegExp("^Piloto plata 2 ") }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Piloto Dos, Team A, 15" }),
+    ).toBeInTheDocument();
   });
 });

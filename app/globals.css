@@ -1152,3 +1152,198 @@ section[id] {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* ── Seleccionador gráfico de activos (US-41, ADR-0041) ─────────────────
+   Filas de slots del lineup + rejilla de tarjetas con avatar generativo
+   (dorsal/iniciales sobre un tinte derivado del nombre — sin imágenes ni
+   branding licenciado). Targets táctiles ≥ 44 px (T-16, testing.md §3). */
+.picker {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+/* Slots: 2 columnas fijas (1 en móvil) — el mismo criterio que la rejilla —
+   para que el nombre asignado (p. ej. un constructor largo) quepa sin
+   truncarse (US-41, feedback del usuario 2026-11-17). */
+.picker-slots {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.picker-slot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 44px; /* T-16: target táctil ≥ 44 px. */
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.picker-slot:hover {
+  border-color: color-mix(in srgb, var(--fg) 25%, var(--border));
+}
+
+/* Slot activo: borde de acento + tinte (el único acento fuerte del picker;
+   la rejilla y las tarjetas responden a él con el mismo lenguaje). */
+.picker-slot[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+}
+
+.picker-slot-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* El nombre asignado SIEMPRE es legible: sin elipsis; si no cabe, salta
+   de línea (US-41, feedback del usuario 2026-11-17). */
+.picker-slot-value {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.picker-slot-value.is-filled {
+  color: var(--fg);
+}
+
+.picker-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.picker-controls .field {
+  flex: 1 1 14rem;
+  min-width: 11rem;
+}
+
+.picker-empty {
+  padding: 0.25rem 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+/* Rejilla de tarjetas: 2 columnas fijas (1 en móvil ≤768 px) para que el
+   nombre completo de cada activo quepa sin truncarse (US-41, feedback del
+   usuario 2026-11-17: "2 columnas o incluso 1 para que no se corte el
+   nombre"); si aun así no cabe, el nombre salta de línea en vez de elipsis. */
+.picker-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.picker-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 44px; /* T-16: el avatar ya lo sobrepasa; la regla queda escrita. */
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.picker-card:hover:not([aria-disabled="true"]) {
+  border-color: color-mix(in srgb, var(--fg) 25%, var(--border));
+}
+
+/* Asignada al slot activo (aria-pressed): el acento confirma el estado. */
+.picker-card[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+}
+
+/* Bloqueada ("Ya en otro slot" / "Sin precio para este GP"): el motivo
+   ESCRITO vive fuera de la tarjeta (aria-describedby); la opacidad marca el
+   estado sin esconder el contenido — el motivo sigue a plena legibilidad. */
+.picker-card[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Avatar generativo: color del módulo puro (mismo tono derivado del
+   nombre) + texto casi negro — contraste seguro en CUALQUIER tono
+   (DESIGN.md: sin hex fuera de :root; --bg y --on-accent son tokens). */
+.asset-avatar {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--bg);
+  text-shadow: 0 0 4px color-mix(in srgb, var(--on-accent) 45%, transparent);
+}
+
+.picker-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Nombre y sublínea: el texto completo SIEMPRE es legible — sin elipsis;
+   si no cabe, salta de línea (US-41, feedback del usuario 2026-11-17). */
+.picker-card-name {
+  font-weight: 600;
+}
+
+.picker-card-sub {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.picker-card-price {
+  margin-left: auto;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.picker-card-price--none {
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.picker-hint {
+  font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+  /* Móvil (iPhone SE 375 px): el picker se aprieta; slots y rejilla caen a
+     1 columna — el nombre asignado a cada slot y el de cada tarjeta caben
+     enteros sin saltar a 3–4 líneas. */
+  .picker {
+    padding: 0.75rem;
+  }
+
+  .picker-slots {
+    grid-template-columns: 1fr;
+  }
+
+  .picker-grid {
+    grid-template-columns: 1fr;
+  }
+}

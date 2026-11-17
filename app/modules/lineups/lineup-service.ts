@@ -114,6 +114,8 @@ export interface BuilderView {
   riders: {
     riderId: string;
     name: string;
+    /** Dorsal (null = sin dorsal → el avatar usa iniciales, ADR-0041). */
+    number: number | null;
     teamId: string;
     teamName: string;
     constructorId: string;
@@ -566,6 +568,7 @@ export class LineupService {
       riders: affiliations.map((a) => ({
         riderId: a.riderId,
         name: a.rider.name,
+        number: a.rider.number,
         teamId: a.teamId,
         teamName: a.team.name,
         constructorId: a.constructorId,

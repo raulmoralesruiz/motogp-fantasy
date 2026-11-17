@@ -6,11 +6,14 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   Alert,
+  AssetPicker,
+  type AssetPickerSlot,
   Button,
   ConfirmDialog,
   type ConfirmRequest,
 } from "@/shared/components";
 import { formatNumber } from "@/shared/format";
+import { type AssetKind, type PickerAsset } from "@/shared/picker";
 import { trpc } from "@/trpc/client";
 
 /** Borrador del lineup (IDs de activos; el servidor recalcula el coste). */
@@ -329,6 +332,164 @@ export default function LineupsPage() {
     [builder.data],
   );
 
+  // --- Seleccionador gráfico de activos (US-41, ADR-0041) -----------------
+  // El BORRADOR sigue siendo la fuente de verdad de los 6 slots; el picker
+  // solo renderiza (slots + activos + grupos) y devuelve intenciones
+  // (asignar / vaciar) que la página aplica al borrador. La lógica —búsqueda,
+  // filtro, orden, estado de asignación, motivos de bloqueo, avatar— vive en
+  // el módulo puro `@/shared/picker` (testable como fórmula, sin I/O).
+  const riderNameOf = (id: string): string | null =>
+    id === "" ? null : (riders.find((r) => r.riderId === id)?.name ?? null);
+  const ctorNameOf = (id: string): string | null =>
+    id === ""
+      ? null
+      : (builder.data?.constructors.find((c) => c.id === id)?.name ?? null);
+  const teamNameOf = (id: string): string | null =>
+    id === ""
+      ? null
+      : (builder.data?.teams.find((t) => t.id === id)?.name ?? null);
+
+  /** Los 6 slots del borrador, en la forma que renderiza el picker. */
+  const pickerSlots: AssetPickerSlot[] = [
+    {
+      id: "gold-1",
+      kind: "rider",
+      label: "Piloto oro 1",
+      value: draft.gold[0],
+      assignedName: riderNameOf(draft.gold[0]),
+    },
+    {
+      id: "gold-2",
+      kind: "rider",
+      label: "Piloto oro 2",
+      value: draft.gold[1],
+      assignedName: riderNameOf(draft.gold[1]),
+    },
+    {
+      id: "silver-1",
+      kind: "rider",
+      label: "Piloto plata 1",
+      value: draft.silver[0],
+      assignedName: riderNameOf(draft.silver[0]),
+    },
+    {
+      id: "silver-2",
+      kind: "rider",
+      label: "Piloto plata 2",
+      value: draft.silver[1],
+      assignedName: riderNameOf(draft.silver[1]),
+    },
+    {
+      id: "constructor",
+      kind: "constructor",
+      label: "Constructor",
+      value: draft.constructorId,
+      assignedName: ctorNameOf(draft.constructorId),
+    },
+    {
+      id: "team",
+      kind: "team",
+      label: "Equipo",
+      value: draft.teamId,
+      assignedName: teamNameOf(draft.teamId),
+    },
+  ];
+
+  /** Activos del mercado del GP en la forma del picker (invariante 5: kind). */
+  const pickerAssets: PickerAsset[] = [
+    ...(builder.data?.riders ?? []).map((r) => ({
+      kind: "rider" as const,
+      id: r.riderId,
+      name: r.name,
+      subline: r.teamName,
+      groupId: r.teamId,
+      number: r.number,
+      price: r.price,
+    })),
+    ...(builder.data?.constructors ?? []).map((c) => ({
+      kind: "constructor" as const,
+      id: c.id,
+      name: c.name,
+      subline: null,
+      groupId: null,
+      number: null,
+      price: c.price,
+    })),
+    ...(builder.data?.teams ?? []).map((t) => ({
+      kind: "team" as const,
+      id: t.id,
+      name: t.name,
+      subline: t.constructorName,
+      groupId: t.constructorId,
+      number: null,
+      price: t.price,
+    })),
+  ];
+
+  /**
+   * Grupos para el filtro según el tipo del slot activo (invariante 5):
+   * el grupo de un piloto es su EQUIPO; el grupo de un equipo es su
+   * CONSTRUCTOR; el constructor no tiene grupo (filtro sin efecto).
+   */
+  function groupsForKind(kind: AssetKind): { id: string; name: string }[] {
+    if (kind === "rider") {
+      return (builder.data?.teams ?? []).map((t) => ({ id: t.id, name: t.name }));
+    }
+    if (kind === "team") {
+      return (builder.data?.constructors ?? []).map((c) => ({
+        id: c.id,
+        name: c.name,
+      }));
+    }
+    return [];
+  }
+
+  /**
+   * Asigna un activo a un slot del borrador. Semántica de movimiento: si el
+   * activo ya estaba en otro slot del mismo tipo, ese slot queda vacío (en
+   * la UI esa tarjeta va deshabilitada; la guarda cubre cualquier otra
+   * superficie que escriba el borrador). El servidor recalcula el coste
+   * (invariante 2): el cliente solo envía IDs.
+   */
+  function assignSlot(slotId: string, assetId: string) {
+    setDraft((d) => {
+      if (slotId === "constructor") return { ...d, constructorId: assetId };
+      if (slotId === "team") return { ...d, teamId: assetId };
+      const clear = (arr: [string, string]) =>
+        [
+          arr[0] === assetId ? "" : arr[0],
+          arr[1] === assetId ? "" : arr[1],
+        ] as [string, string];
+      const gold = clear(d.gold);
+      const silver = clear(d.silver);
+      if (slotId === "gold-1") return { ...d, gold: [assetId, gold[1]], silver };
+      if (slotId === "gold-2") return { ...d, gold: [gold[0], assetId], silver };
+      if (slotId === "silver-1")
+        return { ...d, gold, silver: [assetId, silver[1]] };
+      return { ...d, gold, silver: [silver[0], assetId] };
+    });
+  }
+
+  /** Vacía un slot del borrador (tocar de nuevo el activo asignado). */
+  function clearSlotById(slotId: string) {
+    setDraft((d) => {
+      switch (slotId) {
+        case "constructor":
+          return { ...d, constructorId: "" };
+        case "team":
+          return { ...d, teamId: "" };
+        case "gold-1":
+          return { ...d, gold: ["", d.gold[1]] as [string, string] };
+        case "gold-2":
+          return { ...d, gold: [d.gold[0], ""] as [string, string] };
+        case "silver-1":
+          return { ...d, silver: ["", d.silver[1]] as [string, string] };
+        default:
+          return { ...d, silver: [d.silver[0], ""] as [string, string] };
+      }
+    });
+  }
+
   const draftCost = useMemo(() => {
     const values: number[] = [];
     for (const id of [...draft.gold, ...draft.silver]) {
@@ -342,32 +503,6 @@ export default function LineupsPage() {
     if (!team || team.price === null) return null;
     return round2(values.reduce((a, b) => a + b, 0) + ctor.price + team.price);
   }, [draft, riders, builder.data]);
-
-  /**
-   * Precio del piloto elegido en un slot (F3: a un vistazo, no solo
-   * plegado en el `<option>`). `null` si no hay piloto elegido o no está
-   * en el mercado del GP.
-   */
-  function riderPriceLabel(riderId: string): string | null {
-    const found = riders.find((r) => r.riderId === riderId);
-    if (found === undefined) return null;
-    return found.price === null
-      ? "Sin precio para este GP."
-      : `Precio: ${formatNumber(found.price)}`;
-  }
-
-  /** Precio del constructor/equipo elegido (misma intención, F3). */
-  function assetPriceLabel(
-    list: { id: string; price: number | null }[],
-    id: string,
-  ): string | null {
-    if (id === "") return null;
-    const found = list.find((x) => x.id === id);
-    if (found === undefined) return null;
-    return found.price === null
-      ? "Sin precio para este GP."
-      : `Precio: ${formatNumber(found.price)}`;
-  }
 
   // `now` (tick de 30 s), no `new Date()` del último render: el estado no
   // puede quedarse congelado en "abierto" pasado el lockout.
@@ -602,37 +737,6 @@ export default function LineupsPage() {
             ? "El borrador es idéntico al lineup guardado: no hay que gastar el wildcard."
             : "Aún no has guardado un lineup para este GP: 'Guardar lineup' no consume el wildcard."
           : undefined;
-
-  function riderSelect(
-    id: string,
-    label: string,
-    value: string,
-    onChange: (value: string) => void,
-  ) {
-    const taken = [draft.gold[0], draft.gold[1], draft.silver[0], draft.silver[1]];
-    return (
-      <div className="field">
-        <label htmlFor={id}>{label}</label>
-        <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
-          <option value="">— Piloto —</option>
-          {riders.map((r) => {
-            const alreadyTaken = taken.includes(r.riderId) && value !== r.riderId;
-            const disabled = alreadyTaken || r.price === null;
-            return (
-              <option key={r.riderId} value={r.riderId} disabled={disabled}>
-                {r.name} ({r.teamName})
-                {r.price === null ? " — sin precio" : ` — ${formatNumber(r.price)}`}
-                {alreadyTaken ? " — ya en otro slot" : ""}
-              </option>
-            );
-          })}
-        </select>
-        {value !== "" && (
-          <span className="muted">{riderPriceLabel(value)}</span>
-        )}
-      </div>
-    );
-  }
 
   if (seasons.isPending) {
     return <p className="muted">Consultando…</p>;
@@ -869,67 +973,21 @@ export default function LineupsPage() {
             </li>
           </ul>
           <form className="form" onSubmit={handleSubmit} noValidate>
-            {riderSelect("gold-1", "Piloto oro 1", draft.gold[0], (v) =>
-              setDraft((d) => ({ ...d, gold: [v, d.gold[1]] })),
-            )}
-            {riderSelect("gold-2", "Piloto oro 2", draft.gold[1], (v) =>
-              setDraft((d) => ({ ...d, gold: [d.gold[0], v] })),
-            )}
-            {riderSelect("silver-1", "Piloto plata 1", draft.silver[0], (v) =>
-              setDraft((d) => ({ ...d, silver: [v, d.silver[1]] })),
-            )}
-            {riderSelect("silver-2", "Piloto plata 2", draft.silver[1], (v) =>
-              setDraft((d) => ({ ...d, silver: [d.silver[0], v] })),
-            )}
-            <div className="field">
-              <label htmlFor="constructor">Constructor</label>
-              <select
-                id="constructor"
-                value={draft.constructorId}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, constructorId: e.target.value }))
-                }
-              >
-                <option value="">— Constructor —</option>
-                {builder.data.constructors.map((c) => (
-                  <option key={c.id} value={c.id} disabled={c.price === null}>
-                    {c.name}
-                    {c.price === null ? " — sin precio" : ` — ${formatNumber(c.price)}`}
-                  </option>
-                ))}
-              </select>
-              {draft.constructorId !== "" && (
-                <span className="muted">
-                  {assetPriceLabel(builder.data.constructors, draft.constructorId)}
-                </span>
-              )}
-            </div>
-            <div className="field">
-              <label htmlFor="team">Equipo</label>
-              <select
-                id="team"
-                value={draft.teamId}
-                onChange={(e) => setDraft((d) => ({ ...d, teamId: e.target.value }))}
-              >
-                <option value="">— Equipo —</option>
-                {builder.data.teams.map((t) => (
-                  <option key={t.id} value={t.id} disabled={t.price === null}>
-                    {t.name} ({t.constructorName})
-                    {t.price === null ? " — sin precio" : ` — ${formatNumber(t.price)}`}
-                  </option>
-                ))}
-              </select>
-              {draft.teamId !== "" && (
-                <span className="muted">
-                  {assetPriceLabel(builder.data.teams, draft.teamId)}
-                </span>
-              )}
-            </div>
+            {/* US-41 (ADR-0041): seleccionador gráfico — slots + rejilla de
+                tarjetas con avatar generativo. Sustituye a los 6 `<select>`
+                (mismos estados: sin precio, ya en otro slot, borrador). */}
+            <AssetPicker
+              slots={pickerSlots}
+              assets={pickerAssets}
+              groupsForKind={groupsForKind}
+              onAssign={assignSlot}
+              onClear={clearSlotById}
+            />
             {error && <Alert variant="error">{error}</Alert>}
             {success && <Alert variant="success">{success}</Alert>}
             {/* .form-actions (barrido P3): en móvil la barra de acciones se
                 queda sticky — "Guardar lineup" no cae fuera de pliegue tras
-                los 6 selects. */}
+                la rejilla de activos. */}
             <div className="form-actions">
               <Button
                 type="submit"
