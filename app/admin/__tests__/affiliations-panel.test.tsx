@@ -45,6 +45,9 @@ const team = {
   name: "Ducati Lenovo Team",
   constructorId: "c1",
   constructorName: "Ducati",
+  // US-42 (ADR-0042): colores reales (o null → fallback estético).
+  color: "#ad0000",
+  textColor: "#ffffff",
 };
 
 const gps = [

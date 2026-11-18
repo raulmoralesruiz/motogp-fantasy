@@ -240,6 +240,41 @@ describe("LigasPage (US-23/US-24)", () => {
     ).toBeInTheDocument();
   });
 
+  it("marca en mis ligas los estados archivada y planificada (F3 P2)", () => {
+    // Los otros dos estados no activos (la finalizada la cubre CLOSED_LEAGUE).
+    mockMyLeagues([
+      { ...LEAGUE, id: "league-a", status: "archived", isAdmin: false, code: null },
+      { ...LEAGUE, id: "league-p", status: "planned", isAdmin: false, code: null },
+    ]);
+    renderLigas(<LigasPage />);
+
+    expect(
+      screen.getByText("privada · 3/50 miembros · por código · archivada"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("privada · 3/50 miembros · por código · planificada"),
+    ).toBeInTheDocument();
+  });
+
+  it("mis ligas: una liga sin descripción no muestra la línea (rama nula)", () => {
+    mockMyLeagues([
+      {
+        ...LEAGUE,
+        id: "league-3",
+        name: "Liga sin descripción",
+        description: null,
+        isAdmin: false,
+        code: null,
+      },
+    ]);
+    renderLigas(<LigasPage />);
+
+    const link = screen.getByRole("link", { name: "Liga sin descripción" });
+    expect(link).toHaveAttribute("href", "/ligas/league-3");
+    // Rama nula del ternario de descripción: sin <p> de descripción en el ítem.
+    expect(link.closest("li")?.querySelector("p")).not.toBeInTheDocument();
+  });
+
   it("muestra el directorio de ligas públicas (US-24) con enlace", () => {
     mockMyLeagues([]);
     renderLigas(<LigasPage />);

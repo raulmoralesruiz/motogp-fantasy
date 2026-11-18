@@ -54,6 +54,7 @@ describe("barrels de módulos (Fase 0, T-03)", () => {
       "budgetBreakdown",
       "canUseWildcard",
       "changeSpendMovement",
+      "constructorColor",
       "diffSlots",
       "firstSaveBudget",
       "firstSaveMovements",
@@ -83,6 +84,7 @@ describe("barrels de módulos (Fase 0, T-03)", () => {
       "MarketSourceError",
       "PriceService",
       "PulseLiveMarketSource",
+      "dorsalFromRider",
       "normalizePulseLiveMarket",
     ]);
   });

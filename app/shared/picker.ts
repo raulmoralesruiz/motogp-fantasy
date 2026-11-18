@@ -16,6 +16,13 @@
  * FNV-1a → tono). Estable entre renders y GPs, sin esquema nuevo, sin
  * imágenes ni branding licenciado (AGENTS.md §11). El color es ESTEMÁTICO,
  * nunca semántico: los estados usan los tokens `--ok`/`--bad`/`--warning`.
+ *
+ * **US-42 (ADR-0042):** si el activo lleva COLOR REAL de la fuente
+ * (`color`/`textColor`, p. ej. `teams.color`/`teams.text_color`), el avatar
+ * lo usa; solo si no existe cae al hash derivado (fallback estético).
+ * `avatarPalette` decide fondo/foreground de forma pura (incluida la
+ * elección de foreground por luminosidad cuando la fuente no envía
+ * `textColor`), sin I/O.
  */
 
 export type AssetKind = "rider" | "constructor" | "team";
@@ -36,6 +43,16 @@ export interface PickerAsset {
   number: number | null;
   /** Precio congelado del GP; null = sin precio (bloqueado). */
   price: number | null;
+  /**
+   * Color real del activo (hex, p. ej. `#ad0000`) — US-42 (ADR-0042).
+   * Opcional: `null`/ausente ⇒ el avatar cae al hash derivado del nombre.
+   * - rider → color de su equipo (afiliación del GP);
+   * - team → color propio (`teams.color`);
+   * - constructor → heurística determinística sobre sus equipos (BFF).
+   */
+  color?: string | null;
+  /** Color de texto real (hex). `null`/ausente ⇒ foreground por luminosidad. */
+  textColor?: string | null;
 }
 
 /** Slot del lineup (los 6): identificador, tipo de activo, etiqueta y valor. */
@@ -230,4 +247,70 @@ export function assetHue(seed: string): number {
  */
 export function assetColor(seed: string): string {
   return `hsl(${assetHue(seed)} 65% 55%)`;
+}
+
+// ── Paleta del avatar: color real de la fuente con fallback hash (US-42) ──
+
+export interface AvatarPalette {
+  /** Color de fondo del avatar (hex de la fuente o HSL del hash). */
+  background: string;
+  /** Color del texto (hex de la fuente o token CSS de contraste). */
+  foreground: string;
+}
+
+/** Hex válido de color de la fuente: `#RGB` o `#RRGGBB`. */
+function isHexColor(value: string | null | undefined): value is string {
+  return (
+    typeof value === "string" && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value)
+  );
+}
+
+/** Expande `#RGB` → `#RRGGBB` (minúsculas). */
+function expandHex(hex: string): string {
+  const h = hex.slice(1);
+  if (h.length === 3) {
+    return h
+      .split("")
+      .map((c) => c + c)
+      .join("");
+  }
+  return h.toLowerCase();
+}
+
+/**
+ * Luminancia relativa (WCAG, sRGB linealizado) de un hex `#RGB`/`#RRGGBB`
+ * (pura: sin I/O). 0 = negro, 1 = blanco.
+ */
+export function hexLuminance(hex: string): number {
+  const h = expandHex(hex);
+  const channel = (i: number): number => {
+    const c = parseInt(h.slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
+}
+
+/**
+ * Paleta del avatar generativo (US-42, ADR-0042) — pura, sin I/O:
+ *
+ * - **Con color real** (`asset.color` hex válido): fondo = ese color;
+ *   foreground = `asset.textColor` si es hex válido, si no se elige por
+ *   LUMINOSIDAD del fondo (claro ⇒ texto oscuro `var(--bg)`, oscuro ⇒
+ *   texto claro `var(--on-accent)`) para que siga siendo legible aunque
+ *   la fuente no envíe `textColor`.
+ * - **Sin color real** (o hex inválido): fallback estético de ADR-0041 —
+ *   fondo = hash FNV-1a del nombre (`assetColor`), texto oscuro `var(--bg)`.
+ */
+export function avatarPalette(asset: PickerAsset): AvatarPalette {
+  if (isHexColor(asset.color)) {
+    const background = asset.color;
+    if (isHexColor(asset.textColor)) {
+      return { background, foreground: asset.textColor };
+    }
+    return {
+      background,
+      foreground: hexLuminance(asset.color) > 0.2 ? "var(--bg)" : "var(--on-accent)",
+    };
+  }
+  return { background: assetColor(asset.name), foreground: "var(--bg)" };
 }

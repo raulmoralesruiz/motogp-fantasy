@@ -8,7 +8,7 @@ import {
   type PickerAsset,
   type PickerSlot,
   type SortMode,
-  assetColor,
+  avatarPalette,
   cardDisabledReason,
   filterAssets,
   initialsOf,
@@ -205,7 +205,8 @@ export function AssetPicker({
 
 /**
  * Tarjeta de activo: avatar generativo (dorsal o iniciales sobre el color
- * derivado del nombre) + nombre + línea secundaria + precio. Estados:
+ * real del activo cuando existe, si no el derivado del nombre — US-42) +
+ * nombre + línea secundaria + precio. Estados:
  * - asignada al slot activo → `aria-pressed` + clic la quita;
  * - en otro slot / sin precio → `aria-disabled` + motivo escrito
  *   (patrón `Button.disabledReason`).
@@ -225,6 +226,9 @@ function PickerCard({
   const reason = cardDisabledReason(asset, slot.id, slots);
   const disabled = reason !== null;
   const selected = slotStateFor(slot.id, asset, slots) === "selected";
+  // US-42 (ADR-0042): paleta del avatar (color real del activo si existe,
+  // si no el hash derivado del nombre — ADR-0041). Pura, sin I/O.
+  const palette = avatarPalette(asset);
   // Nombre accesible con separadores: la concatenación del JSX daría
   // "Piloto UnoTeam A10" (el lector de pantalla lo leería como una sola
   // palabra), así que se declara explícito: "Piloto Uno, Team A, 10".
@@ -250,7 +254,10 @@ function PickerCard({
       >
         <span
           className="asset-avatar"
-          style={{ background: assetColor(asset.name) }}
+          style={{
+            background: palette.background,
+            color: palette.foreground,
+          }}
           aria-hidden="true"
         >
           {asset.number !== null ? asset.number : initialsOf(asset.name)}

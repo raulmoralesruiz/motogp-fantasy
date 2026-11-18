@@ -17,6 +17,9 @@
  *   rango P0 de `shared/config`, 17.4→5.8, ADR-0032), equipos y constructores
  *   (media de sus riders, vía afiliación en BD); idempotente (re-ejecutar
  *   actualiza); auditoría `price.p0_heuristic`.
+ * - US-42 (ADR-0042): el re-import rellena los `NULL` de `teams.color`/
+ *   `text_color` y `riders.number` (nunca muta lo presente; contadores
+ *   `colorBackfilled`/`numberBackfilled` + auditoría por fila).
  * - RBAC: mutaciones solo `global_admin` (403 para `user`).
  * - Fallos de la fuente → INTERNAL_SERVER_ERROR con motivo en español.
  */
@@ -86,6 +89,9 @@ describe("US-06/ADR-0013/ADR-0014 · Import de mercado + P0 heurística (Postgre
           sourceId: `t-${suffix}`,
           name: TEAM,
           manufacturer: { sourceId: `c-${suffix}`, name: CTOR },
+          // US-42 (ADR-0042): colores reales de la fuente (hex).
+          color: "#ad0000",
+          textColor: "#ffffff",
         },
       ],
       riders: [
@@ -327,6 +333,151 @@ describe("US-06/ADR-0013/ADR-0014 · Import de mercado + P0 heurística (Postgre
     ).toBe(1);
   });
 
+  // ── US-42 · Backfill de colores y dorsal en re-import (ADR-0042 §4) ──────
+
+  it("re-import rellena los NULL de colores y dorsal (contadores + auditoría por fila)", async () => {
+    const team = await prisma.team.findUnique({ where: { name: TEAM } });
+    const rider = await prisma.rider.findUnique({ where: { name: RIDER_FULL } });
+    // Pre-condición: BD sin colores/dorsal (situación de producción
+    // pre-backfill: los valores llegaron después de que existían las filas).
+    await prisma.team.update({
+      where: { id: team?.id },
+      data: { color: null, textColor: null },
+    });
+    await prisma.rider.update({
+      where: { id: rider?.id },
+      data: { number: null },
+    });
+
+    const { market } = await callerFor(ADMIN_IP, adminToken);
+    const report = await market.market.import({
+      seasonId: world.season.id,
+      market: normalizedMarket(world.season.year),
+    });
+
+    // Contadores: color + textColor (2 celdas) + dorsal (1).
+    expect(report).toMatchObject({
+      teamsCreated: 0,
+      teamsSkipped: 1,
+      ridersCreated: 0,
+      ridersSkipped: 1,
+      colorBackfilled: 2,
+      numberBackfilled: 1,
+    });
+
+    // Los valores se rellenan en la BD (NULL → valor de la fuente).
+    expect(
+      await prisma.team.findUnique({ where: { id: team?.id } }),
+    ).toMatchObject({ color: "#ad0000", textColor: "#ffffff" });
+    expect(
+      await prisma.rider.findUnique({ where: { id: rider?.id } }),
+    ).toMatchObject({ number: 93 });
+
+    // Auditoría append-only por fila afectada, con before/after.
+    const colorAudit = await prisma.auditLog.findFirst({
+      where: { action: "market.color.backfilled", entityId: team?.id },
+    });
+    expect(colorAudit).toMatchObject({
+      actorId: adminId,
+      entity: "team",
+      ip: ADMIN_IP,
+      beforeData: { color: null, textColor: null },
+    });
+    expect(colorAudit?.afterData).toMatchObject({
+      color: "#ad0000",
+      textColor: "#ffffff",
+    });
+    const numberAudit = await prisma.auditLog.findFirst({
+      where: { action: "rider.identity.backfilled", entityId: rider?.id },
+    });
+    expect(numberAudit).toMatchObject({
+      actorId: adminId,
+      entity: "rider",
+      ip: ADMIN_IP,
+      beforeData: { number: null },
+      afterData: { number: 93 },
+    });
+
+    // El resumen `market.imported` de esta corrida incluye los contadores.
+    const imported = await prisma.auditLog.findFirst({
+      where: {
+        action: "market.imported",
+        entityId: world.season.id,
+        afterData: { path: ["colorBackfilled"], equals: 2 },
+      },
+    });
+    expect(imported?.afterData).toMatchObject({
+      colorBackfilled: 2,
+      numberBackfilled: 1,
+    });
+  });
+
+  it("re-import NUNCA muta colores/dorsal ya presentes (solo NULL → valor)", async () => {
+    const team = await prisma.team.findUnique({ where: { name: TEAM } });
+    const rider = await prisma.rider.findUnique({ where: { name: RIDER_FULL } });
+    // Valores ya presentes (distintos de los de la fuente): no deben tocarse.
+    await prisma.team.update({
+      where: { id: team?.id },
+      data: { color: "#123456", textColor: "#654321" },
+    });
+    await prisma.rider.update({ where: { id: rider?.id }, data: { number: 7 } });
+
+    const colorAuditsBefore = await prisma.auditLog.count({
+      where: { action: "market.color.backfilled", entityId: team?.id },
+    });
+
+    const { market } = await callerFor(ADMIN_IP, adminToken);
+    const report = await market.market.import({
+      seasonId: world.season.id,
+      market: normalizedMarket(world.season.year),
+    });
+
+    // Sin backfill: nada de NULL que rellenar.
+    expect(report).toMatchObject({ colorBackfilled: 0, numberBackfilled: 0 });
+    // Anti-overwrite: los valores ya presentes se conservan.
+    expect(
+      await prisma.team.findUnique({ where: { id: team?.id } }),
+    ).toMatchObject({ color: "#123456", textColor: "#654321" });
+    expect(
+      await prisma.rider.findUnique({ where: { id: rider?.id } }),
+    ).toMatchObject({ number: 7 });
+    // Ni una auditoría nueva de backfill.
+    expect(
+      await prisma.auditLog.count({
+        where: { action: "market.color.backfilled", entityId: team?.id },
+      }),
+    ).toBe(colorAuditsBefore);
+  });
+
+  it("re-import parcial: rellena solo el NULL, conserva lo presente", async () => {
+    const team = await prisma.team.findUnique({ where: { name: TEAM } });
+    // Solo `color` es NULL; `textColor` ya tiene valor → una sola celda.
+    await prisma.team.update({ where: { id: team?.id }, data: { color: null } });
+
+    const { market } = await callerFor(ADMIN_IP, adminToken);
+    const report = await market.market.import({
+      seasonId: world.season.id,
+      market: normalizedMarket(world.season.year),
+    });
+
+    expect(report).toMatchObject({ colorBackfilled: 1, numberBackfilled: 0 });
+    expect(
+      await prisma.team.findUnique({ where: { id: team?.id } }),
+    ).toMatchObject({ color: "#ad0000", textColor: "#654321" });
+    // La auditoría de esta corrida refleja el before mixto (solo color NULL).
+    const audit = await prisma.auditLog.findFirst({
+      where: {
+        action: "market.color.backfilled",
+        entityId: team?.id,
+        beforeData: { path: ["textColor"], equals: "#654321" },
+      },
+    });
+    expect(audit?.afterData).toMatchObject({
+      color: "#ad0000",
+      textColor: "#654321",
+    });
+  });
+
   it("market.import actualiza un mapeo que apuntaba a otro piloto (self-correcting)", async () => {
     // Pre-condición: el sourceId del fixture ya está mapeado a un piloto
     // distinto (simula un mapeo manual anterior o un cambio de identidad).
@@ -417,6 +568,8 @@ describe("US-06/ADR-0013/ADR-0014 · Import de mercado + P0 heurística (Postgre
         sourceId: `t-bad-${suffix}`,
         name: `Equipo Huérfano ${suffix}`,
         manufacturer: { sourceId: `c-unknown-${suffix}`, name: `Constructor Desconocido ${suffix}` },
+        color: null,
+        textColor: null,
       },
     ];
     // La afiliación (rider → equipo huérfano) pasa la validación Zod (min 1)

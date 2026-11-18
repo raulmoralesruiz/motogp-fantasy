@@ -403,6 +403,11 @@ model Team {
   id            String   @id @default(uuid()) @db.Uuid
   name          String   @unique
   constructorId String   @map("constructor_id") @db.Uuid
+  // US-42 (ADR-0042): colores reales de la fuente (hex, p. ej. "#ad0000").
+  // NULL-ables: datos anteriores / fuentes sin color → fallback estético.
+  // El color de rider/constructor es DERIVADO, no se persiste aquí.
+  color         String?  @map("color")
+  textColor     String?  @map("text_color")
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 

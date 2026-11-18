@@ -103,6 +103,13 @@ export interface TeamView {
   name: string;
   constructorId: string;
   constructorName: string;
+  /**
+   * Color real del equipo (hex) — US-42 (ADR-0042). `null` si la fuente no
+   * lo envió (fallback estético del picker). El color de rider/constructor
+   * es DERIVADO de aquí, no se persiste en sus tablas.
+   */
+  color: string | null;
+  textColor: string | null;
 }
 
 /** Resultado de crear un activo: la vista + si se creó o se reutilizó. */
@@ -183,6 +190,13 @@ export interface MarketImportReport {
   riderMappingsUpdated: number;
   /** Mapeos fuente→piloto ya correctos (no-op, idempotencia). */
   riderMappingsSkipped: number;
+  /**
+   * Celdas de color rellenas en equipos ya creados (US-42, ADR-0042).
+   * Cuenta cada campo `color`/`textColor` que pasó de `NULL` a valor.
+   */
+  colorBackfilled: number;
+  /** Dorsales rellenas en pilotos ya creados (US-42, ADR-0042). */
+  numberBackfilled: number;
 }
 
 // ── Utilidades ──────────────────────────────────────────────────────────────
@@ -640,6 +654,13 @@ export class MarketService {
    *
    * El constructor se deriva del equipo (invariante 5).
    *
+   * **US-42 (ADR-0042):** también rellena los `NULL` de
+   * `teams.color`/`teams.text_color` y de `riders.number` sobre las filas ya
+   * creadas — idempotente (nunca muta un valor ya presente; solo `NULL` →
+   * valor normalizado) y auditado (`rider.identity.backfilled` por piloto,
+   * `market.color.backfilled` por equipo; contadores
+   * `colorBackfilled`/`numberBackfilled` en el resumen de `market.imported`).
+   *
    * Auditoría: `market.imported` con resumen (entityId = seasonId).
    */
   async importMarket(
@@ -674,6 +695,8 @@ export class MarketService {
       let riderMappingsCreated = 0;
       let riderMappingsUpdated = 0;
       let riderMappingsSkipped = 0;
+      let colorBackfilled = 0;
+      let numberBackfilled = 0;
 
       // Mapeo: name → id (BD) para constructores y equipos.
       const constructorByName = new Map<string, string>();
@@ -704,6 +727,36 @@ export class MarketService {
         if (existing) {
           teamByName.set(team.name, existing.id);
           teamsSkipped += 1;
+          // US-42 (ADR-0042): backfill de colores sobre la fila ya creada.
+          // Solo rellena NULL → valor (idempotente; nunca muta lo existente).
+          const fillColor =
+            existing.color == null && team.color != null;
+          const fillTextColor =
+            existing.textColor == null && team.textColor != null;
+          if (fillColor || fillTextColor) {
+            const afterData = {
+              color: existing.color ?? team.color,
+              textColor: existing.textColor ?? team.textColor,
+            };
+            await tx.team.update({
+              where: { id: existing.id },
+              data: afterData,
+            });
+            if (fillColor) colorBackfilled += 1;
+            if (fillTextColor) colorBackfilled += 1;
+            await appendAudit(tx, {
+              actorId: meta.actorId,
+              action: "market.color.backfilled",
+              entity: "team",
+              entityId: existing.id,
+              beforeData: {
+                color: existing.color,
+                textColor: existing.textColor,
+              },
+              afterData,
+              ip: meta.ip,
+            });
+          }
           continue;
         }
         const constructorId = constructorByName.get(team.manufacturer.name);
@@ -713,7 +766,13 @@ export class MarketService {
           );
         }
         const created = await tx.team.create({
-          data: { name: team.name, constructorId },
+          data: {
+            name: team.name,
+            constructorId,
+            // US-42 (ADR-0042): colores reales de la fuente (hex).
+            color: team.color,
+            textColor: team.textColor,
+          },
         });
         teamByName.set(team.name, created.id);
         teamsCreated += 1;
@@ -742,6 +801,24 @@ export class MarketService {
         riderByName.set(fullName, riderId);
         if (existing) {
           ridersSkipped += 1;
+          // US-42 (ADR-0042): backfill de la dorsal sobre la fila ya creada.
+          // Solo rellena NULL → valor (idempotente; nunca muta lo existente).
+          if (existing.number == null && rider.number != null) {
+            await tx.rider.update({
+              where: { id: existing.id },
+              data: { number: rider.number },
+            });
+            numberBackfilled += 1;
+            await appendAudit(tx, {
+              actorId: meta.actorId,
+              action: "rider.identity.backfilled",
+              entity: "rider",
+              entityId: existing.id,
+              beforeData: { number: null },
+              afterData: { number: rider.number },
+              ip: meta.ip,
+            });
+          }
         } else {
           ridersCreated += 1;
         }
@@ -857,6 +934,8 @@ export class MarketService {
           riderMappingsCreated,
           riderMappingsUpdated,
           riderMappingsSkipped,
+          colorBackfilled,
+          numberBackfilled,
         },
         ip: meta.ip,
       });
@@ -875,6 +954,8 @@ export class MarketService {
         riderMappingsCreated,
         riderMappingsUpdated,
         riderMappingsSkipped,
+        colorBackfilled,
+        numberBackfilled,
       };
     });
   }
@@ -1108,6 +1189,9 @@ export class MarketService {
       name: team.name,
       constructorId: team.constructorId,
       constructorName: team.constructor.name,
+      // US-42 (ADR-0042): colores reales de la fuente (o `null` → fallback).
+      color: team.color,
+      textColor: team.textColor,
     };
   }
 

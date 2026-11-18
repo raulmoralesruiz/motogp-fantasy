@@ -10,6 +10,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  dorsalFromRider,
   MarketNormalizationError,
   MarketSourceError,
   normalizePulseLiveMarket,
@@ -34,26 +35,30 @@ function makeFetch(routes: Record<string, unknown>): typeof fetch {
   }) as unknown as typeof fetch;
 }
 
-/** Rider crudo de PulseLive (solo los campos que usa el normalizador). */
+/**
+ * Rider crudo de PulseLive (solo los campos que usa el normalizador).
+ * Semántica del payload en vivo (US-42, ADR-0042): la dorsal vive en
+ * `current_career_step.number` (el top-level `rider.number` está ausente)
+ * y los colores del equipo son hex.
+ */
 function rawRider(overrides: Partial<PulseLiveRider> = {}): PulseLiveRider {
   return {
     id: "r1",
     name: "Marc",
     surname: "Marquez",
     nickname: null,
-    number: 93,
     country: { iso: "ES", name: "España" },
     current_career_step: {
       season: 2026,
-      number: 1,
+      number: 93,
       sponsored_team: "Ducati",
       team: {
         id: "t1",
         name: "Ducati Lenovo Team",
         legacy_id: 1,
         type: "factory",
-        color: "red",
-        text_color: "white",
+        color: "#ad0000",
+        text_color: "#ffffff",
         picture: null,
         constructor: { id: "c1", name: "Ducati", legacy_id: 1 },
         category: { id: "cat-motogp", name: "MotoGP", legacy_id: 3 },
@@ -65,6 +70,20 @@ function rawRider(overrides: Partial<PulseLiveRider> = {}): PulseLiveRider {
     retired: false,
     published: true,
     ...overrides,
+  };
+}
+
+/** Cambia la dorsal del career step (semántica del payload en vivo). */
+function withStepNumber(
+  rider: PulseLiveRider,
+  number: number | null | undefined,
+): PulseLiveRider {
+  return {
+    ...rider,
+    current_career_step: {
+      ...rider.current_career_step,
+      number: number as unknown as number,
+    },
   };
 }
 
@@ -132,33 +151,38 @@ describe("normalizePulseLiveMarket (pura)", () => {
     const riders = [
       rawRider(),
       // Mismo equipo/constructor, otro piloto (dedup de equipo/constructor).
-      rawRider({ id: "r2", name: "Jorge", surname: "Martin", number: 89 }),
-      // Otro equipo y constructor.
-      rawRider({
-        id: "r3",
-        name: "Pedro",
-        surname: "Acosta",
-        number: 33,
-        current_career_step: {
-          season: 2026,
-          number: 3,
-          sponsored_team: "KTM",
-          team: {
-            id: "t2",
-            name: "Red Bull KTM Tech3",
-            legacy_id: 2,
-            type: "factory",
-            color: "orange",
-            text_color: "white",
-            picture: null,
-            constructor: { id: "c2", name: "KTM", legacy_id: 2 },
+      withStepNumber(
+        rawRider({ id: "r2", name: "Jorge", surname: "Martin" }),
+        89,
+      ),
+      // Otro equipo y constructor (colores hex de KTM, como en vivo).
+      withStepNumber(
+        rawRider({
+          id: "r3",
+          name: "Pedro",
+          surname: "Acosta",
+          current_career_step: {
+            season: 2026,
+            number: 33,
+            sponsored_team: "KTM",
+            team: {
+              id: "t2",
+              name: "Red Bull KTM Tech3",
+              legacy_id: 2,
+              type: "factory",
+              color: "#ff7e27",
+              text_color: "#383838",
+              picture: null,
+              constructor: { id: "c2", name: "KTM", legacy_id: 2 },
+              category: { id: "cat-motogp", name: "MotoGP", legacy_id: 3 },
+            },
             category: { id: "cat-motogp", name: "MotoGP", legacy_id: 3 },
+            in_grid: true,
+            current: true,
           },
-          category: { id: "cat-motogp", name: "MotoGP", legacy_id: 3 },
-          in_grid: true,
-          current: true,
-        },
-      }),
+        }),
+        33,
+      ),
     ];
     const result = normalizePulseLiveMarket(riders, 2026, "season-uuid", {
       name: "pulselive",
@@ -171,16 +195,21 @@ describe("normalizePulseLiveMarket (pura)", () => {
       { sourceId: "c1", name: "Ducati" },
       { sourceId: "c2", name: "KTM" },
     ]);
+    // US-42 (ADR-0042): los colores hex de la fuente se conservan.
     expect(result.teams).toEqual([
       {
         sourceId: "t1",
         name: "Ducati Lenovo Team",
         manufacturer: { sourceId: "c1", name: "Ducati" },
+        color: "#ad0000",
+        textColor: "#ffffff",
       },
       {
         sourceId: "t2",
         name: "Red Bull KTM Tech3",
         manufacturer: { sourceId: "c2", name: "KTM" },
+        color: "#ff7e27",
+        textColor: "#383838",
       },
     ]);
     expect(result.riders).toHaveLength(3);
@@ -191,6 +220,9 @@ describe("normalizePulseLiveMarket (pura)", () => {
       number: 93,
       countryIso: "ES",
     });
+    // Dorsales del career step (payload en vivo, US-42).
+    expect(result.riders[1]).toMatchObject({ number: 89 });
+    expect(result.riders[2]).toMatchObject({ number: 33 });
     expect(result.affiliations).toEqual([
       { riderSourceId: "r1", teamSourceId: "t1", seasonYear: 2026 },
       { riderSourceId: "r2", teamSourceId: "t1", seasonYear: 2026 },
@@ -199,15 +231,38 @@ describe("normalizePulseLiveMarket (pura)", () => {
   });
 
   it("dorsal y país ausentes → null", () => {
-    const rider = rawRider({
-      number: null,
-      country: undefined as unknown as PulseLiveRider["country"],
-    });
+    const rider = withStepNumber(
+      rawRider({
+        country: undefined as unknown as PulseLiveRider["country"],
+      }),
+      undefined,
+    );
     const result = normalizePulseLiveMarket([rider], 2026, "ref", {
       name: "pulselive",
       version: "v1",
     });
     expect(result.riders[0]).toMatchObject({ number: null, countryIso: null });
+  });
+
+  it("equipo sin colores en la fuente → null (el picker hará fallback)", () => {
+    const rider = rawRider({
+      current_career_step: {
+        ...rawRider().current_career_step,
+        team: {
+          ...rawRider().current_career_step.team!,
+          color: null,
+          text_color: null,
+        },
+      },
+    });
+    const result = normalizePulseLiveMarket([rider], 2026, "ref", {
+      name: "pulselive",
+      version: "v1",
+    });
+    expect(result.teams[0]).toMatchObject({
+      color: null,
+      textColor: null,
+    });
   });
 
   it("deduplica el mismo piloto (sourceId) aunque aparezca dos veces", () => {
@@ -219,6 +274,39 @@ describe("normalizePulseLiveMarket (pura)", () => {
     );
     expect(result.riders).toHaveLength(1);
     expect(result.affiliations).toHaveLength(1);
+  });
+});
+
+// ── dorsalFromRider (US-42, ADR-0042) ──────────────────────────────────────
+
+describe("dorsalFromRider (US-42, ADR-0042)", () => {
+  it("la dorsal del career step tiene prioridad sobre la top-level", () => {
+    // En vivo el top-level no existe; si ambos existieran, manda el step.
+    expect(dorsalFromRider(rawRider({ number: 7 }))).toBe(93);
+  });
+
+  it("sin dorsal en el career step → cae al top-level", () => {
+    const rider = withStepNumber(rawRider({ number: 7 }), undefined);
+    expect(dorsalFromRider(rider)).toBe(7);
+  });
+
+  it("dorsal ausente en ambas → null", () => {
+    expect(dorsalFromRider(withStepNumber(rawRider(), undefined))).toBeNull();
+  });
+
+  it("dorsal inválida (negativa) → no cuenta; si no hay otra → null", () => {
+    expect(
+      dorsalFromRider(withStepNumber(rawRider({ number: 7 }), -5)),
+    ).toBe(7);
+    expect(
+      dorsalFromRider(withStepNumber(rawRider(), -5)),
+    ).toBeNull();
+  });
+
+  it("dorsal no entera → no cuenta", () => {
+    expect(
+      dorsalFromRider(withStepNumber(rawRider({ number: 7 }), 2.5)),
+    ).toBe(7);
   });
 });
 
@@ -243,6 +331,12 @@ describe("PulseLiveMarketSource.fetchSeasonMarket", () => {
     expect(result.constructors).toHaveLength(1);
     expect(result.teams).toHaveLength(1);
     expect(result.affiliations).toHaveLength(1);
+    // US-42: dorsal del career step + colores hex pasan por el I/O.
+    expect(result.riders[0]).toMatchObject({ number: 93 });
+    expect(result.teams[0]).toMatchObject({
+      color: "#ad0000",
+      textColor: "#ffffff",
+    });
   });
 
   it("sin temporada en la fuente → MarketSourceError", async () => {

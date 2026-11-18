@@ -367,6 +367,29 @@ describe("PerfilPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("export: rechazo opaco (no Error): mensaje genérico, sin valor interno filtrado", async () => {
+    // Rama defensiva del catch: un rechazo que no es `Error` (p. ej. un
+    // string) no tiene `.message` que mostrar; se avisa sin filtrarlo.
+    mockMe();
+    mockResult(trpc.profile.export.useQuery, {
+      data: undefined,
+      isPending: false,
+      isError: false,
+      isFetching: false,
+      refetch: vi.fn(async () => {
+        throw "rechazo-opaco";
+      }),
+    });
+    renderPerfil(<PerfilPage />);
+
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole("button", { name: "Exportar mis datos (JSON)" }),
+    );
+
+    expect(screen.getByText("No se pudo exportar.")).toBeInTheDocument();
+  });
+
   it("delete: el botón está deshabilitado (con motivo) hasta marcar la confirmación", async () => {
     mockMe();
     mockResult(trpc.profile.delete.useMutation, {
@@ -386,6 +409,22 @@ describe("PerfilPage", () => {
     const user = userEvent.setup();
     await user.click(screen.getByLabelText(/Entiendo que esta acción es irreversible/));
     expect(button).toBeEnabled();
+    expect(button).not.toHaveAttribute("aria-disabled");
+  });
+
+  it("delete: en transitorio (isPending) el botón se deshabilita sin motivo escrito", () => {
+    // F3 P3: transitorio → `disabled` nativo (rama `? undefined` del
+    // `disabledReason`), no la `aria-disabled` con motivo del bloqueo real.
+    mockMe();
+    mockResult(trpc.profile.delete.useMutation, {
+      mutate: vi.fn(),
+      isPending: true,
+      isError: false,
+    });
+    renderPerfil(<PerfilPage />);
+
+    const button = screen.getByRole("button", { name: "Eliminando cuenta…" });
+    expect(button).toBeDisabled();
     expect(button).not.toHaveAttribute("aria-disabled");
   });
 

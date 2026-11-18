@@ -30,6 +30,7 @@ import type { GpStatus, Prisma, PrismaClient } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 
 import { appendAudit } from "@/modules/admin/audit";
+import { normalizeText } from "@/shared/picker";
 import { seasonRulesSchema, type SeasonRules } from "@/shared/validation/season-rules";
 
 import {
@@ -111,6 +112,13 @@ export interface BuilderView {
   };
   /** Presupuesto del usuario para este GP (US-10). */
   budget: GpBudget;
+  /**
+   * US-42 (ADR-0042): `color`/`textColor` (hex) por activo — `null` si la
+   * fuente no lo envió (el picker cae al hash derivado, ADR-0041):
+   * - rider → color de su equipo (afiliación de ESTE GP);
+   * - team → color propio (`teams.color`);
+   * - constructor → heurística determinística sobre sus equipos (no persistida).
+   */
   riders: {
     riderId: string;
     name: string;
@@ -122,14 +130,30 @@ export interface BuilderView {
     constructorName: string;
     /** Precio congelado para el GP (null = sin precio → no incluye). */
     price: number | null;
+    /** Color real del equipo afiliado en este GP (null → fallback hash). */
+    color: string | null;
+    /** Color de texto del equipo afiliado (null → foreground por luminosidad). */
+    textColor: string | null;
   }[];
-  constructors: { id: string; name: string; price: number | null }[];
+  constructors: {
+    id: string;
+    name: string;
+    price: number | null;
+    /** Color del constructor (heurística sobre sus equipos; null → hash). */
+    color: string | null;
+    /** Color de texto del constructor (heurística; null → por luminosidad). */
+    textColor: string | null;
+  }[];
   teams: {
     id: string;
     name: string;
     constructorId: string;
     constructorName: string;
     price: number | null;
+    /** Color real del equipo (`teams.color`; null → fallback hash). */
+    color: string | null;
+    /** Color de texto real del equipo (`teams.text_color`; null → luminancia). */
+    textColor: string | null;
   }[];
   /** Wildcards usados esta temporada (US-12, ADR-0017: 1 por temporada). */
   wildcardsUsed: number;
@@ -162,6 +186,46 @@ function totalBudget(movements: readonly BudgetMovement[]): number {
 function overBudgetMessage(cost: number, budget: number): string {
   const excess = round2(cost - budget);
   return `El lineup excede el presupuesto por ${excess} (coste ${cost}, presupuesto ${budget}).`;
+}
+
+/**
+ * Color de un constructor (US-42, ADR-0042): heurística determinística
+ * sobre sus equipos (pura, testable — no I/O):
+ *
+ * 1. Candidatos: los equipos cuyo nombre CONTIENE el nombre del
+ *    constructor (case- y acento-insensible) Y que tengan color
+ *    (los sin color no son aplicables → fallback, ver 3).
+ * 2. Desempate: el equipo con MÁS pilotos afiliados (de este GP); si aún
+ *    empatan, nombre ascendente (es-ES, base).
+ * 3. Sin equipo aplicable → `{ color: null, textColor: null }` → el picker
+ *    cae al hash derivado del nombre (ADR-0041).
+ *
+ * Proyección de vista (NO se persiste, NO se audita como dato): ADR-0042 §2.
+ */
+export function constructorColor(
+  constructorName: string,
+  teams: readonly {
+    name: string;
+    color: string | null;
+    textColor: string | null;
+    /** Nº de pilotos afiliados a este equipo (de este GP). */
+    affiliationCount: number;
+  }[],
+): { color: string | null; textColor: string | null } {
+  const needle = normalizeText(constructorName);
+  if (needle === "") return { color: null, textColor: null };
+  const candidates = teams.filter(
+    (t) => t.color != null && normalizeText(t.name).includes(needle),
+  );
+  if (candidates.length === 0) return { color: null, textColor: null };
+  const best =
+    [...candidates].sort(
+      (a, b) =>
+        b.affiliationCount - a.affiliationCount ||
+        a.name.localeCompare(b.name, "es", { sensitivity: "base" }),
+    )[0] ?? null;
+  if (!best) return { color: null, textColor: null };
+  return { color: best.color, textColor: best.textColor };
 }
 
 /** Slots a partir de filas de BD (el trigger garantiza la composición). */
@@ -556,6 +620,21 @@ export class LineupService {
       );
       return price ? price.price : null;
     };
+    // US-42 (ADR-0042): nº de pilotos afiliados por equipo (este GP) —
+    // desempate de la heurística de color de constructor.
+    const affiliationCountByTeam = new Map<string, number>();
+    for (const a of affiliations) {
+      affiliationCountByTeam.set(
+        a.teamId,
+        (affiliationCountByTeam.get(a.teamId) ?? 0) + 1,
+      );
+    }
+    const teamColorInput = teams.map((t) => ({
+      name: t.name,
+      color: t.color,
+      textColor: t.textColor,
+      affiliationCount: affiliationCountByTeam.get(t.id) ?? 0,
+    }));
     return {
       gp: {
         id: gp.id,
@@ -565,6 +644,8 @@ export class LineupService {
         lockoutAt: gp.lockoutAt,
       },
       budget,
+      // US-42 (ADR-0042): el color del rider es el de su EQUIPO afiliado
+      // en este GP (deriva, no persistencia en `riders`).
       riders: affiliations.map((a) => ({
         riderId: a.riderId,
         name: a.rider.name,
@@ -574,18 +655,25 @@ export class LineupService {
         constructorId: a.constructorId,
         constructorName: a.constructor.name,
         price: priceOf("rider", a.riderId),
+        color: a.team.color,
+        textColor: a.team.textColor,
       })),
+      // US-42 (ADR-0042): color de constructor por heurística sobre equipos.
       constructors: constructors.map((c) => ({
         id: c.id,
         name: c.name,
         price: priceOf("constructor", c.id),
+        ...constructorColor(c.name, teamColorInput),
       })),
+      // US-42 (ADR-0042): color propio del equipo (`teams.color`).
       teams: teams.map((t) => ({
         id: t.id,
         name: t.name,
         constructorId: t.constructorId,
         constructorName: t.constructor.name,
         price: priceOf("team", t.id),
+        color: t.color,
+        textColor: t.textColor,
       })),
       wildcardsUsed,
       wildcardsPerSeason: rules.transfers.wildcardsPerSeason,

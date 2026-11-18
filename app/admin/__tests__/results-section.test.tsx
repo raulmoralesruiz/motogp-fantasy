@@ -2321,5 +2321,29 @@ describe("ResultsSection", () => {
       expect(screen.getByLabelText("GP")).toHaveValue(gpId);
       expect(screen.getByLabelText("Evento")).toHaveValue(eventId);
     });
+
+    it("prellena solo el evento con ?event= sobre una cascada ya abierta (rama defensiva)", async () => {
+      // Rama defensiva de `apply()`: un query string con SOLO `event`
+      // (sin temporada ni GP) actualiza únicamente el evento, sin tocar
+      // la cascada abierta.
+      navigation.searchParams = new URLSearchParams({
+        season: seasonId,
+        gp: gpId,
+      });
+      mockLoaded();
+      render(<ResultsSection seasons={[season]} />);
+      await screen.findByLabelText("Evento");
+
+      // Navegación a ?event= (solo el evento en la URL).
+      act(() => {
+        navigation.searchParams = new URLSearchParams({ event: eventId });
+      });
+
+      // La cascada no se toca: temporada y GP se conservan...
+      expect(screen.getByLabelText("Temporada")).toHaveValue(seasonId);
+      expect(screen.getByLabelText("GP")).toHaveValue(gpId);
+      // ...y el evento se prellena desde la URL.
+      expect(screen.getByLabelText("Evento")).toHaveValue(eventId);
+    });
   });
 });

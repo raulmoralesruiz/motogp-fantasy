@@ -395,7 +395,12 @@ export default function LineupsPage() {
     },
   ];
 
-  /** Activos del mercado del GP en la forma del picker (invariante 5: kind). */
+  /**
+   * Activos del mercado del GP en la forma del picker (invariante 5: kind).
+   * US-42 (ADR-0042): `color`/`textColor` reales del activo (rider → su
+   * equipo; team → propio; constructor → heurística del BFF); `null` ⇒ el
+   * avatar cae al hash derivado del nombre (ADR-0041).
+   */
   const pickerAssets: PickerAsset[] = [
     ...(builder.data?.riders ?? []).map((r) => ({
       kind: "rider" as const,
@@ -405,6 +410,8 @@ export default function LineupsPage() {
       groupId: r.teamId,
       number: r.number,
       price: r.price,
+      color: r.color,
+      textColor: r.textColor,
     })),
     ...(builder.data?.constructors ?? []).map((c) => ({
       kind: "constructor" as const,
@@ -414,6 +421,8 @@ export default function LineupsPage() {
       groupId: null,
       number: null,
       price: c.price,
+      color: c.color,
+      textColor: c.textColor,
     })),
     ...(builder.data?.teams ?? []).map((t) => ({
       kind: "team" as const,
@@ -423,6 +432,8 @@ export default function LineupsPage() {
       groupId: t.constructorId,
       number: null,
       price: t.price,
+      color: t.color,
+      textColor: t.textColor,
     })),
   ];
 

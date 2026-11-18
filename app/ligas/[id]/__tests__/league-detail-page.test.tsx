@@ -181,6 +181,28 @@ describe("LeagueDetailPage (US-24)", () => {
     expect(screen.getByText("archivada")).toBeInTheDocument();
   });
 
+  it("liga planificada: marca el estado en la cabecera (F3 P1)", () => {
+    mockLeague({ ...LEAGUE, status: "planned" });
+    mockRanking(RANKING);
+    renderDetail(<LeagueDetailPage />);
+
+    expect(screen.getByText("planificada")).toBeInTheDocument();
+  });
+
+  it("muestra las fechas de inicio y fin en local es-ES cuando la liga las tiene", () => {
+    // `formatDate`: día/mes de 2 dígitos y año completo, sin UTC.
+    mockLeague({
+      ...LEAGUE,
+      startDate: new Date(2026, 3, 5),
+      endDate: new Date(2026, 10, 29),
+    });
+    mockRanking(RANKING);
+    renderDetail(<LeagueDetailPage />);
+
+    expect(screen.getByText(/inicio 05\/04\/2026/)).toBeInTheDocument();
+    expect(screen.getByText(/fin 29\/11\/2026/)).toBeInTheDocument();
+  });
+
   it("muestra el ranking ajustado desactivado por defecto (US-30, D-10)", () => {
     mockLeague({ ...LEAGUE, adjustedRankingEnabled: false });
     mockRanking(RANKING);
@@ -443,6 +465,32 @@ describe("LeagueDetailPage (US-24)", () => {
         "href",
         "/login",
       );
+      expect(
+        screen.queryByRole("button", { name: "Unirme a la liga" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("pública + fallo real de la sesión (no 401): error, no «necesitas una cuenta»", () => {
+      // F3 P3: un fallo real de `auth.me` (red/500) no se lee como "sin
+      // cuenta": se avisa como error de sesión, no con el empuje al login.
+      mockLeague(PUBLIC_LEAGUE);
+      mockRanking(RANKING);
+      mockResult(trpc.auth.me.useQuery, {
+        data: undefined,
+        isPending: false,
+        isError: true,
+        error: new Error("fallo de red"),
+      });
+      renderDetail(<LeagueDetailPage />);
+
+      expect(
+        screen.getByText(
+          "No se pudo verificar tu sesión. Recarga la página e inténtalo de nuevo.",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText(/Para unirte a la liga necesitas una cuenta/),
+      ).not.toBeInTheDocument();
       expect(
         screen.queryByRole("button", { name: "Unirme a la liga" }),
       ).not.toBeInTheDocument();

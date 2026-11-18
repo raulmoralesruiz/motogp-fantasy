@@ -29,9 +29,9 @@
 
 ### Mercado
 
-- `riders` — piloto (nombre, dorsal, activo).
-- `constructors` — constructor (nombre).
-- `teams` — equipo (nombre, constructor FK).
+- `riders` — piloto (nombre, dorsal, activo). La dorsal se normaliza desde `current_career_step.number` de la fuente (ADR-0042).
+- `constructors` — constructor (nombre). Sin color propio: su color es **derivado** de sus equipos (ADR-0042).
+- `teams` — equipo (nombre, constructor FK, `color`/`text_color` hex NULL-ables — colores reales de la fuente, ADR-0042).
 - `rider_affiliations` — **afiliación por GP** (rider, team, constructor, gp). Permite cambios de equipo a mitad de temporada.
 - `prices` — **precio de apertura y por GP** (asset_type: rider/constructor/team, asset_id, gp, price, motivo: formula/manual, rules_version, created_by).
 - `price_history` — derivado/índice sobre prices (o vista).
@@ -134,6 +134,7 @@ leagues 1--N rankings
 | rider_affiliations (por GP)                                          | **Fuente de verdad** | Permite cambios de equipo                         |
 | prices (por GP)                                                      | **Fuente de verdad** | Con motivo (fórmula/manual) y versión             |
 | lineups + lineup_slots                                               | **Fuente de verdad** | El lineup del usuario                             |
+| Color de rider/constructor (picker)                                  | **Derivado**         | Proyección de `teams.color`: rider → equipo de su afiliación de GP; constructor → heurística determinística sobre sus equipos (más afiliados, nombre asc); sin color → fallback hash del nombre (ADR-0042) |
 | lineup_changes                                                       | **Fuente de verdad** | Historial de cambios (auditable)                  |
 | injury_confirmations + change_exemptions                             | **Fuente de verdad** | Lesiones confirmadas y exenciones (ADR-0017)      |
 | budget_movements                                                     | **Fuente de verdad** | De donde se deriva el presupuesto                 |

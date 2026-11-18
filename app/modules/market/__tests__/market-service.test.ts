@@ -11,14 +11,25 @@ import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 
 import { MarketService } from "../market-service";
+import type { NormalizedMarket } from "../market-source";
 
 const meta = { actorId: "admin-1", ip: "127.0.0.1" };
 
 /** Prisma falso: los métodos son `vi.fn()` independientes; `tx` = el propio objeto. */
 function makePrisma() {
-  const rider = { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn() };
+  const rider = {
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+  };
   const constructor = { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn() };
-  const team = { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn() };
+  const team = {
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+  };
   const gp = { findUnique: vi.fn(), findMany: vi.fn() };
   const riderAffiliation = {
     findUnique: vi.fn(),
@@ -34,6 +45,7 @@ function makePrisma() {
     update: vi.fn(),
   };
   const auditLog = { create: vi.fn() };
+  const riderMapping = { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() };
   const prisma = {
     rider,
     constructor,
@@ -43,6 +55,7 @@ function makePrisma() {
     season,
     price,
     auditLog,
+    riderMapping,
     $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(prisma)),
   };
   return {
@@ -55,6 +68,7 @@ function makePrisma() {
     season,
     price,
     auditLog,
+    riderMapping,
   };
 }
 
@@ -545,5 +559,228 @@ describe("MarketService.calculateP0FromClassification (ADR-0014)", () => {
       }),
     );
     expect(fake.price.create).not.toHaveBeenCalled();
+  });
+});
+
+// ── importMarket: backfill US-42 (colores de equipo + dorsales) ────────────
+
+/** Mercado normalizado de prueba (1 constructor, 1 equipo, 1 rider). */
+function makeNormalized(
+  overrides: Partial<NormalizedMarket> = {},
+): NormalizedMarket {
+  return {
+    year: 2026,
+    seasonRef: "ref",
+    source: { name: "pulselive", version: "v1" },
+    constructors: [{ sourceId: "c1", name: "Ducati" }],
+    teams: [
+      {
+        sourceId: "t1",
+        name: "Ducati Lenovo Team",
+        manufacturer: { sourceId: "c1", name: "Ducati" },
+        color: "#ad0000",
+        textColor: "#ffffff",
+      },
+    ],
+    riders: [
+      {
+        sourceId: "r1",
+        name: "Marc",
+        surname: "Marquez",
+        number: 93,
+        countryIso: "ES",
+      },
+    ],
+    affiliations: [{ riderSourceId: "r1", teamSourceId: "t1", seasonYear: 2026 }],
+    ...overrides,
+  };
+}
+
+describe("MarketService.importMarket (US-42 backfill, ADR-0042)", () => {
+  it("re-import: rellena colores NULL→valor y dorsal NULL→valor, y audita ambos", async () => {
+    const fake = makePrisma();
+    fake.season.findUnique.mockResolvedValue(seasonRow);
+    fake.constructor.findUnique.mockResolvedValue(constructorRow);
+    // Fila ya creada SIN colores / SIN dorsal (estado de producción actual).
+    const existingTeam = {
+      id: "t1",
+      name: "Ducati Lenovo Team",
+      constructorId: "c1",
+      color: null,
+      textColor: null,
+    };
+    const existingRider = { id: "r1", name: "Marc Marquez", number: null };
+    fake.team.findUnique.mockResolvedValue(existingTeam);
+    fake.team.update.mockResolvedValue(existingTeam);
+    fake.rider.findUnique.mockResolvedValue(existingRider);
+    fake.rider.update.mockResolvedValue(existingRider);
+    fake.riderMapping.findUnique.mockResolvedValue(null);
+    fake.riderMapping.create.mockResolvedValue({ id: "m1" });
+    fake.gp.findMany.mockResolvedValue([]);
+    const service = new MarketService({ prisma: fake.prisma });
+
+    const report = await service.importMarket(
+      { normalized: makeNormalized(), seasonId: "s1" },
+      meta,
+    );
+
+    expect(report).toMatchObject({
+      teamsCreated: 0,
+      teamsSkipped: 1,
+      ridersCreated: 0,
+      ridersSkipped: 1,
+      colorBackfilled: 2, // color + textColor (dos celdas NULL → valor)
+      numberBackfilled: 1,
+    });
+    expect(fake.team.update).toHaveBeenCalledWith({
+      where: { id: "t1" },
+      data: { color: "#ad0000", textColor: "#ffffff" },
+    });
+    expect(fake.rider.update).toHaveBeenCalledWith({
+      where: { id: "r1" },
+      data: { number: 93 },
+    });
+    const calls = fake.auditLog.create.mock.calls.map((c) => c[0].data);
+    const actions = calls.map((d) => d.action);
+    expect(actions).toContain("market.color.backfilled");
+    expect(actions).toContain("rider.identity.backfilled");
+    expect(actions).toContain("market.imported");
+    // Auditoría de color: antes (NULLs) → después (valores).
+    const colorAudit = calls.find((d) => d.action === "market.color.backfilled");
+    expect(colorAudit).toMatchObject({
+      entity: "team",
+      entityId: "t1",
+      beforeData: { color: null, textColor: null },
+      afterData: { color: "#ad0000", textColor: "#ffffff" },
+    });
+    // Dorsal: antes NULL → después 93.
+    const riderAudit = calls.find((d) => d.action === "rider.identity.backfilled");
+    expect(riderAudit).toMatchObject({
+      entity: "rider",
+      entityId: "r1",
+      beforeData: { number: null },
+      afterData: { number: 93 },
+    });
+    // El resumen `market.imported` incluye los contadores.
+    const imported = calls.find((d) => d.action === "market.imported");
+    expect(imported?.afterData).toMatchObject({
+      colorBackfilled: 2,
+      numberBackfilled: 1,
+    });
+  });
+
+  it("idempotencia: los valores ya presentes NUNCA se mutan (sin update, sin auditoría de backfill)", async () => {
+    const fake = makePrisma();
+    fake.season.findUnique.mockResolvedValue(seasonRow);
+    fake.constructor.findUnique.mockResolvedValue(constructorRow);
+    fake.team.findUnique.mockResolvedValue({
+      id: "t1",
+      name: "Ducati Lenovo Team",
+      constructorId: "c1",
+      color: "#0000ff",
+      textColor: "#123456",
+    });
+    fake.rider.findUnique.mockResolvedValue({
+      id: "r1",
+      name: "Marc Marquez",
+      number: 93,
+    });
+    fake.riderMapping.findUnique.mockResolvedValue({
+      source: "pulselive",
+      riderRef: "r1",
+      riderId: "r1",
+    });
+    fake.gp.findMany.mockResolvedValue([]);
+    const service = new MarketService({ prisma: fake.prisma });
+
+    const report = await service.importMarket(
+      { normalized: makeNormalized(), seasonId: "s1" },
+      meta,
+    );
+
+    expect(report).toMatchObject({
+      colorBackfilled: 0,
+      numberBackfilled: 0,
+    });
+    expect(fake.team.update).not.toHaveBeenCalled();
+    expect(fake.rider.update).not.toHaveBeenCalled();
+    const actions = fake.auditLog.create.mock.calls.map((c) => c[0].data.action);
+    expect(actions).not.toContain("market.color.backfilled");
+    expect(actions).not.toContain("rider.identity.backfilled");
+  });
+
+  it("relleno parcial: solo cuenta la celda NULL (textColor → colorBackfilled = 1)", async () => {
+    const fake = makePrisma();
+    fake.season.findUnique.mockResolvedValue(seasonRow);
+    fake.constructor.findUnique.mockResolvedValue(constructorRow);
+    fake.team.findUnique.mockResolvedValue({
+      id: "t1",
+      name: "Ducati Lenovo Team",
+      constructorId: "c1",
+      color: "#ad0000",
+      textColor: null,
+    });
+    fake.team.update.mockResolvedValue({ id: "t1" });
+    fake.rider.findUnique.mockResolvedValue({
+      id: "r1",
+      name: "Marc Marquez",
+      number: 93,
+    });
+    fake.riderMapping.findUnique.mockResolvedValue(null);
+    fake.riderMapping.create.mockResolvedValue({ id: "m1" });
+    fake.gp.findMany.mockResolvedValue([]);
+    const service = new MarketService({ prisma: fake.prisma });
+
+    const report = await service.importMarket(
+      { normalized: makeNormalized(), seasonId: "s1" },
+      meta,
+    );
+
+    expect(report).toMatchObject({
+      colorBackfilled: 1,
+      numberBackfilled: 0,
+    });
+    // Se reescribe el par completo, pero solo la celda NULL cuenta.
+    expect(fake.team.update).toHaveBeenCalledWith({
+      where: { id: "t1" },
+      data: { color: "#ad0000", textColor: "#ffffff" },
+    });
+  });
+
+  it("creación nueva: el equipo nace con colores y el rider con dorsal (sin backfill)", async () => {
+    const fake = makePrisma();
+    fake.season.findUnique.mockResolvedValue(seasonRow);
+    fake.constructor.findUnique.mockResolvedValue(null);
+    fake.constructor.create.mockResolvedValue({ id: "c1" });
+    fake.team.findUnique.mockResolvedValue(null);
+    fake.team.create.mockResolvedValue({ id: "t1" });
+    fake.rider.findUnique.mockResolvedValue(null);
+    fake.rider.create.mockResolvedValue({ id: "r1" });
+    fake.riderMapping.findUnique.mockResolvedValue(null);
+    fake.riderMapping.create.mockResolvedValue({ id: "m1" });
+    fake.gp.findMany.mockResolvedValue([]);
+    const service = new MarketService({ prisma: fake.prisma });
+
+    const report = await service.importMarket(
+      { normalized: makeNormalized(), seasonId: "s1" },
+      meta,
+    );
+
+    expect(report).toMatchObject({
+      constructorsCreated: 1,
+      teamsCreated: 1,
+      ridersCreated: 1,
+      colorBackfilled: 0,
+      numberBackfilled: 0,
+    });
+    expect(fake.team.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        color: "#ad0000",
+        textColor: "#ffffff",
+      }),
+    });
+    expect(fake.rider.create).toHaveBeenCalledWith({
+      data: { name: "Marc Marquez", number: 93 },
+    });
   });
 });

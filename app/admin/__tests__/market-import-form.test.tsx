@@ -46,11 +46,15 @@ const market: NormalizedMarket = {
       sourceId: "t1",
       name: "Ducati Lenovo Team",
       manufacturer: { sourceId: "c1", name: "Ducati" },
+      color: "#ad0000",
+      textColor: "#ffffff",
     },
     {
       sourceId: "t2",
       name: "Aprilia Racing",
       manufacturer: { sourceId: "c2", name: "Aprilia" },
+      color: null,
+      textColor: null,
     },
   ],
   riders: [
@@ -178,6 +182,8 @@ describe("MarketImportForm", () => {
         riderMappingsCreated: 2,
         riderMappingsUpdated: 0,
         riderMappingsSkipped: 0,
+        colorBackfilled: 0,
+        numberBackfilled: 0,
       },
     });
     render(<MarketImportForm seasons={[season]} onImported={onImported} />);
@@ -204,6 +210,41 @@ describe("MarketImportForm", () => {
     };
     options.onSuccess?.();
     expect(onImported).toHaveBeenCalledTimes(1);
+  });
+
+  it("muestra la línea de backfill (US-42) cuando hay rellenos", async () => {
+    utilsMock("market.market.fetch.fetch").mockResolvedValue(market);
+    mockImport({
+      isSuccess: true,
+      data: {
+        seasonId: "s1",
+        seasonYear: 2026,
+        constructorsCreated: 0,
+        constructorsSkipped: 2,
+        teamsCreated: 0,
+        teamsSkipped: 2,
+        ridersCreated: 0,
+        ridersSkipped: 2,
+        affiliationsCreated: 0,
+        affiliationsSkipped: 4,
+        riderMappingsCreated: 0,
+        riderMappingsUpdated: 0,
+        riderMappingsSkipped: 2,
+        colorBackfilled: 4,
+        numberBackfilled: 2,
+      },
+    });
+    render(<MarketImportForm seasons={[season]} onImported={vi.fn()} />);
+
+    await downloadMarket();
+
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText("Importar en la temporada"), "s1");
+    await user.click(screen.getByRole("button", { name: "2. Importar mercado" }));
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Backfill (US-42): 4 color(es) de equipo rellenado(s), 2 dorsal(es) de piloto relleno(s).",
+    );
   });
 
   it("muestra el error general cuando falla la import", async () => {

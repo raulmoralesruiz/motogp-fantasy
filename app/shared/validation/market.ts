@@ -203,7 +203,21 @@ export type MarketDetailInput = z.infer<typeof marketDetailInputSchema>;
 // ── Import de mercado (US-06, ADR-0013) ──────────────────────────────────
 
 /**
+ * Color hex de la fuente (US-42, ADR-0042): `#RGB` o `#RRGGBB`.
+ * NULL = la fuente no lo envía (fallback estético del picker).
+ * Se revalida server-side: nunca se confía en el cliente.
+ */
+const hexColorSchema = z
+  .string()
+  .regex(
+    /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/,
+    "El color debe ser hex (p. ej. #ad0000)",
+  )
+  .nullable();
+
+/**
  * Constructor normalizado (preview del import de mercado).
+ * Sin color propio: su color es DERIVADO de sus equipos (ADR-0042, BFF).
  */
 const normalizedConstructorSchema = z.object({
   sourceId: z.string().min(1).nullable(),
@@ -223,6 +237,9 @@ const normalizedTeamSchema = z.object({
     .min(1, "El nombre del equipo es obligatorio")
     .max(160, "El nombre del equipo no puede superar los 160 caracteres"),
   manufacturer: normalizedConstructorSchema,
+  // US-42 (ADR-0042): colores reales de la fuente (hex). NULL si no existen.
+  color: hexColorSchema,
+  textColor: hexColorSchema,
 });
 
 /**

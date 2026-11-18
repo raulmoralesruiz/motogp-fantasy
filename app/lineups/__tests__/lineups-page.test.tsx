@@ -520,6 +520,60 @@ describe("LineupsPage", () => {
     });
   });
 
+  it("re-tocar la tarjeta del activo vacía el slot (los 6 slots, US-41)", async () => {
+    // Cobertura del toggle del picker (ADR-0041): `clearSlotById` rama por
+    // rama (oro 1/2, plata 1/2, constructor, equipo).
+    mockSeasons();
+    mockGps();
+    mockBuilder(GP1);
+    mockLineup(null);
+    mockResult(trpc.lineups.save.useMutation, {
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+    });
+    renderLineups(<LineupsPage />);
+
+    const user = userEvent.setup();
+    await openGp1(user);
+    await fillDraft(user);
+
+    const plan: Array<[string, string]> = [
+      ["Piloto oro 1", "Piloto Uno"],
+      ["Piloto oro 2", "Piloto Dos"],
+      ["Piloto plata 1", "Piloto Tres"],
+      ["Piloto plata 2", "Piloto Cuatro"],
+      ["Constructor", "Ctor A"],
+      ["Equipo", "Team A"],
+    ];
+    for (const [slotLabel, assetName] of plan) {
+      // `fillDraft` dejó el slot relleno con ese activo: `assignSlot`
+      // re-toca la tarjeta con el slot activo → el picker lo vacía
+      // (rama `onClear` → `clearSlotById`, rama por rama: oro 1/2,
+      // plata 1/2, constructor, equipo).
+      await assignSlot(user, slotLabel, assetName);
+      // El slot vuelve a "Vacío" (el NOMBRE del botón es el estado;
+      // `aria-pressed` solo marca qué slot está activo).
+      expect(slotButton(slotLabel, null)).toBeInTheDocument();
+      // Y la tarjeta pierde la marca de «asignada al slot activo».
+      expect(
+        screen.getByRole("button", {
+          name: new RegExp(`^${assetName}([, ]|$)`),
+        }),
+      ).toHaveAttribute("aria-pressed", "false");
+      // La tarjeta ya no está en el slot: puede asignarse de nuevo.
+      expect(
+        screen.getByRole("button", {
+          name: new RegExp(`^${assetName}([, ]|$)`),
+        }),
+      ).not.toBeDisabled();
+    }
+    // Borrador completamente vacío: la fila de coste vuelve a "—".
+    expect(screen.getByText(/Si guardas ahora:/)).toHaveTextContent(
+      "coste —",
+    );
+  });
+
   it("guardar: el botón se deshabilita hasta completar la composición", async () => {
     mockSeasons();
     mockGps();

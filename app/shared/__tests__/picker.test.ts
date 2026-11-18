@@ -6,9 +6,11 @@ import {
   assignToSlot,
   assetColor,
   assetHue,
+  avatarPalette,
   cardDisabledReason,
   clearSlot,
   filterAssets,
+  hexLuminance,
   initialsOf,
   normalizeText,
   searchMatches,
@@ -296,5 +298,80 @@ describe("assetHue / assetColor (color derivado determinístico)", () => {
 
   it("el color es una especificación hsl() con saturación/lum fijos", () => {
     expect(assetColor("Piloto Uno")).toMatch(/^hsl\(\d+ 65% 55%\)$/);
+  });
+});
+
+describe("hexLuminance (US-42: contraste del avatar por color real)", () => {
+  it("extremos: negro = 0, blanco = 1", () => {
+    expect(hexLuminance("#000000")).toBe(0);
+    expect(hexLuminance("#ffffff")).toBe(1);
+  });
+
+  it("acepta el formato corto #RGB (lo expande)", () => {
+    expect(hexLuminance("#fff")).toBe(1);
+    expect(hexLuminance("#000")).toBe(0);
+  });
+
+  it("es monotónica: más claro ⇒ mayor luminancia", () => {
+    expect(hexLuminance("#ffffff")).toBeGreaterThan(hexLuminance("#808080"));
+    expect(hexLuminance("#808080")).toBeGreaterThan(hexLuminance("#000000"));
+  });
+
+  it("colores reales de equipos caen en [0, 1]", () => {
+    for (const hex of ["#ad0000", "#fafafa", "#262626", "#ff7e27", "#5f259f"]) {
+      const l = hexLuminance(hex);
+      expect(l).toBeGreaterThanOrEqual(0);
+      expect(l).toBeLessThanOrEqual(1);
+    }
+  });
+});
+
+describe("avatarPalette (US-42, ADR-0042: color real con fallback hash)", () => {
+  it("color real + texto real: se usan tal cual (Ducati)", () => {
+    const p = avatarPalette(
+      asset({ id: "r1", name: "Marc Marquez", color: "#ad0000", textColor: "#ffffff" }),
+    );
+    expect(p).toEqual({ background: "#ad0000", foreground: "#ffffff" });
+  });
+
+  it("sin color real: fallback estético ADR-0041 (hash del nombre)", () => {
+    const p = avatarPalette(asset({ id: "r1", name: "Piloto Uno" }));
+    expect(p).toEqual({ background: assetColor("Piloto Uno"), foreground: "var(--bg)" });
+  });
+
+  it("color inválido (no hex): cae al fallback hash", () => {
+    const p = avatarPalette(
+      asset({ id: "r1", name: "Piloto Uno", color: "rojo", textColor: "#ffffff" }),
+    );
+    expect(p).toEqual({ background: assetColor("Piloto Uno"), foreground: "var(--bg)" });
+  });
+
+  it("fondo oscuro sin textColor: texto claro (var(--on-accent))", () => {
+    // #262626 (VR46/Racing Team) — luminancia ≈ 0.022 < 0.2
+    const p = avatarPalette(asset({ id: "r1", name: "Franco", color: "#262626" }));
+    expect(p).toEqual({ background: "#262626", foreground: "var(--on-accent)" });
+  });
+
+  it("fondo claro sin textColor: texto oscuro (var(--bg))", () => {
+    // #fafafa (Honda LCR) — luminancia ≈ 0.953 > 0.2
+    const p = avatarPalette(
+      asset({ id: "r1", name: "Takaaki", color: "#fafafa", textColor: null }),
+    );
+    expect(p).toEqual({ background: "#fafafa", foreground: "var(--bg)" });
+  });
+
+  it("textColor inválido: se elige por luminosidad del fondo", () => {
+    const p = avatarPalette(
+      asset({ id: "r1", name: "Marc", color: "#ad0000", textColor: "nohex" }),
+    );
+    expect(p.background).toBe("#ad0000");
+    expect(p.foreground).toBe("var(--on-accent)");
+  });
+
+  it("formato corto #RGB es válido y se respeta", () => {
+    const p = avatarPalette(
+      asset({ id: "r1", name: "Marc", color: "#abc", textColor: "#fff" }),
+    );
+    expect(p).toEqual({ background: "#abc", foreground: "#fff" });
   });
 });

@@ -191,6 +191,21 @@ export default function MarketImportForm({ seasons, onImported }: MarketImportFo
           {importMarket.data.riderMappingsCreated} mapeos de piloto creados,{" "}
           {importMarket.data.riderMappingsUpdated} actualizados,{" "}
           {importMarket.data.riderMappingsSkipped} ya correctos.
+          {(importMarket.data.colorBackfilled > 0 ||
+            importMarket.data.numberBackfilled > 0) && (
+            <>
+              <br />
+              Backfill (US-42):{" "}
+              {importMarket.data.colorBackfilled > 0 &&
+                `${importMarket.data.colorBackfilled} color(es) de equipo rellenado(s)`}
+              {importMarket.data.colorBackfilled > 0 &&
+                importMarket.data.numberBackfilled > 0 &&
+                ", "}
+              {importMarket.data.numberBackfilled > 0 &&
+                `${importMarket.data.numberBackfilled} dorsal(es) de piloto relleno(s)`}
+              .
+            </>
+          )}
           <br />
           <em>
             Las afiliaciones y los mapeos de piloto (fuente → piloto) se crean

@@ -31,6 +31,13 @@ export interface NormalizedTeam {
   name: string;
   /** Constructor (fabricante de la moto). */
   manufacturer: NormalizedConstructor;
+  /**
+   * Color real del equipo (hex, p. ej. `#ad0000`) — US-42 (ADR-0042).
+   * `null` si la fuente no lo envía → fallback estético del picker.
+   */
+  color: string | null;
+  /** Color de texto real del equipo (hex) — US-42 (ADR-0042). `null` si no existe. */
+  textColor: string | null;
 }
 
 /** Piloto (mapa a `Rider`: único por `name` en BD). */
@@ -109,7 +116,12 @@ export interface PulseLiveRider {
   name: string;
   surname: string;
   nickname: string | null;
-  number: number | null;
+  /**
+   * Dorsal top-level: **absente** en el payload en vivo de PulseLive
+   * (verificado 2026-11-18) → opcional; la dorsal real vive en
+   * `current_career_step.number` (US-42, ADR-0042).
+   */
+  number?: number | null;
   country: {
     iso: string;
     name: string;
@@ -123,8 +135,10 @@ export interface PulseLiveRider {
       name: string;
       legacy_id: number;
       type: string;
-      color: string;
-      text_color: string;
+      // US-42 (ADR-0042): colores reales de la fuente (hex). NULL-ables —
+      // una fuente futura (o un equipo sin color) puede no enviarlos.
+      color: string | null;
+      text_color: string | null;
       picture: string | null;
       constructor: {
         id: string;
@@ -150,6 +164,27 @@ export interface PulseLiveRider {
 }
 
 // ── Normalización pura ─────────────────────────────────────────────────────
+
+/**
+ * Extrae la dorsal (US-42, ADR-0042) de un rider crudo (pura).
+ *
+ * La dorsal real de PulseLive vive en `current_career_step.number`
+ * (verificado en vivo: 34/34 pilotos la tienen; el campo top-level
+ * `rider.number` está ausente en el payload). Si por cualquier razón el
+ * career step no la llevara, cae al top-level `rider.number` (si existe).
+ * `null` si ninguna fuente la tiene.
+ */
+export function dorsalFromRider(rider: PulseLiveRider): number | null {
+  const fromStep = rider.current_career_step?.number;
+  if (typeof fromStep === "number" && Number.isInteger(fromStep) && fromStep > 0) {
+    return fromStep;
+  }
+  const topLevel = rider.number;
+  if (typeof topLevel === "number" && Number.isInteger(topLevel) && topLevel > 0) {
+    return topLevel;
+  }
+  return null;
+}
 
 /**
  * Normaliza un payload crudo de PulseLive (pura — sin I/O).
@@ -213,6 +248,9 @@ export function normalizePulseLiveMarket(
           sourceId: team.constructor.id,
           name: team.constructor.name,
         },
+        // US-42 (ADR-0042): colores reales de la fuente (hex). NULL si no existen.
+        color: team.color ?? null,
+        textColor: team.text_color ?? null,
       });
     }
   }
@@ -226,7 +264,10 @@ export function normalizePulseLiveMarket(
         sourceId: rider.id,
         name: rider.name,
         surname: rider.surname,
-        number: rider.number ?? null,
+        // US-42 (ADR-0042): la dorsal vive en `current_career_step.number`
+        // (fuente real; el top-level está ausente en el payload en vivo).
+        // Fallback al top-level si el campo no existiera.
+        number: dorsalFromRider(rider),
         countryIso: rider.country?.iso ?? null,
       });
     }

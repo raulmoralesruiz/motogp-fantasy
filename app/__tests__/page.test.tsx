@@ -124,6 +124,23 @@ describe("HomePage", () => {
     expect(screen.getByText("sin conexión")).toBeInTheDocument();
   });
 
+  it("pendiente: la tarjeta de estado muestra «Consultando…» (global_admin)", () => {
+    mockResult(trpc.health.check.useQuery, {
+      data: undefined,
+      isPending: true,
+      isError: false,
+    });
+    mockResult(trpc.auth.me.useQuery, loggedInMe);
+    // Dashboard resuelto: que la única «Consultando…» sea la del health.
+    mockResult(trpc.dashboard.get.useQuery, {
+      data: dashboardOk,
+      isPending: false,
+      isError: false,
+    });
+    renderHome(<HomePage />);
+    expect(screen.getByText("Consultando…")).toBeInTheDocument();
+  });
+
   it("muestra el error si no se pudo consultar el estado (logueado)", () => {
     mockResult(trpc.health.check.useQuery, {
       data: undefined,
