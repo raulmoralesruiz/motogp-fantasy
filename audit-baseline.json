@@ -68,6 +68,78 @@
       "severity": "high",
       "reason": "GHSA-4qv8-2p9j-2685 (DoS EventSource), GHSA-f72v-6w45-q472 (SRI bypass), GHSA-xjj6-f33q-929c (DoS content-encodings), GHSA-4w7w-5xrc-9h26 (cache poisoning): dependencias de dev (jsdom en tests UI, testcontainers en integración); no se empaqueta en producción.",
       "closure": "T-23 (toolchain)"
+    },
+    {
+      "package": "picomatch",
+      "severity": "high",
+      "reason": "GHSA-fc5q-39xc-vjpf (ReDoS por extglobs repetidos, rango <=4.0.7, solo DoS, CVSS 7.5): publicada 2026-10-19 y sin version parcheada (la ultima publicada es 4.0.7). La explotacion exige un patron glob controlado por el atacante; en este arbol los patrones son de config de toolchain (eslint, tsconfig, build) o internos, nunca input de usuario.",
+      "closure": "picomatch >=4.0.8 al publicarse (Dependabot T-02); si solo llega en mayor, T-23"
+    },
+    {
+      "package": "micromatch",
+      "severity": "high",
+      "reason": "Hereda GHSA-fc5q-39xc-vjpf de picomatch (vía picomatch): transitive de fast-glob en la toolchain de lint (dev); los glob que procesa son de la toolchain, no input de usuario. Sin version parcheada de picomatch (ultima 4.0.7).",
+      "closure": "picomatch >=4.0.8 al publicarse (Dependabot T-02); si solo llega en mayor, T-23"
+    },
+    {
+      "package": "fast-glob",
+      "severity": "high",
+      "reason": "Hereda GHSA-fc5q-39xc-vjpf de picomatch (vía micromatch): transitive de @next/eslint-plugin-next en la toolchain de lint (dev); solo procesa patrones internos del proyecto. Sin version parcheada de picomatch (ultima 4.0.7).",
+      "closure": "picomatch >=4.0.8 al publicarse (Dependabot T-02); si solo llega en mayor, T-23"
+    },
+    {
+      "package": "@next/eslint-plugin-next",
+      "severity": "high",
+      "reason": "Hereda GHSA-fc5q-39xc-vjpf de picomatch (vía fast-glob): transitive de eslint-config-next, solo toolchain de lint (dev); el plugin opera sobre patrones propios del proyecto, no de terceros. Sin version parcheada de picomatch (ultima 4.0.7).",
+      "closure": "picomatch >=4.0.8 al publicarse (Dependabot T-02); si solo llega en mayor, T-23"
+    },
+    {
+      "package": "eslint-config-next",
+      "severity": "high",
+      "reason": "devDependency (config de lint); el hallazgo high hereda GHSA-fc5q-39xc-vjpf de picomatch (vía @next/eslint-plugin-next -> fast-glob -> micromatch); toolchain que solo maneja patrones propios del proyecto. Sin version parcheada de picomatch (ultima 4.0.7).",
+      "closure": "picomatch >=4.0.8 al publicarse (Dependabot T-02); si solo llega en mayor, T-23"
+    },
+    {
+      "package": "fdir",
+      "severity": "high",
+      "reason": "Hereda GHSA-fc5q-39xc-vjpf de picomatch: transitive de tinyglobby y @rollup/plugin-commonjs en toolchain de build/lint (dev); los glob de ficheros son internos de la toolchain, no input de usuario. Sin version parcheada de picomatch (ultima 4.0.7).",
+      "closure": "picomatch >=4.0.8 al publicarse (Dependabot T-02); si solo llega en mayor, T-23"
+    },
+    {
+      "package": "tinyglobby",
+      "severity": "high",
+      "reason": "Hereda GHSA-fc5q-39xc-vjpf de picomatch (vía fdir): transitive de @typescript-eslint/typescript-estree y eslint-import-resolver-typescript en la toolchain de lint (dev); los glob son internos de la toolchain. Sin version parcheada de picomatch (ultima 4.0.7).",
+      "closure": "picomatch >=4.0.8 al publicarse (Dependabot T-02); si solo llega en mayor, T-23"
+    },
+    {
+      "package": "@rollup/pluginutils",
+      "severity": "high",
+      "reason": "Hereda GHSA-fc5q-39xc-vjpf de picomatch: transitive de @sentry/bundler-plugins en el build de @sentry/nextjs; solo se ejecuta en build (no en runtime), y los glob son de config interna. Sin version parcheada de picomatch (ultima 4.0.7).",
+      "closure": "picomatch >=4.0.8 al publicarse (Dependabot T-02); si solo llega en mayor, T-23"
+    },
+    {
+      "package": "@rollup/plugin-commonjs",
+      "severity": "high",
+      "reason": "Hereda GHSA-fc5q-39xc-vjpf de picomatch (vía @rollup/pluginutils y fdir): transitive de @sentry/bundler-plugins en el build de @sentry/nextjs; la via vulnerable solo se ejecuta en build (empaquetado del codigo de instrumentacion), no en runtime de servidor. Sin version parcheada de picomatch (ultima 4.0.7).",
+      "closure": "picomatch >=4.0.8 al publicarse (Dependabot T-02); si solo llega en mayor, T-23"
+    },
+    {
+      "package": "@sentry/nextjs",
+      "severity": "high",
+      "reason": "Dependencia de produccion, pero el hallazgo high hereda GHSA-fc5q-39xc-vjpf de picomatch (ReDoS <=4.0.7) vía @sentry/bundler-plugins -> @rollup/plugin-commonjs: via que solo se ejecuta en build (bundler de instrumentacion), no en runtime de servidor; los patrones glob son de config propia (sentry), no input de usuario. Sin version parcheada de picomatch (ultima 4.0.7).",
+      "closure": "picomatch >=4.0.8 al publicarse (Dependabot T-02); si solo llega en mayor, T-23"
+    },
+    {
+      "package": "@typescript-eslint/typescript-estree",
+      "severity": "high",
+      "reason": "Hereda GHSA-fc5q-39xc-vjpf de picomatch (vía tinyglobby): toolchain de lint (dev); los glob son internos de la toolchain, no input de usuario. Sin version parcheada de picomatch (ultima 4.0.7).",
+      "closure": "picomatch >=4.0.8 al publicarse (Dependabot T-02); si solo llega en mayor, T-23"
+    },
+    {
+      "package": "eslint-import-resolver-typescript",
+      "severity": "high",
+      "reason": "Hereda GHSA-fc5q-39xc-vjpf de picomatch (vía tinyglobby): transitive de eslint en la toolchain de lint (dev); los patrones son internos de la toolchain. Sin version parcheada de picomatch (ultima 4.0.7).",
+      "closure": "picomatch >=4.0.8 al publicarse (Dependabot T-02); si solo llega en mayor, T-23"
     }
   ]
 }

@@ -68,3 +68,22 @@ El resto (9 paquetes) es **devDependency**: toolchain de tests/build; no se empa
 ## Reversibilidad
 
 Alta. Quitar el gate = borrar el paso de CI + el script + el baseline. No toca `package.json` de dependencias ni el código de la app. Si T-23 resuelve todo, el gate puede simplificarse a un `npm audit --audit-level=high` puro (ADR posterior o addendum a este).
+
+## Addendum (2026-11-18): ReDoS de `picomatch` (GHSA-fc5q-39xc-vjpf)
+
+Advisory publicada el 2026-10-19 y recogida en `npm audit` después del cierre de T-21: **ReDoS de `picomatch` por extglobs repetidos** (rango `<=4.0.7`, CVSS 7.5, solo DoS). **No existe versión parcheada** (la última publicada sigue siendo 4.0.7, dentro del rango vulnerable), por lo que ni `npm audit fix` ni los bumps pendientes de T-23 la resuelven hoy.
+
+Al propagarse por el árbol, el gate la reporta sobre **12 paquetes** (todos `high`, 12 "nuevas" → CI roja en `35cf495`):
+
+| Paquete | Ámbito | Vía (encadena hasta `picomatch`) |
+|---|---|---|
+| `picomatch` | transitive (raíz del hallazgo) | — |
+| `micromatch`, `fast-glob`, `@next/eslint-plugin-next`, `eslint-config-next` | toolchain de lint (dev) | `eslint-config-next` → `@next/eslint-plugin-next` → `fast-glob` → `micromatch` |
+| `tinyglobby`, `fdir` | toolchain de build/lint (dev) | vía `fdir`/`picomatch` |
+| `@typescript-eslint/typescript-estree`, `eslint-import-resolver-typescript` | toolchain de lint (dev) | vía `tinyglobby` |
+| `@rollup/plugin-commonjs`, `@rollup/pluginutils` | build de `@sentry/nextjs` (vía `@sentry/bundler-plugins`) | vía `fdir`/`picomatch` |
+| `@sentry/nextjs` | **producción** | vía `@sentry/bundler-plugins` → `@rollup/plugin-commonjs` |
+
+Análisis de superficie (patrón del §Problema): la ReDoS exige un **patrón glob controlado por el atacante**. En cada caso de este proyecto los patrones son de configuración propia (eslint, tsconfig, config de Sentry) o internos de la toolchain — nunca input de usuario. En `@sentry/nextjs` (único paquete de producción) la vía vulnerable solo se ejecuta **en build** (bundler de la instrumentación), no en runtime de servidor.
+
+Proceso aplicado (§Decisión 1): **12 entradas nuevas** en `audit-baseline.json` (una por paquete, severidad `high`), cada una con motivo + cierre: `picomatch >=4.0.8` al publicarse (Dependabot T-02 recogerá el patch; si solo llega en mayor, T-23). Cuando el patch se publique y se aplique, el gate marcará las 12 entradas como obsoletas: se eliminarán **en el mismo commit** que la actualización, siguiendo la regla de obsolescencia de este ADR.
